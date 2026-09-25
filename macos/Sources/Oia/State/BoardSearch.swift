@@ -55,6 +55,19 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
         }
     }
 
+    /// Recognize only complete palette queries; other submitted text stays a
+    /// normal full-text search.
+    static func colorQuery(_ rawValue: String) -> Self? {
+        let value = BoardSearchNormalization.value(rawValue)
+        let lowercased = value.lowercased()
+        guard value.hasPrefix("#")
+            || lowercased.hasPrefix("colour:#")
+            || lowercased.hasPrefix("color:#")
+        else { return nil }
+        let token = Self(kind: .color, value: value)
+        return token.value.isEmpty ? nil : token
+    }
+
     private var identityValue: String {
         kind == .tag ? value : BoardSearchNormalization.value(value)
     }
@@ -202,10 +215,10 @@ struct BoardSearchTermCompletion: Equatable, Sendable {
         var completed: [BoardSearchToken] = []
         for word in text.split(whereSeparator: \.isWhitespace).map(String.init) {
             let lower = word.lowercased()
-            let color = BoardSearchToken(kind: .color, value: word)
+            let color = BoardSearchToken.colorQuery(word)
             if BoardSearchSuggestions.itemTypes.contains(lower) {
                 completed.append(BoardSearchToken(kind: .itemType, value: lower))
-            } else if word.first == "#", !color.value.isEmpty {
+            } else if let color {
                 completed.append(color)
             } else {
                 remaining.append(word)

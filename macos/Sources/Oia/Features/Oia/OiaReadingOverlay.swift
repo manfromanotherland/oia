@@ -190,11 +190,9 @@ struct OiaReadingOverlay: View {
         let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !value.isEmpty else { return }
         // Palette matching and visual labels are distinct search token kinds.
-        let lowercasedValue = value.lowercased()
-        let isColorQuery = lowercasedValue.hasPrefix("colour:#")
-            || lowercasedValue.hasPrefix("color:#")
         let nextQuery = ""
-        let nextTokens = [BoardSearchToken(kind: isColorQuery ? .color : .visual, value: value)]
+        let nextTokens = [BoardSearchToken.colorQuery(value)
+            ?? BoardSearchToken(kind: .visual, value: value)]
         guard !nextTokens[0].value.isEmpty else { return }
         let searchChanged = appState.searchQuery != nextQuery
             || BoardSearchCriteria(tokens: appState.searchTokens)

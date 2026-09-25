@@ -34,6 +34,15 @@ final class BoardSearchTests: XCTestCase {
         ]).tokens.count == 1)
     }
 
+    func testOnlyCompleteHexQueriesBecomeColorTokens() {
+        XCTAssertEqual(BoardSearchToken.colorQuery(" #ffff00 ")?.value, "#FFFF00")
+        XCTAssertEqual(BoardSearchToken.colorQuery("colour:#42c878")?.value, "#42C878")
+        XCTAssertNil(BoardSearchToken.colorQuery("#fff"))
+        XCTAssertNil(BoardSearchToken.colorQuery("#zzffff"))
+        XCTAssertNil(BoardSearchToken.colorQuery("#ffff00 furniture"))
+        XCTAssertNil(BoardSearchToken.colorQuery("furniture"))
+    }
+
     func testCriteriaDropsEmptyAndDuplicateTermsButKeepsKindsDistinct() {
         let criteria = BoardSearchCriteria(tokens: [
             BoardSearchToken(kind: .visual, value: " furniture "),
@@ -120,6 +129,13 @@ final class BoardSearchTests: XCTestCase {
             BoardSearchInput(text: completion.text, tokens: completion.tokens).criteria.itemTypeTerms,
             ["image"]
         )
+    }
+
+    func testSubmittingPrefixedColorQueryCreatesToken() {
+        let completion = BoardSearchTermCompletion(text: "chair colour:#42c878", tokens: [])
+        XCTAssertTrue(completion.didComplete)
+        XCTAssertEqual(completion.text, "chair")
+        XCTAssertEqual(completion.tokens, [BoardSearchToken(kind: .color, value: "#42C878")])
     }
 
     func testSubmittingDuplicateOrInvalidHexDoesNotAddExtraTokens() {
