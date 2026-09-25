@@ -155,7 +155,33 @@ extension OiaLibraryView {
                 placement: .toolbar,
                 prompt: "Search Óia"
             ) { token in
+<<<<<<< HEAD
                 Text(token.displayValue)
+||||||| parent of 64ae231 (fix(search): preserve color fills in search pills)
+                if token.kind == .color,
+                   let palette = CardThemePalette(themeColor: token.value)
+                {
+                    Text(token.displayValue)
+                        .foregroundStyle(palette.foreground.color)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(palette.background.color, in: Capsule())
+                } else {
+                    Text(token.displayValue)
+                }
+=======
+                if token.kind == .color,
+                   let palette = CardThemePalette(themeColor: token.value)
+                {
+                    Image(nsImage: ColorSearchTokenArtwork.image(
+                        hex: token.displayValue,
+                        palette: palette
+                    ))
+                    .accessibilityLabel("Color \(token.displayValue)")
+                } else {
+                    Text(token.displayValue)
+                }
+>>>>>>> 64ae231 (fix(search): preserve color fills in search pills)
             }
             .searchSuggestions {
                 nativeSearchSuggestions
@@ -500,6 +526,35 @@ extension OiaLibraryView {
             moveOverlay(-1)
         } else {
             closeOverlay()
+        }
+    }
+}
+
+private enum ColorSearchTokenArtwork {
+    static func image(hex: String, palette: CardThemePalette) -> NSImage {
+        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let label = hex as NSString
+        let labelSize = label.size(withAttributes: [.font: font])
+        let size = NSSize(width: ceil(labelSize.width) + 16, height: 23)
+        return NSImage(size: size, flipped: false) { bounds in
+            NSColor(
+                srgbRed: palette.background.red,
+                green: palette.background.green,
+                blue: palette.background.blue,
+                alpha: 1
+            ).setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 11.5, yRadius: 11.5).fill()
+            let textColor = NSColor(
+                srgbRed: palette.foreground.red,
+                green: palette.foreground.green,
+                blue: palette.foreground.blue,
+                alpha: 1
+            )
+            label.draw(
+                at: NSPoint(x: 8, y: (bounds.height - labelSize.height) / 2),
+                withAttributes: [.font: font, .foregroundColor: textColor]
+            )
+            return true
         }
     }
 }
