@@ -296,7 +296,7 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
 }
 
 /// The native search field renders SwiftUI tokens as text attachments. Its
-/// attachment cell owns the visible capsule, so SwiftUI view backgrounds on
+/// attachment cell owns the visible chip, so SwiftUI view backgrounds on
 /// the token label do not reach the search field.
 @MainActor
 private final class ColorSearchTokenCell: NSTextAttachmentCell {
@@ -330,8 +330,13 @@ private final class ColorSearchTokenCell: NSTextAttachmentCell {
         let background = palette.background
         NSColor(srgbRed: background.red, green: background.green, blue: background.blue, alpha: 1)
             .setFill()
-        NSBezierPath(roundedRect: cellFrame.insetBy(dx: 1, dy: 1),
-                     xRadius: 4, yRadius: 4).fill()
+        let chipFrame = NSRect(
+            x: cellFrame.minX + 2,
+            y: cellFrame.minY + 1,
+            width: cellFrame.width - 4,
+            height: cellFrame.height - 1
+        )
+        NSBezierPath(roundedRect: chipFrame, xRadius: 2.5, yRadius: 2.5).fill()
 
         let foreground = palette.foreground
         let textColor = NSColor(
@@ -340,7 +345,7 @@ private final class ColorSearchTokenCell: NSTextAttachmentCell {
             blue: foreground.blue,
             alpha: 0.8
         )
-        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let font = (original as? NSCell)?.font ?? NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let text = NSAttributedString(string: tokenTitle, attributes: [
             .font: font,
             .foregroundColor: textColor
