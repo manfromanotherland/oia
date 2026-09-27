@@ -15,6 +15,14 @@ extension OiaLibraryView {
     @ViewBuilder
     var nativeSearchSuggestions: some View {
         let suggestions = searchSuggestions
+        if !suggestions.itemTypeTokens.isEmpty {
+            Section("Item type") {
+                ForEach(suggestions.itemTypeTokens) { token in
+                    Text(token.displayValue.capitalized)
+                        .searchCompletion(token)
+                }
+            }
+        }
         if !suggestions.tagTokens.isEmpty {
             Section("Tags") {
                 ForEach(suggestions.tagTokens) { token in

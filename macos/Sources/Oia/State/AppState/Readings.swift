@@ -94,6 +94,7 @@ extension AppState {
             tagTerms: context.search.criteria.tagTerms,
             visualTerms: context.search.criteria.visualTerms,
             colorTerms: context.search.criteria.colorTerms,
+            itemTypeTerms: context.search.criteria.itemTypeTerms,
             semanticCandidateIDs: candidates.text,
             visualSemanticCandidateIDs: candidates.visual
         )
@@ -157,6 +158,7 @@ extension AppState {
             tagTerms: input.criteria.tagTerms,
             visualTerms: visualTerms,
             colorTerms: input.criteria.colorTerms,
+            itemTypeTerms: input.criteria.itemTypeTerms,
             semanticCandidateIDs: [],
             visualSemanticCandidateIDs: visualCandidates
         )

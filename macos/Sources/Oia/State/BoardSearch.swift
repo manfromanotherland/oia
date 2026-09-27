@@ -11,6 +11,7 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
         case tag
         case visual
         case color
+        case itemType
     }
 
     /// Stable SwiftUI identity derived from search meaning rather than creation
@@ -45,6 +46,8 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
             self.value = value
         case .visual:
             self.value = BoardSearchNormalization.value(value)
+        case .itemType:
+            self.value = BoardSearchNormalization.value(value).lowercased()
         case .color:
             let hex = BoardSearchNormalization.value(value).split(separator: ":").last.map(String.init) ?? ""
             self.value = hex.count == 7 && hex.first == "#"
@@ -117,6 +120,10 @@ struct BoardSearchCriteria: Hashable, Sendable {
         tokens.compactMap { $0.kind == .color ? $0.value : nil }
     }
 
+    var itemTypeTerms: [String] {
+        tokens.compactMap { $0.kind == .itemType ? $0.value : nil }
+    }
+
     var isActive: Bool {
         !tokens.isEmpty
     }
@@ -152,8 +159,22 @@ struct BoardSearchInput: Hashable, Sendable {
 
     init(text: String, tokens: [BoardSearchToken]) {
         let normalizedText = BoardSearchNormalization.value(text)
-        self.text = normalizedText.isEmpty ? nil : normalizedText
-        criteria = BoardSearchCriteria(tokens: tokens)
+        var inferred: [BoardSearchToken] = []
+        var remaining: [String] = []
+        for word in normalizedText.split(whereSeparator: \.isWhitespace).map(String.init) {
+            let lower = word.lowercased()
+            if BoardSearchSuggestions.itemTypes.contains(lower) {
+                inferred.append(BoardSearchToken(kind: .itemType, value: lower))
+            } else if word.count == 7, word.first == "#",
+                      UInt64(word.dropFirst(), radix: 16) != nil {
+                inferred.append(BoardSearchToken(kind: .color, value: word))
+            } else {
+                remaining.append(word)
+            }
+        }
+        let freeText = remaining.joined(separator: " ")
+        self.text = freeText.isEmpty ? nil : freeText
+        criteria = BoardSearchCriteria(tokens: tokens + inferred)
     }
 
     var isActive: Bool {
@@ -187,7 +208,9 @@ struct BoardSearchTagCandidate: Equatable, Sendable {
 /// Bounded native-search completions for the user's current unfinished text.
 struct BoardSearchSuggestions: Equatable, Sendable {
     static let maximumTagCount = 8
+    static let itemTypes = ["quote", "image", "video", "link", "article"]
 
+    let itemTypeTokens: [BoardSearchToken]
     let tagTokens: [BoardSearchToken]
     let visualToken: BoardSearchToken?
 
@@ -198,14 +221,18 @@ struct BoardSearchSuggestions: Equatable, Sendable {
         includeVisualToken: Bool = true
     ) {
         let value = BoardSearchNormalization.value(text)
+        let selectedIDs = Set(BoardSearchCriteria(tokens: selectedTokens).semanticIdentity)
+        let needle = BoardSearchNormalization.matchingKey(value)
+        itemTypeTokens = Self.itemTypes.filter {
+            (needle.isEmpty || $0.hasPrefix(needle))
+                && !selectedIDs.contains(BoardSearchToken(kind: .itemType, value: $0).id)
+        }.map { BoardSearchToken(kind: .itemType, value: $0) }
         guard !value.isEmpty else {
             tagTokens = []
             visualToken = nil
             return
         }
 
-        let selectedIDs = Set(BoardSearchCriteria(tokens: selectedTokens).semanticIdentity)
-        let needle = BoardSearchNormalization.matchingKey(value)
         var prefixes: [BoardSearchToken] = []
 
         for candidate in tagCandidates where

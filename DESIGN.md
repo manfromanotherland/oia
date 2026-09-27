@@ -108,11 +108,12 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   from the toolbar by the same 30 pt used at the board's horizontal edges.
 - Put the native search field in the unified window toolbar using `.searchable`, with the prompt
   *"Search Óia"*. Native token suggestions can narrow the board to exact tags or terms found in
-  the same image; completed terms remain value-only pills in that one field. Do not create a
+  the same image or to an item type; completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
-- Selecting a completion under **Tags** or **In this image** creates that scoped token. Pressing
-  Return without selecting a completion keeps the draft as broad free text; never infer an exact
-  tag merely because a tag has the same spelling.
+- The empty suggestion menu offers Quote, Image, Video, Link, and Article. Selecting a completion
+  creates a type token. Typing a type word or `#RRGGBB` also filters by that type or palette color;
+  remaining words stay broad free text. Never infer an exact tag merely because a tag has the same
+  spelling. Article excludes lightweight links; Link selects only lightweight article cards.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Media,
   Articles, Links, Quotes**. Media combines image and video cards; Articles excludes lightweight
   link placeholders; Links means lightweight URL saves. Exact tag filtering comes from native

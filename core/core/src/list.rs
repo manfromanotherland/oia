@@ -82,6 +82,8 @@ pub struct ListOptions {
     pub visual_terms: Vec<String>,
     /// Palette colors selected as search tokens, combined by AND.
     pub color_terms: Vec<String>,
+    /// Item types selected as search terms; every term must match.
+    pub item_type_terms: Vec<String>,
     /// Restrict to the stable colour family derived by the Rust core.
     pub predominant_color: Option<PredominantColor>,
     /// Ordered Core Spotlight candidates for the same query.
@@ -109,6 +111,7 @@ impl Default for ListOptions {
             tag_terms: Vec::new(),
             visual_terms: Vec::new(),
             color_terms: Vec::new(),
+            item_type_terms: Vec::new(),
             predominant_color: None,
             semantic_candidate_ids: Vec::new(),
             visual_semantic_candidate_ids: Vec::new(),
@@ -763,6 +766,14 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                 )
            )
            AND (?12 = '' OR readings.id IN (SELECT value FROM json_each(?12)))
+           AND NOT EXISTS (
+               SELECT 1 FROM json_each(?13) requested_type
+               WHERE NOT (
+                   (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (readings.kind = 'article' AND requested_type.value = 'article' AND readings.lightweight = 0)
+                   OR (readings.kind = 'article' AND requested_type.value = 'link' AND readings.lightweight = 1)
+               )
+           )
          ORDER BY {order}
          LIMIT ?1 OFFSET ?2"
     );
@@ -794,6 +805,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
             tag_terms_json,
             serde_json::to_string(&opts.visual_semantic_candidate_ids)?,
             color_ids_json,
+            serde_json::to_string(&opts.item_type_terms)?,
         ],
         parse_row,
     )?;
@@ -849,6 +861,14 @@ fn phrase_exists_in_list_scope(
                     )
                )
                AND (?11 = '' OR r.id IN (SELECT value FROM json_each(?11)))
+           AND NOT EXISTS (
+               SELECT 1 FROM json_each(?12) requested_type
+               WHERE NOT (
+                   (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (r.kind = 'article' AND requested_type.value = 'article' AND r.lightweight = 0)
+                   OR (r.kind = 'article' AND requested_type.value = 'link' AND r.lightweight = 1)
+               )
+           )
          )"
     );
     conn.query_row(
@@ -867,6 +887,7 @@ fn phrase_exists_in_list_scope(
             serde_json::to_string(&opts.tag_terms)?,
             serde_json::to_string(&opts.visual_semantic_candidate_ids)?,
             color_ids_json,
+            serde_json::to_string(&opts.item_type_terms)?,
         ],
         |row| row.get(0),
     )
@@ -992,6 +1013,14 @@ fn list_readings_search(
                 )
            )
            AND (?14 = '' OR r.id IN (SELECT value FROM json_each(?14)))
+           AND NOT EXISTS (
+               SELECT 1 FROM json_each(?15) requested_type
+               WHERE NOT (
+                   (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (r.kind = 'article' AND requested_type.value = 'article' AND r.lightweight = 0)
+                   OR (r.kind = 'article' AND requested_type.value = 'link' AND r.lightweight = 1)
+               )
+           )
          ORDER BY {order}
          LIMIT ?1 OFFSET ?2"
     );
@@ -1023,6 +1052,7 @@ fn list_readings_search(
             serde_json::to_string(&opts.tag_terms)?,
             serde_json::to_string(&opts.visual_semantic_candidate_ids)?,
             color_ids_json,
+            serde_json::to_string(&opts.item_type_terms)?,
         ],
         parse_row,
     )?;
@@ -2627,6 +2657,66 @@ mod tests {
         let visual_ids: std::collections::HashSet<_> =
             visual.into_iter().map(|row| row.id).collect();
         assert_eq!(visual_ids, [image_content_id].into());
+    }
+
+    #[test]
+    fn item_type_terms_distinguish_links_and_compose_with_text() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let image_id = new_id();
+        let mut image = meta(&image_id, "https://example.com/image", "Red sample");
+        image.kind = ReadingKind::Image;
+        write_reading(&lib, image, "red".into()).unwrap();
+        let article_id = new_id();
+        write_reading(
+            &lib,
+            meta(&article_id, "https://example.com/article", "Red sample"),
+            "red".into(),
+        )
+        .unwrap();
+        let link_id = new_id();
+        write_reading(
+            &lib,
+            meta(&link_id, "https://example.com/link", "Red sample"),
+            "red".into(),
+        )
+        .unwrap();
+        rebuild(&conn, &lib).unwrap();
+        conn.execute("UPDATE readings SET lightweight=1 WHERE id=?1", [&link_id])
+            .unwrap();
+
+        let images = list_readings(
+            &conn,
+            &ListOptions {
+                item_type_terms: vec!["image".into()],
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            images.iter().map(|row| &row.id).collect::<Vec<_>>(),
+            vec![&image_id]
+        );
+
+        for (term, expected) in [
+            ("image", &image_id),
+            ("article", &article_id),
+            ("link", &link_id),
+        ] {
+            let rows = list_readings(
+                &conn,
+                &ListOptions {
+                    query: Some("red".into()),
+                    item_type_terms: vec![term.into()],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                rows.iter().map(|row| &row.id).collect::<Vec<_>>(),
+                vec![expected]
+            );
+        }
     }
 
     #[test]

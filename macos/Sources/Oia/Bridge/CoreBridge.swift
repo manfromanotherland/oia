@@ -119,6 +119,7 @@ actor CoreBridge {
             tagTerms: query.tagTerms,
             visualTerms: query.visualTerms,
             colorTerms: query.colorTerms,
+            itemTypeTerms: query.itemTypeTerms,
             predominantColor: nil,
             semanticCandidateIds: query.semanticCandidateIDs,
             visualSemanticCandidateIds: query.visualSemanticCandidateIDs,

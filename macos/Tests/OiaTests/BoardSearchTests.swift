@@ -78,6 +78,23 @@ final class BoardSearchTests: XCTestCase {
         XCTAssertTrue(text.isActive)
     }
 
+    func testTypedItemTypeAndColorComposeWithFreeText() {
+        let input = BoardSearchInput(text: "image #ff0000 modern", tokens: [])
+        XCTAssertEqual(input.criteria.itemTypeTerms, ["image"])
+        XCTAssertEqual(input.criteria.colorTerms, ["#FF0000"])
+        XCTAssertEqual(input.text, "modern")
+    }
+
+    func testItemTypesAreDefaultSuggestionsAndSelectedTypeIsExcluded() {
+        let initial = BoardSearchSuggestions(text: "", tagCandidates: [], selectedTokens: [])
+        XCTAssertEqual(initial.itemTypeTokens.map(\.value), ["quote", "image", "video", "link", "article"])
+        let selected = BoardSearchSuggestions(
+            text: "im", tagCandidates: [],
+            selectedTokens: [BoardSearchToken(kind: .itemType, value: "image")]
+        )
+        XCTAssertTrue(selected.itemTypeTokens.isEmpty)
+    }
+
     func testTagSuggestionsMatchCaseAndDiacriticsWithPrefixesFirst() {
         let suggestions = BoardSearchSuggestions(
             text: " BOOK ",

@@ -278,6 +278,7 @@ mod tests {
 
         let color_only = ListOptions {
             color_terms: vec!["#42C878".into()],
+            item_type_terms: vec!["image".into()],
             ..Default::default()
         };
         let rows = crate::list_readings(&conn, &color_only).unwrap();
@@ -285,6 +286,13 @@ mod tests {
             rows.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(),
             ["green"]
         );
+
+        let wrong_type = ListOptions {
+            color_terms: vec!["#42C878".into()],
+            item_type_terms: vec!["quote".into()],
+            ..Default::default()
+        };
+        assert!(crate::list_readings(&conn, &wrong_type).unwrap().is_empty());
 
         let no_match = ListOptions {
             color_terms: vec!["#42C878".into(), "#1234DB".into()],
