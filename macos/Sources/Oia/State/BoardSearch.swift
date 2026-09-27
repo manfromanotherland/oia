@@ -2,7 +2,7 @@
 
 import Foundation
 
-/// A completed, scoped term in the board's native search field.
+/// A completed, scoped term in the board's toolbar search field.
 ///
 /// The visible token is deliberately only `value`; `kind` records which index
 /// field the core must search without putting implementation language in the UI.
@@ -31,7 +31,7 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
         )
     }
 
-    /// Text shown inside the native search token. Exact tag bytes remain in
+    /// Text shown inside the search token. Exact tag bytes remain in
     /// `value` for the core predicate even when an externally-authored tag has
     /// surrounding whitespace or decomposed Unicode.
     var displayValue: String {
@@ -184,7 +184,7 @@ struct BoardSearchTagCandidate: Equatable, Sendable {
     }
 }
 
-/// Bounded native-search completions for the user's current unfinished text.
+/// Bounded search completions for the user's current unfinished text.
 struct BoardSearchSuggestions: Equatable, Sendable {
     static let maximumTagCount = 8
 

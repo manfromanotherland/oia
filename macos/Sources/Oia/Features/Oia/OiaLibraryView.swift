@@ -28,6 +28,7 @@ struct OiaLibraryView: View {
     @FocusState var boardFocused: Bool
     @FocusState var searchFocused: Bool
     @State var isSearchPresented = false
+    @State var showSearchSuggestions = false
     var body: some View {
         NavigationStack {
             deletionSurface
@@ -142,38 +143,7 @@ extension OiaLibraryView {
     }
 
     private var searchableBoard: some View {
-        @Bindable var bindableAppState = appState
-        let hasSearchInput = !bindableAppState.searchQuery.isEmpty
-            || !bindableAppState.searchTokens.isEmpty
-        return board
-            .searchable(
-                text: $bindableAppState.searchQuery,
-                tokens: $bindableAppState.searchTokens,
-                isPresented: $isSearchPresented,
-                placement: .toolbar,
-                prompt: "Search Óia"
-            ) { token in
-                if token.kind == .color,
-                   let palette = CardThemePalette(themeColor: token.value)
-                {
-                    Text(token.displayValue)
-                        .foregroundStyle(palette.foreground.color)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(palette.background.color, in: Capsule())
-                } else {
-                    Text(token.displayValue)
-                }
-            }
-            .searchSuggestions {
-                nativeSearchSuggestions
-            }
-            .searchFocused($searchFocused)
-            .onChange(of: searchFocused || hasSearchInput) { _, isActive in
-                if !isActive {
-                    isSearchPresented = false
-                }
-            }
+        board
             .toolbar { boardToolbar }
     }
 
@@ -186,6 +156,10 @@ extension OiaLibraryView {
 
             ToolbarItem(placement: .principal) {
                 boardFilterPicker
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                toolbarSearchControl
             }
         }
     }
@@ -240,8 +214,13 @@ extension OiaLibraryView {
 
     func focusSearch() {
         guard presentedReading == nil, !appState.isFocusMode else { return }
-        isSearchPresented = true
-        searchFocused = true
+        withAnimation(.easeInOut(duration: 0.22)) {
+            isSearchPresented = true
+        }
+        // The text field is inserted by the expanded toolbar state.
+        DispatchQueue.main.async {
+            searchFocused = true
+        }
     }
 
     @ViewBuilder

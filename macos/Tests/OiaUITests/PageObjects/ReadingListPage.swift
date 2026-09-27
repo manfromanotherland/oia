@@ -148,12 +148,11 @@ struct ReadingListPage {
     }
 
     // ── Search ────────────────────────────────────────────────────────────
-    // The search box is a plain NSSearchField embedded at the top of the list
-    // column (no custom identifier), so it's reached through the search-field
-    // element type.
+    // The toolbar search input has a stable identifier in both compact and
+    // expanded layouts.
 
     var searchField: XCUIElement {
-        app.searchFields.firstMatch
+        app.textFields[A11y.Search.field]
     }
 
     /// Clears the field and types `text`, verifying the field's value and retrying

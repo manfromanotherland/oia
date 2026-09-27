@@ -42,6 +42,10 @@ enum A11y {
         }
     }
 
+    enum Search {
+        static let field = "search.field"
+    }
+
     /// ── Reading list ──────────────────────────────────────────────────────
     enum List {
         static let table = "list.table"

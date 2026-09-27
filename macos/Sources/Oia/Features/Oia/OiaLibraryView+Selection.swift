@@ -60,8 +60,8 @@ extension OiaLibraryView {
         if ShortcutCatalog.focusSearch.matches(key: press.key, modifiers: press.modifiers),
            !appState.isFocusMode
         {
-            // The menu command and this board-local `/` path share SwiftUI's
-            // native `.searchable` presentation and focus bindings.
+            // The menu command and this board-local `/` path focus the same
+            // toolbar search field.
             focusSearch()
             return .handled
         }
