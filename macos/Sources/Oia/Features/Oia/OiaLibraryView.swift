@@ -155,32 +155,7 @@ extension OiaLibraryView {
                 placement: .toolbar,
                 prompt: "Search Óia"
             ) { token in
-<<<<<<< HEAD
                 Text(token.displayValue)
-||||||| parent of 64ae231 (fix(search): preserve color fills in search pills)
-                if token.kind == .color,
-                   let palette = CardThemePalette(themeColor: token.value)
-                {
-                    Text(token.displayValue)
-                        .foregroundStyle(palette.foreground.color)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 2)
-                        .background(palette.background.color, in: Capsule())
-                } else {
-                    Text(token.displayValue)
-                }
-=======
-                if token.kind == .color,
-                   let palette = CardThemePalette(themeColor: token.value)
-                {
-                    Text(ColorSearchTokenLabel.attributedString(
-                        hex: token.displayValue,
-                        palette: palette
-                    ))
-                } else {
-                    Text(token.displayValue)
-                }
->>>>>>> 64ae231 (fix(search): preserve color fills in search pills)
             }
             .searchSuggestions {
                 nativeSearchSuggestions
@@ -201,7 +176,7 @@ extension OiaLibraryView {
                     isSearchExpanded: isSearchExpanded,
                     searchTokens: appState.searchTokens
                 )
-                    .frame(width: 0, height: 0)
+                .frame(width: 0, height: 0)
             }
     }
 
@@ -526,14 +501,5 @@ extension OiaLibraryView {
         } else {
             closeOverlay()
         }
-    }
-}
-
-private enum ColorSearchTokenLabel {
-    static func attributedString(hex: String, palette: CardThemePalette) -> AttributedString {
-        var label = AttributedString("\u{00A0}\(hex)\u{00A0}")
-        label.foregroundColor = palette.foreground.color
-        label.backgroundColor = palette.background.color
-        return label
     }
 }
