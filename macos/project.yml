@@ -101,6 +101,7 @@ targets:
       - path: Sources/Oia/State/ComposedFilter.swift
       - path: Sources/Oia/State/BoardSelection.swift
       - path: Sources/Oia/State/BoardSearch.swift
+      - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
       - path: Sources/Oia/State/ReadingSort.swift
       - path: Sources/Oia/App/Shortcuts.swift
       - path: Sources/Oia/App/TestHooks.swift

@@ -38,12 +38,10 @@ extension AppState {
             try LibrarySetup.scaffold(at: url)
             WelcomeArticle.seedIfEmpty(in: url)
             // Keep scaffolding + welcome seed so onboarding stays testable, but
-            // in UI-testing mode skip the security-scoped bookmark handoff so
+            // in UI-testing mode skip the bookmark write so
             // the dev's persisted library bookmark is never overwritten.
             if !TestHooks.isUITesting {
                 try LibraryBookmark.save(url: url)
-                stopAccessing()
-                accessedURL = LibraryBookmark.resolve()
             }
             await boot(url: url)
         } catch {
@@ -324,13 +322,6 @@ extension AppState {
             to: configURL,
             atomically: true, encoding: .utf8
         )
-    }
-
-    // ── Security-scoped resource ──────────────────────────────────────────
-
-    private func stopAccessing() {
-        accessedURL?.stopAccessingSecurityScopedResource()
-        accessedURL = nil
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

@@ -2,54 +2,50 @@
 
 import Foundation
 
-/// Persists and resolves a security-scoped bookmark for the library folder.
-///
-/// macOS sandboxed apps lose access to user-chosen folders after reboot unless
-/// the URL is stored as a security-scoped bookmark. This type handles the
-/// full bookmark lifecycle: save, resolve, and start/stop accessing.
+/// Persists and resolves a bookmark for the library folder.
+/// Óia is not sandboxed, so a regular bookmark survives local builds with
+/// different signing identities.
 enum LibraryBookmark {
     private static let key = "libraryBookmark"
 
     // ── Save ──────────────────────────────────────────────────────────────
 
-    static func save(url: URL) throws {
+    static func save(url: URL, store: UserDefaults = .standard) throws {
         let data = try url.bookmarkData(
-            options: .withSecurityScope,
+            options: [],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        UserDefaults.standard.set(data, forKey: key)
+        store.set(data, forKey: key)
     }
 
     // ── Resolve ───────────────────────────────────────────────────────────
 
-    /// Returns a started security-scoped URL, or nil if no bookmark is stored.
-    /// Caller must call `url.stopAccessingSecurityScopedResource()` when done.
-    static func resolve() -> URL? {
-        guard let data = UserDefaults.standard.data(forKey: key) else { return nil }
+    /// Older security-scoped bookmarks still resolve without requesting scope.
+    static func resolve(store: UserDefaults = .standard) -> URL? {
+        guard let data = store.data(forKey: key) else { return nil }
         var isStale = false
         guard let url = try? URL(
             resolvingBookmarkData: data,
-            options: .withSecurityScope,
+            options: [],
             relativeTo: nil,
             bookmarkDataIsStale: &isStale
         ) else { return nil }
 
         if isStale, let refreshed = try? url.bookmarkData(
-            options: .withSecurityScope,
+            options: [],
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         ) {
-            UserDefaults.standard.set(refreshed, forKey: key)
+            store.set(refreshed, forKey: key)
         }
 
-        guard url.startAccessingSecurityScopedResource() else { return nil }
         return url
     }
 
     // ── Clear ─────────────────────────────────────────────────────────────
 
-    static func clear() {
-        UserDefaults.standard.removeObject(forKey: key)
+    static func clear(store: UserDefaults = .standard) {
+        store.removeObject(forKey: key)
     }
 }

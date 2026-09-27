@@ -208,7 +208,6 @@ final class AppState {
     @ObservationIgnored var watcherChanges = FolderWatcher.Change()
     @ObservationIgnored var inboxRetryTask: Task<Void, Never>?
     @ObservationIgnored var inboxRetryAttempt = 0
-    var accessedURL: URL?
     var watcher: FolderWatcher?
     let visualSearchCoordinator: VisualSearchCoordinator?
 
@@ -253,7 +252,6 @@ final class AppState {
                 Task { await boot(url: url) }
             }
         } else if let url = LibraryBookmark.resolve() {
-            accessedURL = url
             libraryURL = url
             isRestoringLibrary = true
             Task { await boot(url: url) }
