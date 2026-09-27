@@ -85,6 +85,35 @@ final class BoardSearchTests: XCTestCase {
         XCTAssertEqual(input.text, "modern")
     }
 
+    func testSubmittingHexColorsCreatesTokensAndPreservesOtherTerms() {
+        let completion = BoardSearchColorCompletion(
+            text: "image #ff0000 modern #00ff00",
+            tokens: [BoardSearchToken(kind: .tag, value: "chairs")]
+        )
+
+        XCTAssertTrue(completion.didComplete)
+        XCTAssertEqual(completion.text, "image modern")
+        XCTAssertEqual(completion.tokens.map(\.kind), [.tag, .color, .color])
+        XCTAssertEqual(completion.tokens.map(\.value), ["chairs", "#FF0000", "#00FF00"])
+        XCTAssertEqual(
+            BoardSearchInput(text: completion.text, tokens: completion.tokens).criteria.itemTypeTerms,
+            ["image"]
+        )
+    }
+
+    func testSubmittingDuplicateOrInvalidHexDoesNotAddExtraTokens() {
+        let existing = [BoardSearchToken(kind: .color, value: "#FF0000")]
+        let duplicate = BoardSearchColorCompletion(text: "#ff0000 chair", tokens: existing)
+        XCTAssertTrue(duplicate.didComplete)
+        XCTAssertEqual(duplicate.text, "chair")
+        XCTAssertEqual(duplicate.tokens, existing)
+
+        let invalid = BoardSearchColorCompletion(text: "chair  #ff00  ", tokens: existing)
+        XCTAssertFalse(invalid.didComplete)
+        XCTAssertEqual(invalid.text, "chair  #ff00  ")
+        XCTAssertEqual(invalid.tokens, existing)
+    }
+
     func testItemTypesAreDefaultSuggestionsAndSelectedTypeIsExcluded() {
         let initial = BoardSearchSuggestions(text: "", tagCandidates: [], selectedTokens: [])
         XCTAssertEqual(initial.itemTypeTokens.map(\.value), ["image", "video", "article", "link", "quote"])
@@ -93,6 +122,17 @@ final class BoardSearchTests: XCTestCase {
             selectedTokens: [BoardSearchToken(kind: .itemType, value: "image")]
         )
         XCTAssertTrue(selected.itemTypeTokens.isEmpty)
+    }
+
+    func testCompleteHexIsSuggestedAsAColorToken() {
+        let suggestions = BoardSearchSuggestions(text: "#ff0000", tagCandidates: [], selectedTokens: [])
+        XCTAssertEqual(suggestions.colorToken, BoardSearchToken(kind: .color, value: "#FF0000"))
+        XCTAssertNil(BoardSearchSuggestions(text: "#ff00", tagCandidates: [], selectedTokens: []).colorToken)
+        XCTAssertNil(BoardSearchSuggestions(
+            text: "#ff0000",
+            tagCandidates: [],
+            selectedTokens: [BoardSearchToken(kind: .color, value: "#FF0000")]
+        ).colorToken)
     }
 
     func testTagSuggestionsMatchCaseAndDiacriticsWithPrefixesFirst() {

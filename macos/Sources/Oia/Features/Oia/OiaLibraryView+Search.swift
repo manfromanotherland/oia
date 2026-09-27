@@ -23,6 +23,12 @@ extension OiaLibraryView {
                 }
             }
         }
+        if let token = suggestions.colorToken {
+            Section("Color") {
+                Text(token.displayValue)
+                    .searchCompletion(token)
+            }
+        }
         if !suggestions.tagTokens.isEmpty {
             Section("Tags") {
                 ForEach(suggestions.tagTokens) { token in

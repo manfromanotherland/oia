@@ -168,6 +168,15 @@ extension OiaLibraryView {
                 nativeSearchSuggestions
             }
             .searchFocused($searchFocused)
+            .onSubmit(of: .search) {
+                let completion = BoardSearchColorCompletion(
+                    text: appState.searchQuery,
+                    tokens: appState.searchTokens
+                )
+                guard completion.didComplete else { return }
+                appState.searchTokens = completion.tokens
+                appState.searchQuery = completion.text
+            }
             .toolbar { boardToolbar }
             .background {
                 CompactSearchToolbarConfiguration(isSearchExpanded: isSearchExpanded)

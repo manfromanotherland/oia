@@ -186,6 +186,31 @@ struct BoardSearchInput: Hashable, Sendable {
     }
 }
 
+/// Moves complete hex colors from submitted search text into native tokens.
+struct BoardSearchColorCompletion: Equatable, Sendable {
+    let text: String
+    let tokens: [BoardSearchToken]
+    let didComplete: Bool
+
+    init(text: String, tokens: [BoardSearchToken]) {
+        var remaining: [String] = []
+        var colors: [BoardSearchToken] = []
+        for word in text.split(whereSeparator: \.isWhitespace).map(String.init) {
+            let color = BoardSearchToken(kind: .color, value: word)
+            if word.first == "#", !color.value.isEmpty {
+                colors.append(color)
+            } else {
+                remaining.append(word)
+            }
+        }
+        didComplete = !colors.isEmpty
+        self.text = didComplete ? remaining.joined(separator: " ") : text
+        self.tokens = didComplete
+            ? BoardSearchCriteria(tokens: tokens + colors).tokens
+            : tokens
+    }
+}
+
 /// One cached tag-search candidate from the exact file-backed vocabulary.
 ///
 /// Folding thousands of tag strings on every search-field keystroke made the
@@ -211,6 +236,7 @@ struct BoardSearchSuggestions: Equatable, Sendable {
     static let itemTypes = ["image", "video", "article", "link", "quote"]
 
     let itemTypeTokens: [BoardSearchToken]
+    let colorToken: BoardSearchToken?
     let tagTokens: [BoardSearchToken]
     let visualToken: BoardSearchToken?
 
@@ -227,6 +253,9 @@ struct BoardSearchSuggestions: Equatable, Sendable {
             (needle.isEmpty || $0.hasPrefix(needle))
                 && !selectedIDs.contains(BoardSearchToken(kind: .itemType, value: $0).id)
         }.map { BoardSearchToken(kind: .itemType, value: $0) }
+        let color = BoardSearchToken(kind: .color, value: value)
+        colorToken = value.first == "#" && !color.value.isEmpty && !selectedIDs.contains(color.id)
+            ? color : nil
         guard !value.isEmpty else {
             tagTokens = []
             visualToken = nil
