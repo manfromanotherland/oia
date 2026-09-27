@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import LazyLayoutKit
 import SwiftUI
 
@@ -81,5 +82,44 @@ extension OiaLibraryView {
         default:
             nil
         }
+    }
+}
+
+/// Escape belongs to the board even when a card or the scroll view is the
+/// first responder. A local monitor keeps text fields and other windows free
+/// to handle their own Escape presses.
+struct BoardEscapeMonitor: NSViewRepresentable {
+    let onEscape: () -> Bool
+
+    func makeNSView(context: Context) -> EscapeView {
+        let view = EscapeView()
+        view.onEscape = onEscape
+        return view
+    }
+
+    func updateNSView(_ view: EscapeView, context: Context) {
+        view.onEscape = onEscape
+    }
+
+    final class EscapeView: NSView {
+        var onEscape: (() -> Bool)?
+        private var monitor: Any?
+
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+                self.monitor = nil
+            }
+            guard window != nil else { return }
+            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+                guard let self, event.keyCode == 53, event.window === self.window,
+                      self.onEscape?() == true else { return event }
+                return nil
+            }
+        }
+
     }
 }

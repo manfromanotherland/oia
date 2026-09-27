@@ -5,6 +5,21 @@ import XCTest
 /// Bring-up smoke test for the sidebar-free board: load every seeded card,
 /// open one, search to a single result, and delete it.
 final class SmokeTest: UITestCase {
+    func testBoardEscapeAndUnselectedCardContextDelete() throws {
+        try launchApp(articles: Fixtures.standardCorpus)
+
+        list.select(Fixtures.Ids.rust)
+        XCTAssertTrue(list.row(Fixtures.Ids.rust).isSelected)
+        keyboard.escape()
+        XCTAssertTrue(wait { !list.row(Fixtures.Ids.rust).isSelected },
+                      "Escape clears the card selection")
+
+        list.invokeContextMenu(on: Fixtures.Ids.swift, item: "Delete")
+        list.confirmDelete()
+        XCTAssertTrue(list.row(Fixtures.Ids.swift).waitDisappears(),
+                      "An unselected card can be deleted from its context menu")
+    }
+
     func testLaunchBoardOpenSearchAndDelete() throws {
         try launchApp(articles: Fixtures.standardCorpus)
 

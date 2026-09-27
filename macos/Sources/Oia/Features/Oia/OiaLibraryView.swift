@@ -302,8 +302,14 @@ extension OiaLibraryView {
                     phases: [.down, .repeat],
                     action: moveSelection
                 )
-                .onExitCommand {
-                    appState.boardSelection.clear()
+                .background {
+                    BoardEscapeMonitor {
+                        guard presentedReading == nil,
+                              !appState.isEditingText,
+                              !appState.boardSelection.isEmpty else { return false }
+                        appState.boardSelection.clear()
+                        return true
+                    }
                 }
                 .onKeyPress(
                     keys: [

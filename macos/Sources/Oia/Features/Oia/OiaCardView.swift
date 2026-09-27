@@ -21,6 +21,7 @@ struct OiaCardView: View {
     var onEditTags: () -> Void
 
     @State private var isHovered = false
+    @State private var isSelectingWithMouse = false
     @State private var fallbackVisibility = false
 
     private var isInViewport: Bool {
@@ -49,7 +50,15 @@ struct OiaCardView: View {
         accessibleCard(in: size)
             .contentShape(cardShape)
             .onTapGesture(count: 2, perform: onOpen)
-            .simultaneousGesture(TapGesture().onEnded(onSelect))
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { _ in
+                        guard !isSelectingWithMouse else { return }
+                        isSelectingWithMouse = true
+                        onSelect()
+                    }
+                    .onEnded { _ in isSelectingWithMouse = false }
+            )
             .contextMenu {
                 OiaReadingActions(
                     row: row,
