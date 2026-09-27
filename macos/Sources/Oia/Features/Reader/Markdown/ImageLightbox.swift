@@ -57,7 +57,11 @@ struct ImageLightbox: View {
     @ViewBuilder
     private var picture: some View {
         if let localImage {
-            displayed(Image(nsImage: localImage).resizable().scaledToFit())
+            if target.localURL.isLocalGIF {
+                displayed(AnimatedLocalGIF(url: target.localURL, fallback: localImage, contentMode: .fit))
+            } else {
+                displayed(Image(nsImage: localImage).resizable().scaledToFit())
+            }
         } else if failed {
             failureView
         } else {

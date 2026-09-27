@@ -73,11 +73,15 @@ struct AssetImageView: View {
             // upscaled to fill the width. A larger image still scales down to the
             // column, via `scaledToFit` under the surrounding `maxWidth: .infinity`.
             zoomable(
-                Image(nsImage: localImage)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: localImage.size.width)
-                    .clipShape(RoundedRectangle(cornerRadius: theme.imageCornerRadius))
+                Group {
+                    if let url = loadRequest.url, url.isLocalGIF {
+                        AnimatedLocalGIF(url: url, fallback: localImage, contentMode: .fit)
+                    } else {
+                        Image(nsImage: localImage).resizable().scaledToFit()
+                    }
+                }
+                .frame(maxWidth: localImage.size.width)
+                .clipShape(RoundedRectangle(cornerRadius: theme.imageCornerRadius))
             )
         } else if failed {
             placeholder

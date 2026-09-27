@@ -28,10 +28,15 @@ struct LocalReadingImage: View {
     var body: some View {
         Group {
             if let image = presentedImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .interpolation(.high)
-                    .aspectRatio(imageAspectRatio(image), contentMode: contentMode)
+                if let url = assetRequest?.url, url.isLocalGIF {
+                    AnimatedLocalGIF(url: url, fallback: image, contentMode: contentMode)
+                        .aspectRatio(imageAspectRatio(image), contentMode: contentMode)
+                } else {
+                    Image(nsImage: image)
+                        .resizable()
+                        .interpolation(.high)
+                        .aspectRatio(imageAspectRatio(image), contentMode: contentMode)
+                }
             } else {
                 placeholder
                     .aspectRatio(fallbackAspectRatio, contentMode: contentMode)
