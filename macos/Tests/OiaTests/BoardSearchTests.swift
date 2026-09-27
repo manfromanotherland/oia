@@ -60,6 +60,18 @@ final class BoardSearchTests: XCTestCase {
         )
     }
 
+    func testCriteriaReplacesEarlierItemTypeWhileKeepingOtherTokens() {
+        let criteria = BoardSearchCriteria(tokens: [
+            BoardSearchToken(kind: .itemType, value: "image"),
+            BoardSearchToken(kind: .tag, value: "cinema"),
+            BoardSearchToken(kind: .itemType, value: "video")
+        ])
+
+        XCTAssertEqual(criteria.tokens.map(\.kind), [.tag, .itemType])
+        XCTAssertEqual(criteria.tagTerms, ["cinema"])
+        XCTAssertEqual(criteria.itemTypeTerms, ["video"])
+    }
+
     func testSearchInputNormalizesTextAndIncludesStructuredTermsInActivity() {
         let empty = BoardSearchInput(text: " \n", tokens: [])
         let structured = BoardSearchInput(
@@ -85,16 +97,25 @@ final class BoardSearchTests: XCTestCase {
         XCTAssertEqual(input.text, "modern")
     }
 
+    func testLastTypedItemTypeOverridesSelectedAndEarlierTypedTypes() {
+        let input = BoardSearchInput(
+            text: "article image video modern",
+            tokens: [BoardSearchToken(kind: .itemType, value: "quote")]
+        )
+        XCTAssertEqual(input.criteria.itemTypeTerms, ["video"])
+        XCTAssertEqual(input.text, "modern")
+    }
+
     func testSubmittingHexColorsCreatesTokensAndPreservesOtherTerms() {
-        let completion = BoardSearchColorCompletion(
+        let completion = BoardSearchTermCompletion(
             text: "image #ff0000 modern #00ff00",
             tokens: [BoardSearchToken(kind: .tag, value: "chairs")]
         )
 
         XCTAssertTrue(completion.didComplete)
-        XCTAssertEqual(completion.text, "image modern")
-        XCTAssertEqual(completion.tokens.map(\.kind), [.tag, .color, .color])
-        XCTAssertEqual(completion.tokens.map(\.value), ["chairs", "#FF0000", "#00FF00"])
+        XCTAssertEqual(completion.text, "modern")
+        XCTAssertEqual(completion.tokens.map(\.kind), [.tag, .itemType, .color, .color])
+        XCTAssertEqual(completion.tokens.map(\.value), ["chairs", "image", "#FF0000", "#00FF00"])
         XCTAssertEqual(
             BoardSearchInput(text: completion.text, tokens: completion.tokens).criteria.itemTypeTerms,
             ["image"]
@@ -103,15 +124,30 @@ final class BoardSearchTests: XCTestCase {
 
     func testSubmittingDuplicateOrInvalidHexDoesNotAddExtraTokens() {
         let existing = [BoardSearchToken(kind: .color, value: "#FF0000")]
-        let duplicate = BoardSearchColorCompletion(text: "#ff0000 chair", tokens: existing)
+        let duplicate = BoardSearchTermCompletion(text: "#ff0000 chair", tokens: existing)
         XCTAssertTrue(duplicate.didComplete)
         XCTAssertEqual(duplicate.text, "chair")
         XCTAssertEqual(duplicate.tokens, existing)
 
-        let invalid = BoardSearchColorCompletion(text: "chair  #ff00  ", tokens: existing)
+        let invalid = BoardSearchTermCompletion(text: "chair  #ff00  ", tokens: existing)
         XCTAssertFalse(invalid.didComplete)
         XCTAssertEqual(invalid.text, "chair  #ff00  ")
         XCTAssertEqual(invalid.tokens, existing)
+    }
+
+    func testSubmittingNewItemTypeReplacesExistingTypeToken() {
+        let completion = BoardSearchTermCompletion(
+            text: "video cinema",
+            tokens: [
+                BoardSearchToken(kind: .itemType, value: "image"),
+                BoardSearchToken(kind: .tag, value: "film")
+            ]
+        )
+
+        XCTAssertTrue(completion.didComplete)
+        XCTAssertEqual(completion.text, "cinema")
+        XCTAssertEqual(completion.tokens.map(\.kind), [.tag, .itemType])
+        XCTAssertEqual(completion.tokens.map(\.value), ["film", "video"])
     }
 
     func testItemTypesAreDefaultSuggestionsAndSelectedTypeIsExcluded() {

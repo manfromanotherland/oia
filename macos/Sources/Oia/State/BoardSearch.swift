@@ -89,22 +89,27 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
 
 /// Normalized structured terms for one board query.
 ///
-/// Token order is retained for display and request construction, while equality
-/// and hashing use a canonical identity because the terms combine by AND and
-/// therefore have no semantic order.
+/// Item type is a single choice, so the last type replaces any earlier one.
+/// Other token order is retained for display and request construction, while
+/// equality and hashing use a canonical identity because the terms combine by
+/// AND and therefore have no semantic order.
 struct BoardSearchCriteria: Hashable, Sendable {
     let tokens: [BoardSearchToken]
 
     init(tokens: [BoardSearchToken]) {
+        let normalized = tokens.compactMap { token -> BoardSearchToken? in
+            let value = BoardSearchToken(kind: token.kind, value: token.value)
+            return value.displayValue.isEmpty ? nil : value
+        }
+        let lastItemTypeID = normalized.last { $0.kind == .itemType }?.id
         var seen = Set<BoardSearchToken.Identifier>()
-        self.tokens = tokens.compactMap { token in
-            let normalized = BoardSearchToken(kind: token.kind, value: token.value)
-            guard !normalized.displayValue.isEmpty,
-                  seen.insert(normalized.id).inserted
+        self.tokens = normalized.filter { token in
+            guard token.kind != .itemType || token.id == lastItemTypeID,
+                  seen.insert(token.id).inserted
             else {
-                return nil
+                return false
             }
-            return normalized
+            return true
         }
     }
 
@@ -186,27 +191,30 @@ struct BoardSearchInput: Hashable, Sendable {
     }
 }
 
-/// Moves complete hex colors from submitted search text into native tokens.
-struct BoardSearchColorCompletion: Equatable, Sendable {
+/// Moves recognized types and complete hex colors from submitted text into tokens.
+struct BoardSearchTermCompletion: Equatable, Sendable {
     let text: String
     let tokens: [BoardSearchToken]
     let didComplete: Bool
 
     init(text: String, tokens: [BoardSearchToken]) {
         var remaining: [String] = []
-        var colors: [BoardSearchToken] = []
+        var completed: [BoardSearchToken] = []
         for word in text.split(whereSeparator: \.isWhitespace).map(String.init) {
+            let lower = word.lowercased()
             let color = BoardSearchToken(kind: .color, value: word)
-            if word.first == "#", !color.value.isEmpty {
-                colors.append(color)
+            if BoardSearchSuggestions.itemTypes.contains(lower) {
+                completed.append(BoardSearchToken(kind: .itemType, value: lower))
+            } else if word.first == "#", !color.value.isEmpty {
+                completed.append(color)
             } else {
                 remaining.append(word)
             }
         }
-        didComplete = !colors.isEmpty
+        didComplete = !completed.isEmpty
         self.text = didComplete ? remaining.joined(separator: " ") : text
         self.tokens = didComplete
-            ? BoardSearchCriteria(tokens: tokens + colors).tokens
+            ? BoardSearchCriteria(tokens: tokens + completed).tokens
             : tokens
     }
 }

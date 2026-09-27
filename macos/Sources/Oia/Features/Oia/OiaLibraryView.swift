@@ -148,7 +148,10 @@ extension OiaLibraryView {
         return board
             .searchable(
                 text: $bindableAppState.searchQuery,
-                tokens: $bindableAppState.searchTokens,
+                tokens: Binding(
+                    get: { appState.searchTokens },
+                    set: { appState.searchTokens = BoardSearchCriteria(tokens: $0).tokens }
+                ),
                 placement: .toolbar,
                 prompt: "Search Óia"
             ) { token in
@@ -169,7 +172,7 @@ extension OiaLibraryView {
             }
             .searchFocused($searchFocused)
             .onSubmit(of: .search) {
-                let completion = BoardSearchColorCompletion(
+                let completion = BoardSearchTermCompletion(
                     text: appState.searchQuery,
                     tokens: appState.searchTokens
                 )

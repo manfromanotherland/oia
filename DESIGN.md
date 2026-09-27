@@ -111,10 +111,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   the same image or to an item type; completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
 - The empty suggestion menu offers Image, Video, Article, Link, and Quote. Selecting a completion
-  creates a type token. Typing a type word or `#RRGGBB` also filters by that type or palette color;
-  pressing Return turns complete hex colors into colored tokens, while remaining words stay broad
-  free text. Never infer an exact tag merely because a tag has the same spelling. Article excludes
-  lightweight links; Link selects only lightweight article cards.
+  creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
+  filters by that type or palette color; pressing Return turns complete type and hex terms into
+  tokens, while remaining words stay broad free text. Only the last type term applies. Never infer
+  an exact tag merely because a tag has the same spelling. Article excludes lightweight links;
+  Link selects only lightweight article cards.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Media,
   Articles, Links, Quotes**. Media combines image and video cards; Articles excludes lightweight
   link placeholders; Links means lightweight URL saves. Exact tag filtering comes from native
