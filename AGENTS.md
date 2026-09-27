@@ -190,6 +190,9 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>  ← AI co-author traile
   silently.
 - Never write logic into Swift/JS that belongs in `core`.
 - **The macOS reader is native SwiftUI — never use a WebView** (`WKWebView`/`WebKit`).
+- **One macOS debug build:** `/Applications/Óia.app` points to
+  `macos/build/Build/Products/Debug/Óia.app`. Run Xcode builds and tests from
+  `macos/` with `-derivedDataPath build` so they use that single app output.
 - Never assume single-writer access to the library; always reconcile against the files.
 - Never persist anything important only in the DB, and never sync the DB.
 - **Native UIs update optimistically; persistence happens in the background.** A mutation already

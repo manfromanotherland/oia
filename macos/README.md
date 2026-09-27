@@ -35,8 +35,8 @@ make all        # build the core XCFramework, copy bindings, generate Oia.xcodep
 ## Run
 
 ```bash
-open Oia.xcodeproj                                    # then press Run in Xcode
-xcodebuild build -project Oia.xcodeproj -scheme Oia   # or from the CLI
+xcodebuild build -project Oia.xcodeproj -scheme Oia -derivedDataPath build
+open /Applications/Óia.app
 ```
 
 ## Test
@@ -51,7 +51,7 @@ make test       # runs the unit suite (OiaTests) then the UI suite (OiaUITests)
 Both are dependency-free (Xcode + the macOS SDK only). Run one suite or test while iterating:
 
 ```bash
-xcodebuild test -project Oia.xcodeproj -scheme Oia -only-testing:OiaTests
+xcodebuild test -project Oia.xcodeproj -scheme Oia -derivedDataPath build -only-testing:OiaTests
 ```
 
 ## Format & lint

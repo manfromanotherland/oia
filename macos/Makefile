@@ -42,7 +42,7 @@ xcodegen:
 ## (OiaTests) before the UI suite, so logic regressions surface first.
 ## Assumes `make all` has generated the framework, bindings, and project.
 test:
-	xcodebuild test -project Oia.xcodeproj -scheme Oia
+	xcodebuild test -project Oia.xcodeproj -scheme Oia -derivedDataPath build
 
 ## Build a Release .app and wrap it in a distributable .dmg (dist/Óia.dmg).
 ## Ad-hoc signed only (local testing) — for a shippable build use `make release`.

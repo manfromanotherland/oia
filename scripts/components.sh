@@ -81,7 +81,7 @@ phase_cmd() {
     macos:fmt)       echo 'make format' ;;
     macos:lint)      echo 'make format-check && make lint' ;;
     macos:test)      echo 'make test' ;;
-    macos:build)     echo 'make all && xcodebuild build -project Oia.xcodeproj -scheme Oia -configuration Debug -derivedDataPath build CODE_SIGNING_ALLOWED=NO' ;;
+    macos:build)     echo 'make all && xcodebuild build -project Oia.xcodeproj -scheme Oia -configuration Debug -derivedDataPath build' ;;
 
     *)               echo '' ;;
   esac
