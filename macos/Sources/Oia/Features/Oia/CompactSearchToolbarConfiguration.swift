@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Supplies a compact resting width to SwiftUI's native
@@ -37,8 +38,6 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
         private static let compactConstraintIdentifier =
             "is.edmundo.oia.search.compact-resting-width"
         private var isSearchExpanded: Bool
-        private weak var anchoredField: NSSearchField?
-        private var trailingConstraint: NSLayoutConstraint?
         nonisolated(unsafe) private var mouseMonitor: Any?
 
         init(isSearchExpanded: Bool) {
@@ -67,11 +66,6 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             super.viewDidMoveToWindow()
             if let mouseMonitor { NSEvent.removeMonitor(mouseMonitor) }
             mouseMonitor = nil
-            if window == nil {
-                trailingConstraint?.isActive = false
-                trailingConstraint = nil
-                anchoredField = nil
-            }
             if window != nil {
                 mouseMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) {
                     [weak self] event in
@@ -98,11 +92,22 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                     if self.isSearchExpanded, !clickedSearch,
                        field.stringValue.isEmpty
                     {
-                        // Keep the trailing edge anchored while AppKit animates
-                        // the field's width back to its compact representation.
-                        self.isSearchExpanded = false
-                        self.configureCurrentToolbar()
-                        item.endSearchInteraction()
+                        // AppKit's outgoing animation translates the still-wide
+                        // field beyond the window before shrinking it. Complete
+                        // the native interaction and compact layout together,
+                        // without letting that presentation-layer motion run.
+                        NSAnimationContext.runAnimationGroup { context in
+                            context.duration = 0
+                            context.allowsImplicitAnimation = false
+                            CATransaction.begin()
+                            CATransaction.setDisableActions(true)
+                            self.isSearchExpanded = false
+                            self.configureCurrentToolbar()
+                            item.endSearchInteraction()
+                            self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
+                            self.window?.displayIfNeeded()
+                            CATransaction.commit()
+                        }
                     }
                     return event
                 }
@@ -146,7 +151,6 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
 
         private func configure(_ item: NSSearchToolbarItem) {
             let field = item.searchField
-            anchorTrailingEdge(of: field)
             if let compactWidth = field.constraints.first(where: {
                 $0.identifier == Self.compactConstraintIdentifier
             }) {
@@ -163,28 +167,6 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             // leftward without clipping.
             compactWidth.priority = desiredPriority
             compactWidth.isActive = true
-        }
-
-        private func anchorTrailingEdge(of field: NSSearchField) {
-            guard anchoredField !== field,
-                  let chrome = window?.contentView?.superview,
-                  field.isDescendant(of: chrome),
-                  chrome.bounds.width > 0, field.bounds.width > 0
-            else { return }
-
-            trailingConstraint?.isActive = false
-            let fieldFrame = field.convert(field.bounds, to: chrome)
-            let inset = max(0, chrome.bounds.maxX - fieldFrame.maxX)
-            let constraint = field.trailingAnchor.constraint(
-                equalTo: chrome.trailingAnchor,
-                constant: -inset
-            )
-            // Fix the right edge in place while AppKit changes the field width.
-            // Its internal toolbar layout constraints are default-high (750).
-            constraint.priority = .init(rawValue: 752)
-            constraint.isActive = true
-            trailingConstraint = constraint
-            anchoredField = field
         }
 
         private var desiredPriority: NSLayoutConstraint.Priority {
@@ -227,6 +209,5 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             window?.contentView?.superview?.layoutSubtreeIfNeeded()
             window?.displayIfNeeded()
         }
-
     }
 }
