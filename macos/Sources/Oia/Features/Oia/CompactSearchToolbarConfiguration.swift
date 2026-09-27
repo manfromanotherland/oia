@@ -70,15 +70,31 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                     [weak self] event in
                     guard let self, event.window === self.window,
                           let item = self.window?.toolbar?.items
-                            .compactMap({ $0 as? NSSearchToolbarItem }).first,
-                          !self.isSearchExpanded,
-                          item.searchField.bounds.contains(
-                            item.searchField.convert(event.locationInWindow, from: nil)
-                          ) else { return event }
+                            .compactMap({ $0 as? NSSearchToolbarItem }).first
+                    else { return event }
 
-                    self.isSearchExpanded = true
-                    CompactSearchToolbarConfiguration.beginSearchInteraction(in: self.window)
-                    return nil
+                    let field = item.searchField
+                    let clickedSearch = field.bounds.contains(
+                        field.convert(event.locationInWindow, from: nil)
+                    )
+                    if !self.isSearchExpanded, clickedSearch {
+                        self.isSearchExpanded = true
+                        CompactSearchToolbarConfiguration.beginSearchInteraction(in: self.window)
+                        return nil
+                    }
+
+                    // AppKit starts its native focus-loss animation while the
+                    // toolbar still has the expanded allocation. Compacting in
+                    // that transaction makes the full-width field slide past
+                    // the right edge. Settle the compact width before the click
+                    // can end editing instead.
+                    if self.isSearchExpanded, !clickedSearch,
+                       field.stringValue.isEmpty
+                    {
+                        self.isSearchExpanded = false
+                        self.configureCurrentToolbar()
+                    }
+                    return event
                 }
             }
             configureCurrentToolbar()
