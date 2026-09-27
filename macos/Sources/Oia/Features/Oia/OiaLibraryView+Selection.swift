@@ -61,7 +61,7 @@ extension OiaLibraryView {
            !appState.isFocusMode
         {
             // The menu command and this board-local `/` path share SwiftUI's
-            // native `.searchFocused` binding.
+            // native `.searchable` presentation and focus bindings.
             focusSearch()
             return .handled
         }

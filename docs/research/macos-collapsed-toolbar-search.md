@@ -1,126 +1,21 @@
 # Collapsed macOS toolbar search
 
-Research date: 2026-09-24; availability rechecked 2026-09-25 against Apple's current documentation and the public Xcode 27.0 / macOS 27 SDK interfaces and compiler.
+Research updated 2026-09-27 against Apple's documentation and the installed Xcode 27 macOS SDK.
 
-## Conclusion
+## Supported behavior
 
-The Mac-native control is [`NSSearchToolbarItem`](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem), not a separate search button plus a conditionally mounted SwiftUI search field. It owns the compressed magnifying-glass representation, the field, and the expansion transition. Apple documents that it collapses automatically when toolbar space is low and expands when clicked.
+Óia uses SwiftUI's `.searchable` with tokens and suggestions. On macOS this creates a trailing [`NSSearchToolbarItem`](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem). AppKit expands it on focus and may compress it to a magnifying-glass button **when toolbar space is low**. AppKit owns the transition and the toolbar allocation. The [toolbar placement documentation](https://developer.apple.com/documentation/swiftui/searchfieldplacement/toolbar) confirms that this is the trailing macOS toolbar item.
 
-Xcode 26 introduced the `SearchToolbarBehavior` type and the `searchToolbarBehavior(_:)` modifier on native macOS 26. That does **not** make every behavior value available on macOS. The exact member that requests a button-like resting search control, `SearchToolbarBehavior.minimize`, is available on iOS, iPadOS, Mac Catalyst, and visionOS 26, but is explicitly unavailable on a native macOS target. Native macOS receives `.automatic` only. This remains true in the current Xcode 27 SDK and compiler. [`searchToolbarBehavior(_:)`](https://developer.apple.com/documentation/swiftui/view/searchtoolbarbehavior%28_%3A%29), [`.automatic`](https://developer.apple.com/documentation/swiftui/searchtoolbarbehavior/automatic), [`.minimize`](https://developer.apple.com/documentation/swiftui/searchtoolbarbehavior/minimize).
+SwiftUI's tokenized [`.searchable(text:tokens:isPresented:placement:prompt:token:)`](https://developer.apple.com/documentation/swiftui/view/searchable%28text%3Atokens%3Aispresented%3Aplacement%3Aprompt%3Atoken%3A%29) is available on macOS 14 and later, according to the installed SwiftUI interface. Apple says [`isPresented`](https://developer.apple.com/documentation/swiftui/managing-search-interface-activation) activates and dismisses search on macOS, including focus. It does not request a compact resting representation.
 
-There is therefore still no named public force-minimize setting for a native macOS toolbar search item. `DefaultToolbarItem(kind: .search)` only repositions the system search item, and `ToolbarSpacer` only supplies fixed or flexible space; neither requests compact search behavior.
+[`SearchToolbarBehavior.minimize`](https://developer.apple.com/documentation/swiftui/searchtoolbarbehavior/minimize) would request a button-like resting control, but the installed macOS SDK explicitly marks that member unavailable on native macOS. Only `.automatic` is available there. `preferredWidthForSearchField` controls the width **when focused**, not the compact resting state. The older `NSToolbarItem.minSize` and `maxSize` properties are deprecated; Apple recommends automatic measurement through view constraints instead.
 
-For an always-compact resting state at a wide window size, an AppKit layout workaround can give the owned `NSSearchField` a square-width constraint just above AppKit's default-high resting-width constraint. The SDK header permits configuring the search field's width constraint. A priority of 751 selects the compressed representation at rest. While search is focused or retains text or tokens, that constraint must drop below AppKit's own width constraint so the toolbar item can claim its preferred width and keep its trailing edge fixed.
+## Why the previous workaround failed
 
-```swift
-let searchItem = NSSearchToolbarItem(
-    itemIdentifier: NSToolbarItem.Identifier("com.oia.search")
-)
-let searchField = searchItem.searchField
-searchField.placeholderString = "Search Óia"
+The former `CompactSearchToolbarConfiguration` added a square-width constraint to the search field *after* SwiftUI created the toolbar item, then changed its priority during focus changes. That could make the idle field look compact, but it did not give the toolbar item a consistent allocation during AppKit's outgoing animation. The full-width presentation moved beyond the window's trailing edge before shrinking. Suppressing implicit animations and forcing layout inside the focus transaction did not change that behavior. A later constraint between the search field and a view outside its hierarchy caused a launch-time Auto Layout abort and was reverted.
 
-let compactWidth = searchField.widthAnchor.constraint(
-    equalTo: searchField.heightAnchor
-)
-compactWidth.priority = .init(
-    rawValue: NSLayoutConstraint.Priority.defaultHigh.rawValue + 1
-)
-compactWidth.isActive = true
+Apple's [`NSSearchToolbarItem.searchField`](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem/searchfield) documentation says to customize a replacement search field **before assigning it to the item**. It does not document changing the generated field's sizing constraint after SwiftUI installs it. The earlier claim that this was a reliable native compact mode was incorrect.
 
-// The default is 240 points; set this only if Óia needs another active width.
-searchItem.preferredWidthForSearchField = 240
+## Decision
 
-// Mirror whether the native field should remain expanded.
-compactWidth.priority = isSearchExpanded
-    ? .defaultLow
-    : .init(rawValue: NSLayoutConstraint.Priority.defaultHigh.rawValue + 1)
-```
-
-In a hidden macOS 27 toolbar-level check using a 543-point window, that configuration produced:
-
-- inactive at priority 751: the native item is 36 × 36 at x = 499…535;
-- active while incorrectly leaving priority 751 in place: the field is 240 points at x = 397…637, clipped beyond the window's right edge;
-- active after lowering the compact constraint to `.defaultLow`: the field is 240 points at x = 295…535, retaining the same trailing edge and expanding leftward inside the window;
-- nonempty after focus loss and token-only expanded intent at `.defaultLow`: the field remains fully visible at x = 293…533;
-- a nonempty field installed with expanded intent starts fully visible at x = 375…535 rather than overflowing.
-
-Use `beginSearchInteraction()` for Command-F and `endSearchInteraction()` for an explicit Escape command. `resignsFirstResponderWithCancel` defaults to `true`, so the field's native cancel action clears the query and gives up first responder, allowing the empty field to collapse. The item handles an ordinary click itself. Apple describes `beginSearchInteraction()` and `endSearchInteraction()` as the supported way to control search programmatically. [Begin interaction](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem/beginsearchinteraction%28%29), [end interaction](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem/endsearchinteraction%28%29), and [cancel behavior](https://developer.apple.com/documentation/appkit/nssearchtoolbaritem/resignsfirstresponderwithcancel).
-
-The earlier always-`.defaultLow` attempt lost to AppKit's priority-750 resting width and therefore remained expanded in Óia. Leaving the corrected priority-751 constraint dominant while the native field was expanded created a different failure: the field drew at its expanded width without the toolbar reallocating that width, so it extended beyond the window and its visible geometry no longer matched the toolbar item's actionable region. Switching the same constraint between 751 only for the empty, unfocused rest state and `.defaultLow` while focused or retaining text or tokens composes public APIs and uses the customization point called out by Apple's SDK header, but Apple does not document it as a formal always-minimized mode. Treat it as an isolated layout workaround, not a guaranteed semantic API, and check it manually in Óia on every supported macOS release. The native low-space collapse itself is the documented contract.
-
-## Why the SwiftUI attempts stayed expanded
-
-[`searchable(text:placement:prompt:)`](https://developer.apple.com/documentation/swiftui/view/searchable%28text%3Aplacement%3Aprompt%3A%29) places a search field at the trailing edge of a macOS toolbar. Apple says its precise appearance depends on platform, location, and configuration, but exposes no macOS compact-rest option through this modifier.
-
-The overload with `isPresented` controls activation, not the resting representation. Apple describes it as programmatic presentation and says that on macOS setting it presents and focuses search, while dismissing unfocuses it. Keeping this modifier mounted avoids rebuilding the board, but does not force its toolbar field to become a magnifying-glass button. [`searchable(text:isPresented:placement:prompt:)`](https://developer.apple.com/documentation/swiftui/view/searchable%28text%3Aispresented%3Aplacement%3Aprompt%3A%29), [Managing search interface activation](https://developer.apple.com/documentation/swiftui/managing-search-interface-activation).
-
-`searchFocused` is narrower still: it binds keyboard focus to the search field. It does not control toolbar presentation or compactness. [`searchFocused(_:)`](https://developer.apple.com/documentation/swiftui/view/searchfocused%28_%3A%29).
-
-## Native macOS 26 and 27 API audit
-
-The installed SwiftUI public interface records the following:
-
-| API | macOS availability | What it controls |
-| --- | --- | --- |
-| `.searchable(..., placement: .toolbar)` | macOS 12+ | Adds the trailing toolbar search field. |
-| `.searchable(..., isPresented:)` | macOS 14+ | Programmatic search activation and dismissal. |
-| `.searchFocused(...)` | macOS 15+ | Focus only. |
-| `.searchToolbarBehavior(_:)` | macOS 26+ | Applies a `SearchToolbarBehavior`; native macOS can pass `.automatic`. |
-| `SearchToolbarBehavior.automatic` | macOS 26+ | Automatic behavior. |
-| `SearchToolbarBehavior.minimize` | **Unavailable on native macOS** | Button-like inactive search on iOS, iPadOS, Mac Catalyst, and visionOS 26+. |
-| `DefaultToolbarItem(kind: .search, placement:)` | macOS 26+ | Repositions the system-provided search item. |
-| `ToolbarSpacer` | macOS 26+ | Fixed or flexible toolbar spacing. |
-| `.toolbarMinimizationBehavior(_:for:)` | macOS 27+ | A separate whole-toolbar scrolling API, not search-item presentation. |
-| `NSSearchToolbarItem` | macOS 11+ | Native Mac search item, including low-space compression and begin/end interaction. |
-
-The decisive installed declaration is:
-
-```swift
-@available(iOS 26.0, macOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *)
-public struct SearchToolbarBehavior {
-    public static var automatic: SearchToolbarBehavior { get }
-
-    @available(iOS 26.0, visionOS 26.0, *)
-    @available(macOS, unavailable)
-    @available(tvOS, unavailable)
-    @available(watchOS, unavailable)
-    public static var minimize: SearchToolbarBehavior { get }
-}
-
-extension View {
-    @available(iOS 26.0, macOS 26.0, tvOS 26.0, watchOS 26.0, visionOS 26.0, *)
-    public func searchToolbarBehavior(_ behavior: SearchToolbarBehavior) -> some View
-}
-```
-
-Apple's current documentation metadata agrees with the SDK: the modifier and type list macOS 26, while the `.minimize` symbol omits macOS and lists Mac Catalyst instead. Mac Catalyst availability does not make the member callable from Óia's native `platform: macOS` target.
-
-A direct type-check with the installed Xcode 27 compiler used the complete modifier chain for arm64 and x86_64 targets on both macOS 26 and macOS 27:
-
-```swift
-Text("Content")
-    .searchable(text: .constant(""), placement: .toolbar)
-    .searchToolbarBehavior(.minimize)
-```
-
-All four checks fail with `'minimize' is unavailable in macOS`; replacing `.minimize` with `.automatic` succeeds for all four. This rules out deployment-target and architecture ambiguity. An `if #available(macOS 26, *)` branch cannot bypass an explicit platform-unavailable annotation.
-
-The relevant installed first-party interfaces are:
-
-- `SwiftUI.swiftinterface` lines 7286–7312 (`searchable(..., isPresented:)`), 7493–7502 (`searchFocused`), 8088–8106 and 22463–22486 (`DefaultToolbarItem` and `.search`), 14254–14286 (`ToolbarMinimizationBehavior`), 26195–26215 (`SearchToolbarBehavior`), and 29506–29531 (`ToolbarSpacer`).
-- `AppKit.framework/Headers/NSSearchToolbarItem.h` lines 20–63 (`searchField`, width-constraint guidance, `preferredWidthForSearchField`, and begin/end interaction).
-- Xcode's first-party `IDEIntelligenceChat.framework/Resources/AdditionalDocumentation/SwiftUI-New-Toolbar-Features.md` puts the explicit `.minimize` recommendation under iOS and iPadOS; its separate macOS section does not recommend that member.
-
-Apple's design guidance matches AppKit's adaptive contract: on iPad and Mac, a toolbar search field can scale or collapse into a button according to available space; activation expands it and may move other items into overflow. [Build a SwiftUI app with the new design, WWDC25](https://developer.apple.com/videos/play/wwdc2025/323/), [Design intuitive search experiences, WWDC26](https://developer.apple.com/videos/play/wwdc2026/292/). The WWDC25 session also introduces `searchToolbarBehavior(.minimize)`, but the target-specific SDK declaration and current symbol metadata limit that explicit value to iOS, iPadOS, Mac Catalyst, and visionOS. The supplied Photos recording has a 490-pixel-wide frame, so its compact rest state is consistent with native Mac's documented low-space behavior; it does not by itself establish a native-macOS force-minimize API.
-
-## Not `toolbarMinimizationBehavior`
-
-`toolbarMinimizationBehavior(_:for:)` is a different SwiftUI API introduced across Apple SDKs in version 27. It controls how an entire toolbar or navigation bar minimizes in response to scrolling; it does not choose the resting representation of a search item.
-
-Apple documents `.navigationBar` as the only supported placement. That placement, along with `.onScrollDown`, `.onScrollUp`, and `.never`, is unavailable on native macOS in the Xcode 27 interface. The type and `.automatic` member are nominally present on macOS 27, but this API provides no native-Mac replacement for `SearchToolbarBehavior.minimize`. [`toolbarMinimizationBehavior(_:for:)`](https://developer.apple.com/documentation/swiftui/view/toolbarminimizationbehavior%28_%3Afor%3A%29), [`ToolbarMinimizationBehavior`](https://developer.apple.com/documentation/swiftui/toolbarminimizationbehavior).
-
-## Recommendation for Óia
-
-Use exactly one persistent `NSSearchToolbarItem`. Óia can keep `.searchable` as the owner of that native item and its query binding, then configure the generated item through the window toolbar when AppKit adds it. Apply the square-width constraint once, set it to priority 751 only while search is empty and unfocused, and lower it to `.defaultLow` while `.searchFocused` reports focus or the binding retains text or tokens. AppKit continues to own clicking, Escape/cancel, focus loss, and the expansion animation. There is no need to replace the rest of the SwiftUI toolbar or add a second search control. Do not conditionally attach `.searchable`, use private SwiftUI symbols, or use spacing as an implicit compactness switch.
-
-This keeps the system control and animation while requesting a compact resting width. It still requires manual verification on macOS 15, 26, and 27 because Óia declares macOS 15 as its deployment target and the current product integration has not passed the requested visual behavior.
+Use one persistent native `.searchable` item and its public `isPresented` and `searchFocused` bindings for ⌘F and `/`. Dismiss presentation when search is empty and no longer focused. Remove the field constraint, mouse monitor, and direct begin/end interaction calls. AppKit then decides when available toolbar space calls for the compact representation and keeps responsibility for both directions of its animation. At wide window sizes the native field may remain visible at rest; macOS provides no supported always-compact switch for this control. Óia keeps native token editing and suggestions, as required by [DESIGN.md](../../DESIGN.md).

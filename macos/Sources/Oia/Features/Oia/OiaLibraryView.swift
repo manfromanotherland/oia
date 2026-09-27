@@ -27,6 +27,7 @@ struct OiaLibraryView: View {
     @State var quickLookURL: URL?
     @FocusState var boardFocused: Bool
     @FocusState var searchFocused: Bool
+    @State var isSearchPresented = false
     var body: some View {
         NavigationStack {
             deletionSurface
@@ -142,13 +143,13 @@ extension OiaLibraryView {
 
     private var searchableBoard: some View {
         @Bindable var bindableAppState = appState
-        let isSearchExpanded = searchFocused
-            || !bindableAppState.searchQuery.isEmpty
+        let hasSearchInput = !bindableAppState.searchQuery.isEmpty
             || !bindableAppState.searchTokens.isEmpty
         return board
             .searchable(
                 text: $bindableAppState.searchQuery,
                 tokens: $bindableAppState.searchTokens,
+                isPresented: $isSearchPresented,
                 placement: .toolbar,
                 prompt: "Search Óia"
             ) { token in
@@ -168,11 +169,12 @@ extension OiaLibraryView {
                 nativeSearchSuggestions
             }
             .searchFocused($searchFocused)
-            .toolbar { boardToolbar }
-            .background {
-                CompactSearchToolbarConfiguration(isSearchExpanded: isSearchExpanded)
-                    .frame(width: 0, height: 0)
+            .onChange(of: searchFocused || hasSearchInput) { _, isActive in
+                if !isActive {
+                    isSearchPresented = false
+                }
             }
+            .toolbar { boardToolbar }
     }
 
     @ToolbarContentBuilder
@@ -238,7 +240,7 @@ extension OiaLibraryView {
 
     func focusSearch() {
         guard presentedReading == nil, !appState.isFocusMode else { return }
-        CompactSearchToolbarConfiguration.beginSearchInteraction(in: NSApp.keyWindow)
+        isSearchPresented = true
         searchFocused = true
     }
 
