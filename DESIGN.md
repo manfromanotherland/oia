@@ -110,7 +110,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   *"Search Óia"*. Native token suggestions can narrow the board to exact tags or terms found in
   the same image or to an item type; completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
-- The empty suggestion menu offers Quote, Image, Video, Link, and Article. Selecting a completion
+- The empty suggestion menu offers Image, Video, Article, Link, and Quote. Selecting a completion
   creates a type token. Typing a type word or `#RRGGBB` also filters by that type or palette color;
   remaining words stay broad free text. Never infer an exact tag merely because a tag has the same
   spelling. Article excludes lightweight links; Link selects only lightweight article cards.

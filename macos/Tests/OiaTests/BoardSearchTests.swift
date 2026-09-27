@@ -87,7 +87,7 @@ final class BoardSearchTests: XCTestCase {
 
     func testItemTypesAreDefaultSuggestionsAndSelectedTypeIsExcluded() {
         let initial = BoardSearchSuggestions(text: "", tagCandidates: [], selectedTokens: [])
-        XCTAssertEqual(initial.itemTypeTokens.map(\.value), ["quote", "image", "video", "link", "article"])
+        XCTAssertEqual(initial.itemTypeTokens.map(\.value), ["image", "video", "article", "link", "quote"])
         let selected = BoardSearchSuggestions(
             text: "im", tagCandidates: [],
             selectedTokens: [BoardSearchToken(kind: .itemType, value: "image")]

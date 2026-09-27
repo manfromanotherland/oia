@@ -208,7 +208,7 @@ struct BoardSearchTagCandidate: Equatable, Sendable {
 /// Bounded native-search completions for the user's current unfinished text.
 struct BoardSearchSuggestions: Equatable, Sendable {
     static let maximumTagCount = 8
-    static let itemTypes = ["quote", "image", "video", "link", "article"]
+    static let itemTypes = ["image", "video", "article", "link", "quote"]
 
     let itemTypeTokens: [BoardSearchToken]
     let tagTokens: [BoardSearchToken]
