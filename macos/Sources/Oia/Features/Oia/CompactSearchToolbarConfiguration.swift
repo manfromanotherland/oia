@@ -331,14 +331,14 @@ private final class ColorSearchTokenCell: NSTextAttachmentCell {
         NSColor(srgbRed: background.red, green: background.green, blue: background.blue, alpha: 1)
             .setFill()
         NSBezierPath(roundedRect: cellFrame.insetBy(dx: 1, dy: 1),
-                     xRadius: cellFrame.height / 2, yRadius: cellFrame.height / 2).fill()
+                     xRadius: 4, yRadius: 4).fill()
 
         let foreground = palette.foreground
         let textColor = NSColor(
             srgbRed: foreground.red,
             green: foreground.green,
             blue: foreground.blue,
-            alpha: 1
+            alpha: 0.8
         )
         let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
         let text = NSAttributedString(string: tokenTitle, attributes: [
