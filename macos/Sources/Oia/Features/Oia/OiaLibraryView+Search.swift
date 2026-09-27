@@ -13,9 +13,7 @@ extension OiaLibraryView {
     }
 
     private var isToolbarSearchExpanded: Bool {
-        isSearchPresented || searchFocused
-            || !appState.searchQuery.isEmpty
-            || !appState.searchTokens.isEmpty
+        isSearchPresented
     }
 
     private var hasSearchSuggestions: Bool {
@@ -78,9 +76,11 @@ extension OiaLibraryView {
         .padding(.leading, 10)
         .padding(.trailing, expanded ? 8 : 10)
         .frame(width: expanded ? 260 : 36, height: 34, alignment: .leading)
-        .background(.regularMaterial, in: Capsule())
-        .overlay(Capsule().strokeBorder(.primary.opacity(0.12)))
-        .clipped()
+        .background {
+            if #unavailable(macOS 26) {
+                Capsule().fill(.regularMaterial)
+            }
+        }
         .animation(.easeInOut(duration: 0.22), value: expanded)
         .popover(isPresented: $showSearchSuggestions, arrowEdge: .bottom) {
             searchSuggestionsPopover
@@ -91,17 +91,18 @@ extension OiaLibraryView {
         .onChange(of: searchFocused) { _, focused in
             if focused {
                 showSearchSuggestions = !state.searchQuery.isEmpty && hasSearchSuggestions
-            } else if state.searchQuery.isEmpty && state.searchTokens.isEmpty {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    isSearchPresented = false
-                }
+            } else if !showSearchSuggestions {
+                collapseToolbarSearch()
             }
         }
-        .onChange(of: state.searchQuery.isEmpty && state.searchTokens.isEmpty) { _, empty in
-            if empty && !searchFocused {
-                withAnimation(.easeInOut(duration: 0.22)) {
-                    isSearchPresented = false
-                }
+        .onChange(of: showSearchSuggestions) { _, showing in
+            if !showing && !searchFocused {
+                collapseToolbarSearch()
+            }
+        }
+        .onChange(of: appState.isEditingText) { _, editing in
+            if !editing && !showSearchSuggestions {
+                collapseToolbarSearch()
             }
         }
         .onChange(of: searchSuggestions) { _, _ in
@@ -185,6 +186,11 @@ extension OiaLibraryView {
 
     private func dismissToolbarSearch() {
         appState.clearSearch()
+        collapseToolbarSearch()
+    }
+
+    func collapseToolbarSearch() {
+        guard isSearchPresented else { return }
         showSearchSuggestions = false
         searchFocused = false
         withAnimation(.easeInOut(duration: 0.22)) {

@@ -144,6 +144,10 @@ extension OiaLibraryView {
 
     private var searchableBoard: some View {
         board
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                TapGesture().onEnded { collapseToolbarSearch() }
+            )
             .toolbar { boardToolbar }
     }
 
