@@ -93,6 +93,11 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                     {
                         self.isSearchExpanded = false
                         self.configureCurrentToolbar()
+                        // Pair the explicit begin call with AppKit's matching
+                        // end call while the compact allocation is already in
+                        // place. Merely changing focus leaves the toolbar item
+                        // animating a full-width field beyond the trailing edge.
+                        item.endSearchInteraction()
                     }
                     return event
                 }
