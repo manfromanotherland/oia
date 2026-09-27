@@ -23,7 +23,7 @@ struct ReadingListPage {
         selectScope("All")
     }
 
-    private func selectScope(_ label: String) {
+    func selectScope(_ label: String) {
         let radio = filterGroup.radioButtons[label]
         (radio.exists ? radio : filterGroup.buttons[label]).clickWhenReady()
     }

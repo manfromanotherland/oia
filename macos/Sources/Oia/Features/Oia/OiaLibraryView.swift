@@ -196,8 +196,7 @@ extension OiaLibraryView {
     private var boardFilterPicker: some View {
         Picker("Filter", selection: scopeSelection) {
             ForEach(LibraryScope.allCases) { scope in
-                Label(scope.label, systemImage: scope.icon)
-                    .labelStyle(.iconOnly)
+                Text(scope.label)
                     .help(scope.label)
                     .accessibilityLabel(scope.label)
                     .tag(scope)

@@ -120,10 +120,11 @@ enum ShortcutCatalog {
     static let decreaseCardSize = AppShortcut(title: "Decrease Card Size", key: "-", modifiers: [.command, .shift], keyGlyph: "-")
     static let increaseCardSize = AppShortcut(title: "Increase Card Size", key: "=", modifiers: [.command, .shift], keyGlyph: "+")
     static let showAll = AppShortcut(title: "Show All", key: "1", modifiers: .command, keyGlyph: "1")
-    static let showMedia = AppShortcut(title: "Show Media", key: "2", modifiers: .command, keyGlyph: "2")
-    static let showArticles = AppShortcut(title: "Show Articles", key: "3", modifiers: .command, keyGlyph: "3")
-    static let showLinks = AppShortcut(title: "Show Links", key: "4", modifiers: .command, keyGlyph: "4")
-    static let showQuotes = AppShortcut(title: "Show Quotes", key: "5", modifiers: .command, keyGlyph: "5")
+    static let showImages = AppShortcut(title: "Show Images", key: "2", modifiers: .command, keyGlyph: "2")
+    static let showVideos = AppShortcut(title: "Show Videos", key: "3", modifiers: .command, keyGlyph: "3")
+    static let showArticles = AppShortcut(title: "Show Articles", key: "4", modifiers: .command, keyGlyph: "4")
+    static let showLinks = AppShortcut(title: "Show Links", key: "5", modifiers: .command, keyGlyph: "5")
+    static let showQuotes = AppShortcut(title: "Show Quotes", key: "6", modifiers: .command, keyGlyph: "6")
     static let previousFilter = AppShortcut(title: "Previous Filter", key: "[", modifiers: .command, keyGlyph: "[")
     static let nextFilter = AppShortcut(title: "Next Filter", key: "]", modifiers: .command, keyGlyph: "]")
     static let previousItem = AppShortcut(title: "Previous Item", key: "k", modifiers: [], keyGlyph: "K")
@@ -142,7 +143,7 @@ enum ShortcutCatalog {
         Group(
             name: "View",
             shortcuts: [
-                focusSearch, showAll, showMedia, showArticles, showLinks, showQuotes,
+                focusSearch, showAll, showImages, showVideos, showArticles, showLinks, showQuotes,
                 previousFilter, nextFilter, toggleFocusMode, decreaseCardSize, increaseCardSize,
                 previousItem, nextItem
             ]
@@ -154,7 +155,8 @@ enum ShortcutCatalog {
     static func filterShortcut(for scope: LibraryScope) -> AppShortcut {
         switch scope {
         case .all: showAll
-        case .media: showMedia
+        case .images: showImages
+        case .videos: showVideos
         case .articles: showArticles
         case .links: showLinks
         case .quotes: showQuotes

@@ -116,17 +116,17 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   tokens, while remaining words stay broad free text. Only the last type term applies. Never infer
   an exact tag merely because a tag has the same spelling. Article excludes lightweight links;
   Link selects only lightweight article cards.
-- Use one native labeled segmented picker for the board scope, in this order: **All, Media,
-  Articles, Links, Quotes**. Media combines image and video cards; Articles excludes lightweight
-  link placeholders; Links means lightweight URL saves. Exact tag filtering comes from native
-  suggestions in the toolbar search field.
+- Use one native labeled segmented picker for the board scope, in this order: **All, Images,
+  Videos, Articles, Links, Quotes**. Images and Videos each show only their matching card kind;
+  Articles excludes lightweight link placeholders; Links means lightweight URL saves. Exact tag
+  filtering comes from native suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
   complete board snapshot remains correct. Multiple visual terms must occur in the same reading's
   visual analysis; unrelated title, body, and tag text cannot satisfy them. Board order is fixed:
   newest saved first when browsing and relevance when searching.
 - `⌘F` focuses the native search field; `/` does the same while the board has keyboard focus.
-  `⌘1`–`⌘5` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle the scopes.
+  `⌘1`–`⌘6` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle the scopes.
 
 ### Masonry cards
 

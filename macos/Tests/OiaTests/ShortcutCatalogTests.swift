@@ -31,8 +31,14 @@ final class ShortcutCatalogTests: XCTestCase {
 
     func testEveryScopeHasItsOrderedCommandNumber() {
         XCTAssertEqual(
-            LibraryScope.allCases.map { ShortcutCatalog.filterShortcut(for: $0).display },
-            ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5"]
+            LibraryScope.allCases.map(\.label),
+            ["All", "Images", "Videos", "Articles", "Links", "Quotes"]
         )
+        XCTAssertEqual(
+            LibraryScope.allCases.map { ShortcutCatalog.filterShortcut(for: $0).display },
+            ["⌘1", "⌘2", "⌘3", "⌘4", "⌘5", "⌘6"]
+        )
+        XCTAssertEqual(ShortcutCatalog.previousFilter.display, "⌘[")
+        XCTAssertEqual(ShortcutCatalog.nextFilter.display, "⌘]")
     }
 }

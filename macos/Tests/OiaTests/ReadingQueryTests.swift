@@ -145,7 +145,7 @@ final class ReadingQueryTests: XCTestCase {
             XCTAssertEqual(query.limit, .max)
             XCTAssertEqual(query.offset, 0)
             XCTAssertFalse(query.ascending)
-            XCTAssertNil(query.kind)
+            XCTAssertEqual(query.kind, scope.readingKindFilter)
             XCTAssertNil(query.tag)
             guard case .relevance = query.sort else {
                 return XCTFail("search should use relevance ordering")
@@ -155,7 +155,7 @@ final class ReadingQueryTests: XCTestCase {
 
     func testBrowsingUsesNewestFirstOrdering() {
         let query = ReadingQuery.boardSnapshot(
-            scope: .media,
+            scope: .images,
             search: nil,
             tagTerms: [],
             visualTerms: [],
@@ -163,11 +163,37 @@ final class ReadingQueryTests: XCTestCase {
             visualSemanticCandidateIDs: []
         )
 
-        XCTAssertEqual(query.scope, .media)
+        XCTAssertEqual(query.scope, .images)
+        XCTAssertEqual(query.kind, .image)
         XCTAssertNil(query.search)
         XCTAssertFalse(query.ascending)
         guard case .savedAt = query.sort else {
             return XCTFail("browsing should use saved-date ordering")
+        }
+    }
+
+    func testMediaScopesUseCoreAllViewAndDistinctKindFilters() {
+        let scopes: [(LibraryScope, FfiReadingKind)] = [
+            (.images, .image),
+            (.videos, .video)
+        ]
+
+        for (scope, kind) in scopes {
+            let query = ReadingQuery.boardSnapshot(
+                scope: scope,
+                search: "texture",
+                tagTerms: ["interiors"],
+                visualTerms: ["blue"],
+                semanticCandidateIDs: ["match"],
+                visualSemanticCandidateIDs: ["visual"]
+            )
+
+            XCTAssertEqual(scope.ffiView, .all)
+            XCTAssertEqual(query.kind?.ffiKind, kind)
+            XCTAssertEqual(query.tagTerms, ["interiors"])
+            XCTAssertEqual(query.visualTerms, ["blue"])
+            XCTAssertEqual(query.semanticCandidateIDs, ["match"])
+            XCTAssertEqual(query.visualSemanticCandidateIDs, ["visual"])
         }
     }
 

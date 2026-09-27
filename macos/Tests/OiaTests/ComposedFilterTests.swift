@@ -7,7 +7,8 @@ final class ComposedFilterTests: XCTestCase {
     func testMatchesUsesTheSelectedScope() {
         let image = makeReadingRow(kind: .image)
         XCTAssertTrue(ComposedFilter.matches(image, scope: .all))
-        XCTAssertTrue(ComposedFilter.matches(image, scope: .media))
+        XCTAssertTrue(ComposedFilter.matches(image, scope: .images))
+        XCTAssertFalse(ComposedFilter.matches(image, scope: .videos))
         XCTAssertFalse(ComposedFilter.matches(image, scope: .articles))
     }
 

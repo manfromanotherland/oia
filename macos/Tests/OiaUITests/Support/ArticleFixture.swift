@@ -11,6 +11,10 @@ import Foundation
 struct ArticleFixture {
     // Required frontmatter.
     var id: String
+    /// Omitted for a legacy article; the core defaults a missing kind to article.
+    var kind: String?
+    /// Only emitted for a URL-only link placeholder.
+    var lightweight: Bool
     var url: String
     var canonicalURL: String
     var title: String
@@ -38,6 +42,8 @@ struct ArticleFixture {
         url: String,
         title: String,
         savedAt: Date,
+        kind: String? = nil,
+        lightweight: Bool = false,
         canonicalURL: String? = nil,
         archived: Bool = false,
         favorite: Bool = false,
@@ -52,6 +58,8 @@ struct ArticleFixture {
         body: String? = nil
     ) {
         self.id = id
+        self.kind = kind
+        self.lightweight = lightweight
         self.url = url
         self.canonicalURL = canonicalURL ?? url
         self.title = title
@@ -83,6 +91,8 @@ struct ArticleFixture {
         let fields: [(String, String?)] = [
             ("format_version", "1"),
             ("id", quoted(id)),
+            ("kind", kind.map(quoted)),
+            ("lightweight", lightweight ? "true" : nil),
             ("url", quoted(url)),
             ("canonical_url", quoted(canonicalURL)),
             ("title", quoted(title)),

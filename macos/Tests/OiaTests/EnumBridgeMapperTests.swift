@@ -9,7 +9,8 @@ import XCTest
 final class EnumBridgeMapperTests: XCTestCase {
     func testLibraryScopeMapsEveryViewCase() {
         XCTAssertEqual(LibraryScope.all.ffiView, .all)
-        XCTAssertEqual(LibraryScope.media.ffiView, .media)
+        XCTAssertEqual(LibraryScope.images.ffiView, .all)
+        XCTAssertEqual(LibraryScope.videos.ffiView, .all)
         XCTAssertEqual(LibraryScope.articles.ffiView, .articles)
         XCTAssertEqual(LibraryScope.links.ffiView, .links)
         XCTAssertEqual(LibraryScope.quotes.ffiView, .quotes)
@@ -18,7 +19,7 @@ final class EnumBridgeMapperTests: XCTestCase {
     func testLibraryScopesUseToolbarOrderAndLabels() {
         XCTAssertEqual(
             LibraryScope.allCases.map(\.label),
-            ["All", "Media", "Articles", "Links", "Quotes"]
+            ["All", "Images", "Videos", "Articles", "Links", "Quotes"]
         )
     }
 
@@ -26,15 +27,17 @@ final class EnumBridgeMapperTests: XCTestCase {
         XCTAssertEqual(
             LibraryScope.allCases.map(\.icon),
             [
-                "asterisk", "photo.on.rectangle", "newspaper", "link", "quote.opening"
+                "asterisk", "photo", "play.rectangle", "newspaper", "link", "quote.opening"
             ]
         )
     }
 
     func testLibraryScopeNavigationWrapsInToolbarOrder() {
         XCTAssertEqual(LibraryScope.all.previous, .quotes)
-        XCTAssertEqual(LibraryScope.all.next, .media)
-        XCTAssertEqual(LibraryScope.articles.previous, .media)
+        XCTAssertEqual(LibraryScope.all.next, .images)
+        XCTAssertEqual(LibraryScope.images.next, .videos)
+        XCTAssertEqual(LibraryScope.videos.next, .articles)
+        XCTAssertEqual(LibraryScope.articles.previous, .videos)
         XCTAssertEqual(LibraryScope.articles.next, .links)
         XCTAssertEqual(LibraryScope.quotes.next, .all)
     }

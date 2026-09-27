@@ -79,7 +79,7 @@ host, and macOS app.
 | Term | Definition |
 |------|------------|
 | Tag | User-defined label stored in a reading's frontmatter. Tags organize readings and are indexed by search. |
-| Board scope | Exactly one toolbar selection: All, Media, Articles, Links, or Quotes. Media combines image and video readings; Articles excludes lightweight links; Links selects lightweight article placeholders. |
+| Board scope | Exactly one toolbar selection: All, Images, Videos, Articles, Links, or Quotes. Images and Videos each select their matching reading kind; Articles excludes lightweight links; Links selects lightweight article placeholders. |
 | Board filter | The selected board scope, free-text query, and any scoped search terms, applied as one intersection to the board. |
 | Search token | A native search-field pill created from a suggestion. A tag token means an exact saved tag; a visual token means a derived label or colour found in the same reading's current visual analysis. Tokens narrow one another by intersection. |
 | All | The unfiltered board scope. It includes every saved item, including files carrying a legacy `archived: true` value. |

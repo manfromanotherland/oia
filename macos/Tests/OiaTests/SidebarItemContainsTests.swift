@@ -15,11 +15,15 @@ final class LibraryScopeContainsTests: XCTestCase {
         )
     }
 
-    func testMediaContainsImagesAndVideosOnly() {
-        XCTAssertTrue(LibraryScope.media.contains(makeReadingRow(kind: .image)))
-        XCTAssertTrue(LibraryScope.media.contains(makeReadingRow(kind: .video)))
-        XCTAssertFalse(LibraryScope.media.contains(makeReadingRow(kind: .article)))
-        XCTAssertFalse(LibraryScope.media.contains(makeReadingRow(kind: .quote)))
+    func testImagesAndVideosAreDistinctScopes() {
+        let image = makeReadingRow(kind: .image)
+        let video = makeReadingRow(kind: .video)
+        XCTAssertTrue(LibraryScope.images.contains(image))
+        XCTAssertFalse(LibraryScope.images.contains(video))
+        XCTAssertTrue(LibraryScope.videos.contains(video))
+        XCTAssertFalse(LibraryScope.videos.contains(image))
+        XCTAssertFalse(LibraryScope.images.contains(makeReadingRow(kind: .article)))
+        XCTAssertFalse(LibraryScope.videos.contains(makeReadingRow(kind: .quote)))
     }
 
     func testArticlesContainsOnlyFullArticleReadings() {

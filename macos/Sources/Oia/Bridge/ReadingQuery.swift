@@ -64,7 +64,7 @@ extension ReadingQuery {
     ) -> Self {
         let isSearching = search != nil || !tagTerms.isEmpty || !visualTerms.isEmpty || !colorTerms.isEmpty || !itemTypeTerms.isEmpty
         return Self(
-            kind: nil,
+            kind: scope.readingKindFilter,
             scope: scope,
             sort: isSearching ? .relevance : .savedAt,
             ascending: false,

@@ -8,10 +8,20 @@ extension LibraryScope {
     var ffiView: FfiView {
         switch self {
         case .all: .all
-        case .media: .media
+        case .images, .videos: .all
         case .articles: .articles
         case .links: .links
         case .quotes: .quotes
+        }
+    }
+
+    /// The core's compatible view enum combines images and videos under
+    /// `.media`. The board exposes them separately using its kind filter.
+    var readingKindFilter: ReadingKind? {
+        switch self {
+        case .images: .image
+        case .videos: .video
+        case .all, .articles, .links, .quotes: nil
         }
     }
 }
