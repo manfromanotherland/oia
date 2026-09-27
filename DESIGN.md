@@ -80,7 +80,7 @@ are functional signals that sit *outside* the brand neutrals.
 
 - Use semantic colors (`windowBackgroundColor`, `controlBackgroundColor`, `textBackgroundColor`,
   `labelColor`, `secondaryLabelColor`, `separatorColor`) instead of fixed light/dark RGB values.
-- Use native `Label`, `List`, `Menu`, `Picker`, `Button`, and split-view spacing and
+- Use native `Label`, `List`, `Menu`, `Picker`, `Button`, `searchable`, and split-view spacing and
   focus behavior. Do not override their metrics solely to mimic a web design.
 - Reserve fixed black/white treatments for content that requires guaranteed contrast, such as a
   video poster scrim and its play symbol.
@@ -106,24 +106,23 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 
 - Use one full-width board with no sidebar or navigation rail. Keep the first masonry row inset
   from the toolbar by the same 30 pt used at the board's horizontal edges.
-- Put one search control at the trailing edge of the unified window toolbar. It rests as a
-  magnifying-glass button and expands leftward from the same right edge, with the prompt
-  *"Search Óia"*. Suggestions can narrow the board to exact tags or terms found in the same
-  image; completed terms remain value-only pills in that one control. Do not add a duplicate
-  search control or oversized page header.
+- Put the native search field in the unified window toolbar using `.searchable`, with the prompt
+  *"Search Óia"*. Native token suggestions can narrow the board to exact tags or terms found in
+  the same image; completed terms remain value-only pills in that one field. Do not create a
+  bespoke `NSSearchField`, duplicate search control, or oversized page header.
 - Selecting a completion under **Tags** or **In this image** creates that scoped token. Pressing
   Return without selecting a completion keeps the draft as broad free text; never infer an exact
   tag merely because a tag has the same spelling.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Media,
   Articles, Links, Quotes**. Media combines image and video cards; Articles excludes lightweight
-  link placeholders; Links means lightweight URL saves. Exact tag filtering comes from
+  link placeholders; Links means lightweight URL saves. Exact tag filtering comes from native
   suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
   complete board snapshot remains correct. Multiple visual terms must occur in the same reading's
   visual analysis; unrelated title, body, and tag text cannot satisfy them. Board order is fixed:
   newest saved first when browsing and relevance when searching.
-- `⌘F` focuses the toolbar search field; `/` does the same while the board has keyboard focus.
+- `⌘F` focuses the native search field; `/` does the same while the board has keyboard focus.
   `⌘1`–`⌘5` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle the scopes.
 
 ### Masonry cards

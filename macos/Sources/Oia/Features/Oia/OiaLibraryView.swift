@@ -27,8 +27,6 @@ struct OiaLibraryView: View {
     @State var quickLookURL: URL?
     @FocusState var boardFocused: Bool
     @FocusState var searchFocused: Bool
-    @State var isSearchPresented = false
-    @State var showSearchSuggestions = false
     var body: some View {
         NavigationStack {
             deletionSurface
@@ -143,12 +141,38 @@ extension OiaLibraryView {
     }
 
     private var searchableBoard: some View {
-        board
-            .contentShape(Rectangle())
-            .simultaneousGesture(
-                TapGesture().onEnded { collapseToolbarSearch() }
-            )
+        @Bindable var bindableAppState = appState
+        let isSearchExpanded = searchFocused
+            || !bindableAppState.searchQuery.isEmpty
+            || !bindableAppState.searchTokens.isEmpty
+        return board
+            .searchable(
+                text: $bindableAppState.searchQuery,
+                tokens: $bindableAppState.searchTokens,
+                placement: .toolbar,
+                prompt: "Search Óia"
+            ) { token in
+                if token.kind == .color,
+                   let palette = CardThemePalette(themeColor: token.value)
+                {
+                    Text(token.displayValue)
+                        .foregroundStyle(palette.foreground.color)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 2)
+                        .background(palette.background.color, in: Capsule())
+                } else {
+                    Text(token.displayValue)
+                }
+            }
+            .searchSuggestions {
+                nativeSearchSuggestions
+            }
+            .searchFocused($searchFocused)
             .toolbar { boardToolbar }
+            .background {
+                CompactSearchToolbarConfiguration(isSearchExpanded: isSearchExpanded)
+                    .frame(width: 0, height: 0)
+            }
     }
 
     @ToolbarContentBuilder
@@ -160,10 +184,6 @@ extension OiaLibraryView {
 
             ToolbarItem(placement: .principal) {
                 boardFilterPicker
-            }
-
-            ToolbarItem(placement: .primaryAction) {
-                toolbarSearchControl
             }
         }
     }
@@ -218,13 +238,8 @@ extension OiaLibraryView {
 
     func focusSearch() {
         guard presentedReading == nil, !appState.isFocusMode else { return }
-        withAnimation(.easeInOut(duration: 0.22)) {
-            isSearchPresented = true
-        }
-        // The text field is inserted by the expanded toolbar state.
-        DispatchQueue.main.async {
-            searchFocused = true
-        }
+        CompactSearchToolbarConfiguration.beginSearchInteraction(in: NSApp.keyWindow)
+        searchFocused = true
     }
 
     @ViewBuilder
