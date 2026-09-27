@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import QuartzCore
 import SwiftUI
 
 /// Supplies a compact resting width to SwiftUI's native
@@ -91,13 +92,22 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                     if self.isSearchExpanded, !clickedSearch,
                        field.stringValue.isEmpty
                     {
-                        self.isSearchExpanded = false
-                        self.configureCurrentToolbar()
-                        // Pair the explicit begin call with AppKit's matching
-                        // end call while the compact allocation is already in
-                        // place. Merely changing focus leaves the toolbar item
-                        // animating a full-width field beyond the trailing edge.
-                        item.endSearchInteraction()
+                        // AppKit's outgoing animation translates the still-wide
+                        // field beyond the window before shrinking it. Complete
+                        // the native interaction and compact layout together,
+                        // without letting that presentation-layer motion run.
+                        NSAnimationContext.runAnimationGroup { context in
+                            context.duration = 0
+                            context.allowsImplicitAnimation = false
+                            CATransaction.begin()
+                            CATransaction.setDisableActions(true)
+                            self.isSearchExpanded = false
+                            self.configureCurrentToolbar()
+                            item.endSearchInteraction()
+                            self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
+                            self.window?.displayIfNeeded()
+                            CATransaction.commit()
+                        }
                     }
                     return event
                 }
