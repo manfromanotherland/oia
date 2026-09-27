@@ -161,8 +161,11 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                 context.duration = 0
                 context.allowsImplicitAnimation = false
                 compactWidth.priority = priority
-                field.superview?.layoutSubtreeIfNeeded()
-                window?.contentView?.layoutSubtreeIfNeeded()
+                // The toolbar lives above the content view. Resolve its new
+                // allocation before AppKit animates the field toward the
+                // compact width, or the trailing edge briefly leaves the window.
+                window?.contentView?.superview?.layoutSubtreeIfNeeded()
+                window?.displayIfNeeded()
             }
         }
 
