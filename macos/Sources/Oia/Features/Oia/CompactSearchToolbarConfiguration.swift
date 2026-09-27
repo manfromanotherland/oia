@@ -8,6 +8,7 @@ import SwiftUI
 /// and expanded width.
 struct CompactSearchToolbarConfiguration: NSViewRepresentable {
     let isSearchExpanded: Bool
+    let searchTokens: [BoardSearchToken]
 
     /// Give the toolbar its expanded allocation before moving focus to the field.
     /// Focusing first lets AppKit draw the full field past the window's right edge
@@ -25,11 +26,17 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
     }
 
     func makeNSView(context _: Context) -> NSView {
-        SearchToolbarConfigurationView(isSearchExpanded: isSearchExpanded)
+        SearchToolbarConfigurationView(
+            isSearchExpanded: isSearchExpanded,
+            searchTokens: searchTokens
+        )
     }
 
     func updateNSView(_ view: NSView, context _: Context) {
-        (view as? SearchToolbarConfigurationView)?.setSearchExpanded(isSearchExpanded)
+        (view as? SearchToolbarConfigurationView)?.update(
+            isSearchExpanded: isSearchExpanded,
+            searchTokens: searchTokens
+        )
     }
 
     @MainActor
@@ -39,16 +46,24 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
         private static let trailingIdentifier =
             "is.edmundo.oia.search.trailing-toolbar-edge"
         private var isSearchExpanded: Bool
+        private var searchTokens: [BoardSearchToken]
         nonisolated(unsafe) private var mouseMonitor: Any?
 
-        init(isSearchExpanded: Bool) {
+        init(isSearchExpanded: Bool, searchTokens: [BoardSearchToken]) {
             self.isSearchExpanded = isSearchExpanded
+            self.searchTokens = searchTokens
             super.init(frame: .zero)
 
             NotificationCenter.default.addObserver(
                 self,
                 selector: #selector(toolbarWillAddItem(_:)),
                 name: NSToolbar.willAddItemNotification,
+                object: nil
+            )
+            NotificationCenter.default.addObserver(
+                self,
+                selector: #selector(searchTextDidChange(_:)),
+                name: NSControl.textDidChangeNotification,
                 object: nil
             )
         }
@@ -108,9 +123,51 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             nil
         }
 
-        func setSearchExpanded(_ isSearchExpanded: Bool) {
+        func update(isSearchExpanded: Bool, searchTokens: [BoardSearchToken]) {
             self.isSearchExpanded = isSearchExpanded
+            self.searchTokens = searchTokens
             configureCurrentToolbar()
+            DispatchQueue.main.async { [weak self] in
+                self?.decorateColorTokens()
+            }
+        }
+
+        private func decorateColorTokens() {
+            guard let field = window?.toolbar?.items
+                .compactMap({ $0 as? NSSearchToolbarItem }).first?.searchField
+            else { return }
+            func decorate(_ attributed: NSAttributedString) {
+                var index = 0
+                attributed.enumerateAttribute(
+                    .attachment,
+                    in: NSRange(location: 0, length: attributed.length)
+                ) { value, _, _ in
+                    guard let attachment = value as? NSTextAttachment else { return }
+                    defer { index += 1 }
+                    guard let cell = attachment.attachmentCell else { return }
+                    let nativeCell = (cell as? ColorSearchTokenCell)?.original ?? cell
+                    guard searchTokens.indices.contains(index),
+                          searchTokens[index].kind == .color,
+                          let palette = CardThemePalette(themeColor: searchTokens[index].value)
+                    else {
+                        if cell is ColorSearchTokenCell { attachment.attachmentCell = nativeCell }
+                        return
+                    }
+                    if let colored = cell as? ColorSearchTokenCell,
+                       colored.matches(title: searchTokens[index].displayValue, palette: palette)
+                    { return }
+                    attachment.attachmentCell = ColorSearchTokenCell(
+                        original: nativeCell,
+                        title: searchTokens[index].displayValue,
+                        palette: palette
+                    )
+                }
+            }
+            decorate(field.attributedStringValue)
+            let editor = field.currentEditor() as? NSTextView
+            if let content = editor?.textStorage { decorate(content) }
+            field.needsDisplay = true
+            editor?.needsDisplay = true
         }
 
         private func prepareCollapse(_ item: NSSearchToolbarItem) {
@@ -123,6 +180,7 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             window?.toolbar?.items
                 .compactMap { $0 as? NSSearchToolbarItem }
                 .forEach { configure($0) }
+            decorateColorTokens()
         }
 
         @objc private func toolbarWillAddItem(_ notification: Notification) {
@@ -135,6 +193,16 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             }
 
             configure(item)
+        }
+
+        @objc private func searchTextDidChange(_ notification: Notification) {
+            guard let field = window?.toolbar?.items
+                .compactMap({ $0 as? NSSearchToolbarItem }).first?.searchField,
+                notification.object as AnyObject? === field
+            else { return }
+            DispatchQueue.main.async { [weak self] in
+                self?.decorateColorTokens()
+            }
         }
 
         private func configure(_ item: NSSearchToolbarItem) {
@@ -224,5 +292,76 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             window?.contentView?.superview?.layoutSubtreeIfNeeded()
             window?.displayIfNeeded()
         }
+    }
+}
+
+/// The native search field renders SwiftUI tokens as text attachments. Its
+/// attachment cell owns the visible capsule, so SwiftUI view backgrounds on
+/// the token label do not reach the search field.
+@MainActor
+private final class ColorSearchTokenCell: NSTextAttachmentCell {
+    nonisolated(unsafe) let original: any NSTextAttachmentCellProtocol
+    private let tokenTitle: String
+    private let palette: CardThemePalette
+
+    init(original: any NSTextAttachmentCellProtocol, title: String, palette: CardThemePalette) {
+        self.original = original
+        tokenTitle = title
+        self.palette = palette
+        super.init(textCell: "")
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("ColorSearchTokenCell cannot be decoded")
+    }
+
+    override var cellSize: NSSize { original.cellSize() }
+
+    func matches(title: String, palette: CardThemePalette) -> Bool {
+        tokenTitle == title && self.palette == palette
+    }
+
+    override func cellBaselineOffset() -> NSPoint { original.cellBaselineOffset() }
+    override func wantsToTrackMouse() -> Bool { original.wantsToTrackMouse() }
+
+    override func draw(withFrame cellFrame: NSRect, in controlView: NSView?) {
+        original.draw(withFrame: cellFrame, in: controlView)
+        let background = palette.background
+        NSColor(srgbRed: background.red, green: background.green, blue: background.blue, alpha: 1)
+            .setFill()
+        NSBezierPath(roundedRect: cellFrame.insetBy(dx: 1, dy: 1),
+                     xRadius: cellFrame.height / 2, yRadius: cellFrame.height / 2).fill()
+
+        let foreground = palette.foreground
+        let textColor = NSColor(
+            srgbRed: foreground.red,
+            green: foreground.green,
+            blue: foreground.blue,
+            alpha: 1
+        )
+        let font = NSFont.systemFont(ofSize: NSFont.systemFontSize)
+        let text = NSAttributedString(string: tokenTitle, attributes: [
+            .font: font,
+            .foregroundColor: textColor
+        ])
+        let textSize = text.size()
+        text.draw(at: NSPoint(
+            x: cellFrame.midX - textSize.width / 2,
+            y: cellFrame.midY - textSize.height / 2
+        ))
+    }
+
+    override func highlight(_ flag: Bool, withFrame cellFrame: NSRect, in controlView: NSView?) {
+        original.highlight(flag, withFrame: cellFrame, in: controlView)
+    }
+
+    override func trackMouse(
+        with event: NSEvent,
+        in cellFrame: NSRect,
+        of controlView: NSView?,
+        untilMouseUp flag: Bool
+    ) -> Bool {
+        original.trackMouse(with: event, in: cellFrame, of: controlView, untilMouseUp: flag)
     }
 }
