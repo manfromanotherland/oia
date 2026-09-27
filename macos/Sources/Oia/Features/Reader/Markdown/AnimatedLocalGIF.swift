@@ -41,7 +41,7 @@ private struct AnimatedGIFImageView: NSViewRepresentable {
     let contentMode: ContentMode
 
     func makeNSView(context: Context) -> NSImageView {
-        let view = NSImageView()
+        let view = FittedImageView()
         view.animates = true
         view.imageAlignment = .alignCenter
         view.imageScaling = contentMode == .fill ? .scaleProportionallyUpOrDown : .scaleProportionallyDown
@@ -51,6 +51,22 @@ private struct AnimatedGIFImageView: NSViewRepresentable {
     func updateNSView(_ view: NSImageView, context: Context) {
         if view.image !== image { view.image = image }
         view.imageScaling = contentMode == .fill ? .scaleProportionallyUpOrDown : .scaleProportionallyDown
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: NSImageView, context: Context) -> CGSize? {
+        // NSImageView otherwise reports the GIF's original pixel dimensions as
+        // its ideal size. In a masonry card that pushes the animation outside
+        // the card even though the surrounding SwiftUI preview has a fixed ratio.
+        CGSize(
+            width: proposal.width ?? image.size.width,
+            height: proposal.height ?? image.size.height
+        )
+    }
+
+    private final class FittedImageView: NSImageView {
+        override var intrinsicContentSize: NSSize {
+            NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric)
+        }
     }
 }
 
