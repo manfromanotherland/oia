@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
-import QuartzCore
 import SwiftUI
 
 /// Supplies a compact resting width to SwiftUI's native
@@ -37,6 +36,8 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
     private final class SearchToolbarConfigurationView: NSView {
         private static let compactConstraintIdentifier =
             "is.edmundo.oia.search.compact-resting-width"
+        private static let trailingIdentifier =
+            "is.edmundo.oia.search.trailing-toolbar-edge"
         private var isSearchExpanded: Bool
         nonisolated(unsafe) private var mouseMonitor: Any?
 
@@ -84,31 +85,12 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                         return nil
                     }
 
-                    // AppKit starts its native focus-loss animation while the
-                    // toolbar still has the expanded allocation. Compacting in
-                    // that transaction makes the full-width field slide past
-                    // the right edge. Settle the compact width before the click
-                    // can end editing instead.
                     if self.isSearchExpanded, !clickedSearch,
                        field.stringValue.isEmpty
                     {
-                        // AppKit's outgoing animation translates the still-wide
-                        // field beyond the window before shrinking it. Complete
-                        // the native interaction and compact layout together,
-                        // without letting that presentation-layer motion run.
-                        NSAnimationContext.runAnimationGroup { context in
-                            context.duration = 0
-                            context.allowsImplicitAnimation = false
-                            CATransaction.begin()
-                            CATransaction.setDisableActions(true)
-                            self.isSearchExpanded = false
-                            self.configureCurrentToolbar()
-                            item.endSearchInteraction()
-                            self.window?.contentView?.superview?.layoutSubtreeIfNeeded()
-                            self.window?.displayIfNeeded()
-                            CATransaction.commit()
-                        }
+                        self.prepareCollapse(item)
                     }
+
                     return event
                 }
             }
@@ -131,6 +113,12 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             configureCurrentToolbar()
         }
 
+        private func prepareCollapse(_ item: NSSearchToolbarItem) {
+            isSearchExpanded = false
+            configureCurrentToolbar()
+            item.endSearchInteraction()
+        }
+
         func configureCurrentToolbar() {
             window?.toolbar?.items
                 .compactMap { $0 as? NSSearchToolbarItem }
@@ -151,6 +139,30 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
 
         private func configure(_ item: NSSearchToolbarItem) {
             let field = item.searchField
+            if let searchItemView = field.superview,
+               let toolbarItemViewer = searchItemView.superview
+            {
+                // AppKit centers the search view in the toolbar viewer. The
+                // viewer becomes compact before the field's native shrink
+                // animation finishes, which centers the wide field beyond
+                // the window edge. Let the trailing constraint win while the
+                // native field animates its width.
+                toolbarItemViewer.constraints.first(where: {
+                    $0.firstItem === searchItemView &&
+                    $0.secondItem === toolbarItemViewer &&
+                    $0.firstAttribute == .centerX
+                })?.priority = .defaultHigh
+                if !toolbarItemViewer.constraints.contains(where: {
+                    $0.identifier == Self.trailingIdentifier
+                }) {
+                    let trailing = searchItemView.trailingAnchor.constraint(
+                        equalTo: toolbarItemViewer.trailingAnchor, constant: -4
+                    )
+                    trailing.identifier = Self.trailingIdentifier
+                    trailing.priority = .init(rawValue: 999)
+                    trailing.isActive = true
+                }
+            }
             if let compactWidth = field.constraints.first(where: {
                 $0.identifier == Self.compactConstraintIdentifier
             }) {
@@ -182,15 +194,17 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             let priority = desiredPriority
             guard compactWidth.priority != priority else { return }
 
-            // SwiftUI updates this representable inside the search field's own
-            // focus transaction. Letting the priority change inherit that
-            // transaction makes two width animations fight: the field first
-            // draws beyond its toolbar allocation, then the toolbar catches
-            // up. Resolve the public constraint change synchronously so focus
-            // is immediate and no intermediate frame can be clipped.
+            if !isSearchExpanded {
+                compactWidth.priority = priority
+                return
+            }
+
+            // Expand before focus enters the field so the incoming native
+            // animation begins with the toolbar's full allocation.
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = 0
                 context.allowsImplicitAnimation = false
+                compactWidth.constant = 0
                 compactWidth.priority = priority
                 // The toolbar lives above the content view. Resolve its new
                 // allocation before AppKit animates the field toward the
@@ -205,6 +219,7 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             guard let compactWidth = field.constraints.first(where: {
                 $0.identifier == compactConstraintIdentifier
             }) else { return }
+            compactWidth.constant = 0
             compactWidth.priority = .defaultLow
             window?.contentView?.superview?.layoutSubtreeIfNeeded()
             window?.displayIfNeeded()
