@@ -29,7 +29,7 @@ struct OiaReadingActions: View {
             appState.requestDelete(row)
         }
         .keyboardShortcut(ShortcutCatalog.delete)
-        .disabled(appState.isEditingText || appState.isDeleting)
+        .disabled(appState.isDeleting)
     }
 
     private var disablesSingleReadingActions: Bool {

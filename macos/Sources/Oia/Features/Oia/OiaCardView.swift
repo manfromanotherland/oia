@@ -49,7 +49,7 @@ struct OiaCardView: View {
         accessibleCard(in: size)
             .contentShape(cardShape)
             .onTapGesture(count: 2, perform: onOpen)
-            .onTapGesture(perform: onSelect)
+            .simultaneousGesture(TapGesture().onEnded(onSelect))
             .contextMenu {
                 OiaReadingActions(
                     row: row,

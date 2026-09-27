@@ -302,6 +302,9 @@ extension OiaLibraryView {
                     phases: [.down, .repeat],
                     action: moveSelection
                 )
+                .onExitCommand {
+                    appState.boardSelection.clear()
+                }
                 .onKeyPress(
                     keys: [
                         ShortcutCatalog.openWithReturn.key,
