@@ -4,6 +4,16 @@ import XCTest
 
 @MainActor
 final class VideoPlaybackSchedulerTests: XCTestCase {
+    func testDefaultAdmissionAllowsEveryVisibleCard() async throws {
+        let scheduler = VideoPlaybackScheduler(startSpacing: .zero)
+        var leases: [UUID] = []
+        for _ in 0 ..< 12 {
+            leases.append(try await acquire(scheduler))
+        }
+        XCTAssertEqual(scheduler.state, .init(active: 12, waiting: 0))
+        for lease in leases { scheduler.release(lease) }
+    }
+
     func testAdmissionIsBoundedAndWaitersAdvanceInOrder() async throws {
         let scheduler = VideoPlaybackScheduler(limit: 1, startSpacing: .zero)
         let first = try await acquire(scheduler)

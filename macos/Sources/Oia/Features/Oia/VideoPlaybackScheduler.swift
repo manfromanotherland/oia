@@ -13,7 +13,7 @@ final class VideoPlaybackScheduler {
     private var order: [UUID] = []
     private var nextStart: ContinuousClock.Instant?
 
-    init(limit: Int = 2, startSpacing: Duration = .milliseconds(90)) {
+    init(limit: Int = .max, startSpacing: Duration = .milliseconds(90)) {
         self.limit = max(1, limit)
         self.startSpacing = startSpacing
     }
