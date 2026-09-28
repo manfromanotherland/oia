@@ -76,17 +76,31 @@ struct OiaReadingOverlay: View {
             .accessibilityIdentifier(A11y.Inspector.toggle)
         }
 
-        ToolbarItem(placement: .principal) {
-            HStack(spacing: 8) {
-                Button(action: onClose) {
-                    Label("Close Detail", systemImage: "xmark")
-                }
-                .help("Close detail (Escape)")
-                .accessibilityIdentifier(A11y.Detail.close)
-                .keyboardShortcut(.cancelAction)
-
-                previousNextControl
+        // Reserve the inspector's titlebar width without drawing glass over it.
+        if #available(macOS 26.0, *) {
+            ToolbarItem(placement: .navigation) {
+                Color.clear.frame(width: 180, height: 1)
+                    .accessibilityHidden(true)
             }
+            .sharedBackgroundVisibility(.hidden)
+        } else {
+            ToolbarItem(placement: .navigation) {
+                Color.clear.frame(width: 180, height: 1)
+                    .accessibilityHidden(true)
+            }
+        }
+
+        ToolbarItem(placement: .navigation) {
+            Button(action: onClose) {
+                Label("Close Detail", systemImage: "xmark")
+            }
+            .help("Close detail (Escape)")
+            .accessibilityIdentifier(A11y.Detail.close)
+            .keyboardShortcut(.cancelAction)
+        }
+
+        ToolbarItem(placement: .navigation) {
+            previousNextControl
         }
     }
 
