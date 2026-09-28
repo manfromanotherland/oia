@@ -10,6 +10,19 @@ final class InspectorJourney: UITestCase {
         XCTAssertTrue(list.waitForRowCount(2))
         list.open(cream)
         XCTAssertTrue(app.byId(A11y.Inspector.tabs).waitExists())
+        let inspector = app.byId(A11y.Inspector.panel)
+        let toggle = app.byId(A11y.Inspector.toggle)
+        let close = app.byId(A11y.Detail.close)
+        let windowMidX = app.windows.firstMatch.frame.midX
+        XCTAssertLessThan(inspector.frame.midX, windowMidX, "Inspector is on the left")
+        XCTAssertLessThan(toggle.frame.midX, windowMidX, "Inspector toggle is on the left")
+        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, windowMidX, "Navigation is on the left")
+        XCTAssertLessThan(toggle.frame.midX, close.frame.midX, "Inspector toggle is left of Close")
+        XCTAssertGreaterThan(close.frame.midX, windowMidX, "Close stays on the right")
+        toggle.click()
+        XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
+        toggle.click()
+        XCTAssertTrue(inspector.waitExists(), "Inspector expands")
         XCTAssertTrue(app.staticTexts["Your tags"].exists)
         XCTAssertFalse(app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'cuttings-asset:'")
@@ -18,7 +31,7 @@ final class InspectorJourney: UITestCase {
         app.buttons["Details"].clickWhenReady()
         XCTAssertTrue(app.staticTexts["PNG"].waitExists())
         XCTAssertTrue(app.staticTexts["64 × 64 px"].exists)
-        capture("Floating inspector · Details")
+        capture("Sidebar inspector · Details")
 
         app.buttons["Discover"].clickWhenReady()
         app.byId(A11y.Inspector.editTags).clickWhenReady()
@@ -28,7 +41,7 @@ final class InspectorJourney: UITestCase {
             NSPredicate(format: "identifier BEGINSWITH %@", A11y.Inspector.colorPrefix)
         ).firstMatch
         XCTAssertTrue(swatch.waitForExistence(timeout: 45), "Cached analysis publishes clickable colours")
-        capture("Floating inspector · Discover")
+        capture("Sidebar inspector · Discover")
         swatch.click()
         XCTAssertTrue(list.waitForRowCount(1), "Colour search excludes the blue image")
         XCTAssertEqual(list.orderedRowIds, [cream])

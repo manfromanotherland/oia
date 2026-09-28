@@ -29,30 +29,36 @@ struct OiaReadingOverlay: View {
 
     private var gallery: some View {
         HStack(alignment: .top, spacing: 0) {
-            detail
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
             if showsInspector {
                 OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
                     .frame(width: 320)
-                    .padding(.horizontal, 24)
-                    .padding(.top, 24)
+                    .frame(maxHeight: .infinity)
+                    .background(Color(nsColor: .controlBackgroundColor))
+                Divider()
             }
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.flexible, placement: .primaryAction)
+        ToolbarItem(placement: .navigation) {
+            Button {
+                showsInspector.toggle()
+            } label: {
+                Label(
+                    showsInspector ? "Hide Inspector" : "Show Inspector",
+                    systemImage: "sidebar.leading"
+                )
+            }
+            .help(showsInspector ? "Hide inspector" : "Show inspector")
+            .accessibilityIdentifier(A11y.Inspector.toggle)
         }
 
-        ToolbarItem(placement: .primaryAction) {
+        ToolbarItem(placement: .navigation) {
             previousNextControl
-        }
-
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
         ToolbarItem(placement: .primaryAction) {
@@ -62,23 +68,6 @@ struct OiaReadingOverlay: View {
             .help("Close detail (Escape)")
             .accessibilityIdentifier(A11y.Detail.close)
             .keyboardShortcut(.cancelAction)
-        }
-
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.fixed, placement: .primaryAction)
-        }
-
-        ToolbarItem(placement: .primaryAction) {
-            Button {
-                showsInspector.toggle()
-            } label: {
-                Label(
-                    showsInspector ? "Hide Inspector" : "Show Inspector",
-                    systemImage: "sidebar.trailing"
-                )
-            }
-            .help(showsInspector ? "Hide inspector" : "Show inspector")
-            .accessibilityIdentifier(A11y.Inspector.toggle)
         }
     }
 

@@ -2,8 +2,8 @@
 
 import SwiftUI
 
-/// Optional facts load independently of the board. The material follows the
-/// content; the surrounding scroll area stays clear.
+/// Optional facts load independently of the board. The leading sidebar scrolls
+/// its content while the reading remains visible beside it.
 struct OiaInspectorView: View {
     @Environment(AppState.self) private var appState
     let row: ReadingRow
@@ -39,11 +39,8 @@ struct OiaInspectorView: View {
                 .accessibilityIdentifier(A11y.Toolbar.delete)
             }
             .font(.system(size: 13))
-            .padding(20)
+            .padding(24)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .modifier(InspectorSurface())
-            .padding(.bottom, 24)
-            .padding(.horizontal, 1)
         }
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)

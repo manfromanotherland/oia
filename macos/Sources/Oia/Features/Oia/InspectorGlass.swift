@@ -2,22 +2,6 @@
 
 import SwiftUI
 
-struct InspectorSurface: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-
-    func body(content: Content) -> some View {
-        let shape = RoundedRectangle(cornerRadius: 20, style: .continuous)
-        if reduceTransparency {
-            content.background(Color(nsColor: .controlBackgroundColor), in: shape)
-        } else if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
-        } else {
-            content.background(.regularMaterial, in: shape)
-                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
-        }
-    }
-}
-
 struct InspectorPill: View {
     let title: String
     var symbol: String?
