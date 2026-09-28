@@ -117,6 +117,7 @@ enum ShortcutCatalog {
         alternatives: [focusSearchWithSlash]
     )
     static let toggleFocusMode = AppShortcut(title: "Toggle Focus Mode", key: "r", modifiers: [.command, .shift], keyGlyph: "R")
+    static let scrollToTop = AppShortcut(title: "Scroll to Top", key: .upArrow, modifiers: .command, keyGlyph: "↑")
     static let decreaseCardSize = AppShortcut(title: "Decrease Card Size", key: "-", modifiers: [.command, .shift], keyGlyph: "-")
     static let increaseCardSize = AppShortcut(title: "Increase Card Size", key: "=", modifiers: [.command, .shift], keyGlyph: "+")
     static let showAll = AppShortcut(title: "Show All", key: "1", modifiers: .command, keyGlyph: "1")
@@ -145,7 +146,7 @@ enum ShortcutCatalog {
             shortcuts: [
                 focusSearch, showAll, showImages, showVideos, showArticles, showLinks, showQuotes,
                 previousFilter, nextFilter, toggleFocusMode, decreaseCardSize, increaseCardSize,
-                previousItem, nextItem
+                previousItem, nextItem, scrollToTop
             ]
         ),
         Group(name: "Typography", shortcuts: [increaseFont, decreaseFont]),

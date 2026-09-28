@@ -23,6 +23,7 @@ struct OiaLibraryView: View {
     @State var boardNavigation = MasonryNavigationCoordinator<ReadingRow, String>()
     @State var boardModifierKeys: EventModifiers = []
     @State private var boardScrollState = BoardScrollState()
+    @State var showsScrollToTop = false
     @State var pinchStartCardSize: CardSize?
     @State var quickLookURL: URL?
     @FocusState var boardFocused: Bool
@@ -271,6 +272,12 @@ extension OiaLibraryView {
                     geometryKey: { AnyHashable($0.boardGeometryKey) },
                     position: $boardPosition,
                     navigationCoordinator: boardNavigation,
+                    onViewportChange: { viewport in
+                        let shouldShow = viewport.height > 0 && viewport.y > viewport.height
+                        if showsScrollToTop != shouldShow {
+                            showsScrollToTop = shouldShow
+                        }
+                    },
                     estimatedHeight: estimatedCardHeight,
                     content: { row in
                         OiaCardView(
@@ -329,6 +336,22 @@ extension OiaLibraryView {
                 }
                 .simultaneousGesture(boardMagnifyGesture)
                 .accessibilityIdentifier(A11y.List.table)
+                .overlay(alignment: .bottomTrailing) {
+                    if showsScrollToTop {
+                        Button(action: scrollBoardToTop) {
+                            Image(systemName: "arrow.up")
+                                .font(.system(size: 15, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .background(.regularMaterial, in: Circle())
+                        .overlay { Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1) }
+                        .help("Scroll to Top (\(ShortcutCatalog.scrollToTop.display))")
+                        .accessibilityLabel("Scroll to Top")
+                        .accessibilityIdentifier(A11y.List.scrollToTop)
+                        .padding(24)
+                    }
+                }
             }
         }
     }

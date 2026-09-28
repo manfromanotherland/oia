@@ -226,6 +226,7 @@ struct LazyMasonryBoard<Element: Equatable, ID: Hashable & Sendable>: View {
     private let geometryKey: ((Element) -> AnyHashable)?
     private let position: Binding<LazyLayoutPosition<ID>>?
     private let navigationCoordinator: MasonryNavigationCoordinator<Element, ID>?
+    private let onViewportChange: ((LayoutRect) -> Void)?
     private let estimatedHeight: (Element, CGFloat) -> CGFloat
     private let content: (Element) -> AnyView
 
@@ -240,6 +241,7 @@ struct LazyMasonryBoard<Element: Equatable, ID: Hashable & Sendable>: View {
         geometryKey: ((Element) -> AnyHashable)? = nil,
         position: Binding<LazyLayoutPosition<ID>>? = nil,
         navigationCoordinator: MasonryNavigationCoordinator<Element, ID>? = nil,
+        onViewportChange: ((LayoutRect) -> Void)? = nil,
         estimatedHeight: @escaping (Element, CGFloat) -> CGFloat = { _, _ in 180 },
         @ViewBuilder content: @escaping (Element) -> some View
     ) where Data: RandomAccessCollection, Data.Element == Element {
@@ -254,6 +256,7 @@ struct LazyMasonryBoard<Element: Equatable, ID: Hashable & Sendable>: View {
         self.geometryKey = geometryKey
         self.position = position
         self.navigationCoordinator = navigationCoordinator
+        self.onViewportChange = onViewportChange
         self.estimatedHeight = estimatedHeight
         self.content = { AnyView(content($0)) }
     }
@@ -296,6 +299,7 @@ struct LazyMasonryBoard<Element: Equatable, ID: Hashable & Sendable>: View {
         }
         .onLayoutViewportChange { viewport in
             visibility.update(viewport: viewport)
+            onViewportChange?(viewport)
         }
         .id(scrollResetID)
     }

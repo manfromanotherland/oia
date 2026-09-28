@@ -17,9 +17,11 @@ struct BoardActions {
     let canOpenSelection: Bool
     let canQuickLookSelection: Bool
     let canFocusSearch: Bool
+    let canScrollToTop: Bool
     let openSelection: () -> Void
     let toggleQuickLook: () -> Void
     let focusSearch: () -> Void
+    let scrollToTop: () -> Void
 }
 
 private struct DetailNavigationActionsKey: FocusedValueKey {
@@ -56,6 +58,12 @@ struct NavigationCommands: Commands {
             }
             .keyboardShortcut(ShortcutCatalog.focusSearch)
             .disabled(boardActions?.canFocusSearch != true)
+
+            Button("Scroll to Top") {
+                boardActions?.scrollToTop()
+            }
+            .keyboardShortcut(ShortcutCatalog.scrollToTop)
+            .disabled(boardActions?.canScrollToTop != true || appState.isEditingText)
 
             Button(appState.isFocusMode ? "Exit Focus Mode" : "Focus Mode") {
                 appState.isFocusMode.toggle()

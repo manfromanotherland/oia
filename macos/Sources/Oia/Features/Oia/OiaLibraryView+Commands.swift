@@ -17,9 +17,11 @@ extension OiaLibraryView {
                 && singleSelectedRow != nil
                 && appState.libraryURL != nil,
             canFocusSearch: presentedReading == nil && !appState.isFocusMode,
+            canScrollToTop: presentedReading == nil && !appState.readings.isEmpty,
             openSelection: openSelection,
             toggleQuickLook: toggleQuickLook,
-            focusSearch: focusSearch
+            focusSearch: focusSearch,
+            scrollToTop: scrollBoardToTop
         )
     }
 
@@ -43,6 +45,11 @@ extension OiaLibraryView {
     func openSelection() {
         guard presentedReading == nil, let row = singleSelectedRow else { return }
         open(row)
+    }
+
+    func scrollBoardToTop() {
+        guard presentedReading == nil, let firstID = appState.readings.first?.id else { return }
+        boardPosition.scrollTo(id: firstID, anchor: .top)
     }
 
     static let boardSpacing: CGFloat = 18
