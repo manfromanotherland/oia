@@ -10,12 +10,8 @@ final class NewsreaderFontTests: XCTestCase {
     private let opticalSizeAxis = NSNumber(value: UInt32(0x6F70_737A))
     private let resourceName = "Newsreader-VariableFont_opsz-wght.ttf"
 
-    func testQuoteTypographyUsesTheBundledNewsreaderLightVariations() throws {
-        try assertBundledNewsreader(
-            OiaCardTextMetrics.quoteFont(for: .extraLarge),
-            pointSize: 24,
-            opticalSize: 24
-        )
+    func testQuoteTextUsesItalicPalatinoAndMarksUseBundledNewsreader() throws {
+        assertItalicPalatino(OiaCardTextMetrics.quoteFont(for: .extraLarge), pointSize: 24)
         try assertBundledNewsreader(
             OiaCardTextMetrics.quoteMarkFont(for: .extraLarge),
             pointSize: 59,
@@ -29,11 +25,7 @@ final class NewsreaderFontTests: XCTestCase {
         XCTAssertEqual(pointSizes, [16, 18, 20, 22, 24])
         for (cardSize, pointSize) in zip(CardSize.allCases, pointSizes) {
             let scale = pointSize / 24
-            try assertBundledNewsreader(
-                OiaCardTextMetrics.quoteFont(for: cardSize),
-                pointSize: pointSize,
-                opticalSize: Double(pointSize)
-            )
+            assertItalicPalatino(OiaCardTextMetrics.quoteFont(for: cardSize), pointSize: pointSize)
             try assertBundledNewsreader(
                 OiaCardTextMetrics.quoteMarkFont(for: cardSize),
                 pointSize: 59 * scale,
@@ -54,6 +46,11 @@ final class NewsreaderFontTests: XCTestCase {
         XCTAssertNotEqual(glyphs[0], 0)
         XCTAssertNotEqual(glyphs[1], 0)
         XCTAssertNotEqual(glyphs[0], glyphs[1])
+    }
+
+    private func assertItalicPalatino(_ font: NSFont, pointSize: CGFloat) {
+        XCTAssertEqual(font.fontName, "Palatino-Italic")
+        XCTAssertEqual(font.pointSize, pointSize)
     }
 
     private func assertBundledNewsreader(

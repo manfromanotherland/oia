@@ -278,7 +278,7 @@ struct OiaCardView: View {
                 .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: cardSize))
         }
         .padding(.horizontal, OiaCardTextMetrics.quoteHorizontalPadding)
-        .padding(.vertical, OiaCardTextMetrics.quoteVerticalPadding(for: cardSize))
+        .padding(.vertical, OiaCardTextMetrics.quoteVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 

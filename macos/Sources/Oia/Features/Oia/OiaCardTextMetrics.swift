@@ -68,7 +68,7 @@ final class OiaCardTextMetrics {
         size: fullArticleBodySize * 0.85
     ) ?? NSFont.systemFont(ofSize: fullArticleBodySize * 0.85)
     static let fullArticleLineSpacing = fullArticleBodySize * ReaderLineHeight.normal.extraLeadingMultiple
-    static let fullArticlePadding: CGFloat = 32
+    static let fullArticlePadding: CGFloat = 24
     static let fullArticleSpacing: CGFloat = 10
     static let fullArticleTitleLineLimit = 4
     static let fullArticleDescriptionLineLimit = 5
@@ -78,11 +78,11 @@ final class OiaCardTextMetrics {
             + fullArticleMetadataFont.leading)
     )
 
-    private static let extraSmallQuoteFont = makeQuoteFont(ofSize: 16, opticalSize: 16)
-    private static let smallQuoteFont = makeQuoteFont(ofSize: 18, opticalSize: 18)
-    private static let mediumQuoteFont = makeQuoteFont(ofSize: 20, opticalSize: 20)
-    private static let largeQuoteFont = makeQuoteFont(ofSize: 22, opticalSize: 22)
-    private static let extraLargeQuoteFont = makeQuoteFont(ofSize: 24, opticalSize: 24)
+    private static let extraSmallQuoteFont = makePalatinoQuoteFont(ofSize: 16)
+    private static let smallQuoteFont = makePalatinoQuoteFont(ofSize: 18)
+    private static let mediumQuoteFont = makePalatinoQuoteFont(ofSize: 20)
+    private static let largeQuoteFont = makePalatinoQuoteFont(ofSize: 22)
+    private static let extraLargeQuoteFont = makePalatinoQuoteFont(ofSize: 24)
     private static let quoteMarkBasePointSize: CGFloat = 59
     private static let quoteMarkBaseHeight: CGFloat = 15
     private static let quoteMarkBaseVerticalOffset: CGFloat = 21
@@ -113,7 +113,8 @@ final class OiaCardTextMetrics {
     static let articleFooterPadding: CGFloat = 16
     static let articleFooterSpacing: CGFloat = 8
     static let articleFooterSourceLineHeight = max(14, sourceLineHeight)
-    static let quoteHorizontalPadding: CGFloat = 34.5
+    static let quoteHorizontalPadding: CGFloat = 24
+    static let quoteVerticalPadding: CGFloat = 16
     static let quoteLineSpacing: CGFloat = 7
     static let quoteLineLimit = 12
     static let socialPostPadding: CGFloat = 16
@@ -191,16 +192,16 @@ final class OiaCardTextMetrics {
         let key = QuoteHeightKey(text: text, cardSize: cardSize)
         return quoteHeights.value(for: key, width: halfPointWidth) {
             let font = Self.quoteFont(for: cardSize)
-            let verticalPadding = Self.quoteVerticalPadding(for: cardSize)
             let markHeight = Self.quoteMarkHeight(for: cardSize)
             let markSpacing = Self.quoteMarkSpacing(for: cardSize)
             let measured = Self.measuredQuoteHeight(
                 text,
                 width: CGFloat(halfPointWidth) / 2,
-                font: font
+                font: font,
+                cardSize: cardSize
             )
             return ceil(
-                verticalPadding * 2
+                Self.quoteVerticalPadding * 2
                     + markHeight * 2
                     + markSpacing * 2
                     + measured
@@ -239,23 +240,36 @@ final class OiaCardTextMetrics {
     private static func measuredQuoteHeight(
         _ text: String,
         width: CGFloat,
-        font: NSFont
+        font: NSFont,
+        cardSize: CardSize
     ) -> CGFloat {
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = .center
-        paragraphStyle.lineSpacing = quoteLineSpacing
-        let bounds = (text as NSString).boundingRect(
-            with: CGSize(width: width, height: .greatestFiniteMagnitude),
-            options: [.usesFontLeading, .usesLineFragmentOrigin],
-            attributes: [
-                .font: font,
-                .paragraphStyle: paragraphStyle
-            ]
+        measuredTextHeight(
+            text,
+            width: width,
+            font: font,
+            lineSpacing: quoteLineSpacing,
+            lineLimit: quoteLineLimit,
+            renderedLineHeight: quoteRenderedLineHeight(for: cardSize)
         )
-        let lineHeight = floor(font.ascender - font.descender + font.leading)
-        let maximumHeight = CGFloat(quoteLineLimit) * lineHeight
-            + CGFloat(quoteLineLimit - 1) * quoteLineSpacing
-        return min(maximumHeight, max(lineHeight, ceil(bounds.height)))
+    }
+
+    /// SwiftUI's Palatino line boxes at the five card sizes. The end sizes
+    /// differ by a point from AppKit's rounded ascender/descender measure.
+    private static func quoteRenderedLineHeight(for cardSize: CardSize) -> CGFloat {
+        switch cardSize {
+        case .extraSmall: 17
+        case .small: 20
+        case .medium: 22
+        case .large: 24
+        case .extraLarge: 27
+        }
+    }
+
+    private static func makePalatinoQuoteFont(ofSize size: CGFloat) -> NSFont {
+        NSFont(name: ReaderFont.serifFaceName(weight: .regular, italic: true), size: size)
+            ?? NSFontManager.shared.convert(
+                NSFont.systemFont(ofSize: size), toHaveTrait: .italicFontMask
+            )
     }
 
     private static let newsreaderPostScriptName = "Newsreader16pt-Regular"
@@ -305,7 +319,8 @@ final class OiaCardTextMetrics {
         width: CGFloat,
         font: NSFont,
         lineSpacing: CGFloat = 0,
-        lineLimit: Int
+        lineLimit: Int,
+        renderedLineHeight: CGFloat? = nil
     ) -> CGFloat {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = lineSpacing
@@ -325,8 +340,8 @@ final class OiaCardTextMetrics {
         let nativeStep = nativeLineHeight + lineSpacing
         let measuredLines = 1 + Int(max(0, (bounds.height - nativeLineHeight) / nativeStep).rounded())
         let visibleLines = min(lineLimit, measuredLines)
-        let renderedLineHeight = (font.ascender - font.descender).rounded()
-        return ceil(CGFloat(visibleLines) * renderedLineHeight
+        let lineHeight = renderedLineHeight ?? (font.ascender - font.descender).rounded()
+        return ceil(CGFloat(visibleLines) * lineHeight
             + CGFloat(visibleLines - 1) * lineSpacing)
     }
 
@@ -382,10 +397,6 @@ extension OiaCardTextMetrics {
         case .large: 22
         case .extraLarge: 24
         }
-    }
-
-    static func quoteVerticalPadding(for cardSize: CardSize) -> CGFloat {
-        quotePointSize(for: cardSize)
     }
 
     static func quoteMarkPointSize(for cardSize: CardSize) -> CGFloat {

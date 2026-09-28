@@ -221,10 +221,8 @@ final class OiaCardTextMetricsTests: XCTestCase {
         let text = "Not every situation warrants advice. Sometimes, "
             + "the person just wants to gauge a reaction or to share."
 
-        XCTAssertEqual(
-            CardSize.allCases.map(OiaCardTextMetrics.quoteVerticalPadding(for:)),
-            [16, 18, 20, 22, 24]
-        )
+        XCTAssertEqual(OiaCardTextMetrics.quoteVerticalPadding, 16)
+        XCTAssertEqual(OiaCardTextMetrics.quoteHorizontalPadding, 24)
         let narrowHeight = metrics.quoteCardHeight(
             for: text,
             width: CardSize.extraSmall.minimumColumnWidth,
@@ -375,7 +373,7 @@ extension OiaCardTextMetricsTests {
                 .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: cardSize))
         }
         .padding(.horizontal, OiaCardTextMetrics.quoteHorizontalPadding)
-        .padding(.vertical, OiaCardTextMetrics.quoteVerticalPadding(for: cardSize))
+        .padding(.vertical, OiaCardTextMetrics.quoteVerticalPadding)
         .frame(width: width, alignment: .center)
 
         return ceil(NSHostingView(rootView: view).fittingSize.height)
