@@ -16,6 +16,7 @@ struct OiaReadingOverlay: View {
     var onEditTags: () -> Void
 
     @AppStorage("showsReadingInspector", store: AppDefaults.store) private var showsInspector = true
+    @State private var hoveredNavigation: Int?
 
     var body: some View {
         gallery
@@ -84,7 +85,7 @@ struct OiaReadingOverlay: View {
             HStack(spacing: 8) {
                 closeButton
                     .buttonStyle(.plain)
-                    .glassEffect(in: Circle())
+                    .glassEffect(.regular.interactive(), in: Circle())
                 modernPreviousNextControl
             }
         } else {
@@ -132,28 +133,43 @@ struct OiaReadingOverlay: View {
             Button { onMove(-1) } label: {
                 Image(systemName: "chevron.left")
                     .frame(width: 32, height: 36)
+                    .background {
+                        if hoveredNavigation == -1 {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.primary.opacity(0.12))
+                        }
+                    }
             }
             .help("Previous item (Left Arrow or K)")
             .accessibilityLabel("Previous item")
             .accessibilityIdentifier(A11y.Detail.previous)
             .keyboardShortcut(.leftArrow, modifiers: [])
             .disabled(!canMovePrevious || appState.isEditingText)
+            .onHover { hoveredNavigation = $0 && canMovePrevious && !appState.isEditingText ? -1 : nil }
 
             Divider().frame(height: 18)
 
             Button { onMove(1) } label: {
                 Image(systemName: "chevron.right")
                     .frame(width: 32, height: 36)
+                    .background {
+                        if hoveredNavigation == 1 {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(.primary.opacity(0.12))
+                        }
+                    }
             }
             .help("Next item (Right Arrow or J)")
             .accessibilityLabel("Next item")
             .accessibilityIdentifier(A11y.Detail.next)
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(!canMoveNext || appState.isEditingText)
+            .onHover { hoveredNavigation = $0 && canMoveNext && !appState.isEditingText ? 1 : nil }
         }
         .buttonStyle(.plain)
         .padding(.horizontal, 4)
-        .glassEffect(in: Capsule())
+        .glassEffect(.regular.interactive(), in: Capsule())
+        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: hoveredNavigation)
     }
 
     private var previousNextControl: some View {
