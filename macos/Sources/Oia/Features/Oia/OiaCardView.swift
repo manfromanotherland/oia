@@ -285,7 +285,7 @@ struct OiaCardView: View {
     private func quoteMark(_ mark: String) -> some View {
         Text(mark)
             .font(Font(OiaCardTextMetrics.quoteMarkFont(for: cardSize)))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.tertiary)
             .fixedSize()
             .offset(y: OiaCardTextMetrics.quoteMarkVerticalOffset(for: cardSize))
             .frame(

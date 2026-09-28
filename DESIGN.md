@@ -136,13 +136,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   mix. Redundant title chrome is hidden.
 - **Video:** captured poster image with a restrained play glyph. A durable media URL is secondary
   metadata; session-local streams fall back to the source page for playback.
-- **Quote:** selected text rendered in centered italic Palatino, with 24 pt side and 16 pt vertical
-  padding. Its origin remains available in detail and the Inspector, but is omitted from the board
-  card.
+- **Quote:** selected text rendered in centered Georgia Italic, with 20 pt padding all around and
+  muted quotation marks. Its origin remains available in detail and the Inspector, but is omitted
+  from the board card.
 - **Article:** a local preview image when available, followed by a Palatino heading, saved or
   file-derived description, source, and estimated reading time. Text-only article cards fit their
-  visible content with 24 pt padding; absent favicons leave no decorative placeholder. Lightweight
-  links keep their separate card treatment.
+  visible content with 20 pt padding; source and reading time are muted, and absent favicons leave
+  no decorative placeholder. Lightweight links keep their separate card treatment.
 - **Social post:** a source-aware article card with avatar, author/handle, full post text, provider,
   and the first local attachment or video poster. It remains in Articles and does not acquire an
   automatic tag.

@@ -38,8 +38,8 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 - Full-article board cards now show a description and estimated reading time in the reader's
   Palatino hierarchy. Missing descriptions use the start of the saved article text, and text-only
-  cards fit their content without large empty areas. Article cards use 24 pt padding; quote cards
-  use italic Palatino with 24 pt side and 16 pt vertical padding.
+  cards fit their content without large empty areas. Article and quote cards use 20 pt padding;
+  quote text uses Georgia Italic, and article sources and quote marks have a muted color.
 
 - Card details now have a floating Liquid Glass inspector with Discover and Details tabs,
   compact tag pills, clickable image attributes and closely spaced colour swatches. Swatches

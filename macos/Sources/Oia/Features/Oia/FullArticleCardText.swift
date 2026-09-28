@@ -45,6 +45,7 @@ struct FullArticleCardText: View {
             }
 
             Text(row.displaySite ?? "Saved locally")
+                .foregroundStyle(.tertiary)
                 .lineLimit(1)
 
             if let readingTime = row.readingTimeLabel {
@@ -55,7 +56,6 @@ struct FullArticleCardText: View {
             }
         }
         .font(Font(OiaCardTextMetrics.fullArticleMetadataFont))
-        .foregroundStyle(.secondary)
         .frame(height: OiaCardTextMetrics.fullArticleMetadataLineHeight)
     }
 }

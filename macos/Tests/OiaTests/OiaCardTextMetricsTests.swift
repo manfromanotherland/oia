@@ -221,8 +221,8 @@ final class OiaCardTextMetricsTests: XCTestCase {
         let text = "Not every situation warrants advice. Sometimes, "
             + "the person just wants to gauge a reaction or to share."
 
-        XCTAssertEqual(OiaCardTextMetrics.quoteVerticalPadding, 16)
-        XCTAssertEqual(OiaCardTextMetrics.quoteHorizontalPadding, 24)
+        XCTAssertEqual(OiaCardTextMetrics.quoteVerticalPadding, 20)
+        XCTAssertEqual(OiaCardTextMetrics.quoteHorizontalPadding, 20)
         let narrowHeight = metrics.quoteCardHeight(
             for: text,
             width: CardSize.extraSmall.minimumColumnWidth,
