@@ -64,6 +64,13 @@ make format     # swiftformat . — rewrites sources in place
 make lint       # swiftlint lint — reports remaining violations
 ```
 
+## Profile performance
+
+The shared `Oia` scheme uses a Release build for **Product → Profile** (`⌘I`). Choose
+the **SwiftUI** Instruments template and record the interaction you want to
+measure. See [Performance profiling](docs/performance-profiling.md) for a repeatable
+workflow, trace interpretation, and the isolated board scroll fixture.
+
 ## Software updates (Sparkle)
 
 The project includes [Sparkle](https://sparkle-project.org), but update checks are deliberately
@@ -94,6 +101,7 @@ appcast once that feed exists.
 ```bash
 make all           # build XCFramework + bindings + generate the Xcode project
 make test          # run the test suites
+make profile-build # build the optimized app for SwiftUI Instruments traces
 make dmg           # ad-hoc-signed .dmg for local testing (not notarized)
 make release       # Developer ID signed + notarized + stapled + Sparkle-signed .dmg
 make format        # reformat with SwiftFormat

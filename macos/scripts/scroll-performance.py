@@ -44,7 +44,11 @@ def main():
     script_dir = Path(__file__).resolve().parent
     repo = script_dir.parent.parent
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", type=Path, default=repo / "macos/build/Build/Products/Debug/Óia.app/Contents/MacOS/Oia")
+    parser.add_argument(
+        "--app", type=Path,
+        default=repo / "macos/build/Build/Products/Release/Óia.app/Contents/MacOS/Oia",
+        help="App executable to profile (defaults to the optimized Release build)",
+    )
     parser.add_argument("--output", type=Path, required=True, help="New results directory; never overwritten")
     parser.add_argument("--fixture", type=Path, help="Reusable generated fixture directory")
     parser.add_argument("--count", type=int, default=10000)

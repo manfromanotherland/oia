@@ -15,7 +15,7 @@ DMG := dist/Óia.dmg
 # elsewhere: `make sparkle-sign SIGN_UPDATE=/path/to/sign_update`.
 SIGN_UPDATE ?=
 
-.PHONY: all xcframework bindings xcodegen test dmg release sparkle-sign clean format format-check lint lint-fix
+.PHONY: all xcframework bindings xcodegen test profile-build dmg release sparkle-sign clean format format-check lint lint-fix
 
 all: xcframework bindings xcodegen
 
@@ -43,6 +43,11 @@ xcodegen:
 ## Assumes `make all` has generated the framework, bindings, and project.
 test:
 	xcodebuild test -project Oia.xcodeproj -scheme Oia -derivedDataPath build
+
+## Build the optimized, symbolicated app used by Product > Profile and the
+## isolated SwiftUI trace driver. Keep the normal Debug app in the same build tree.
+profile-build:
+	xcodebuild build -project Oia.xcodeproj -scheme Oia -configuration Release -derivedDataPath build
 
 ## Build a Release .app and wrap it in a distributable .dmg (dist/Óia.dmg).
 ## Ad-hoc signed only (local testing) — for a shippable build use `make release`.
