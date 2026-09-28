@@ -261,6 +261,27 @@
             XCTAssertTrue(recorder.active.keys.contains(0))
         }
 
+        @MainActor
+        func testScrollToStartRestoresInitialViewportWithTopInset() throws {
+            for inset in [0.0, 120.0] {
+                let model = Model(makeItems(0 ..< 3000))
+                let recorder = Recorder()
+                let window = host(model, recorder, topInset: inset)
+                defer { window.close() }
+
+                let firstFrame = try XCTUnwrap(recorder.active[0])
+                model.position.scrollTo(id: 1000)
+                pump(0.8)
+                XCTAssertNil(recorder.active[0])
+
+                model.position.scrollToStart(animated: true)
+                pump(0.7)
+
+                let restoredFrame = try XCTUnwrap(recorder.active[0])
+                XCTAssertEqual(restoredFrame.minY, firstFrame.minY, accuracy: 12)
+            }
+        }
+
         /// **This test fails without the generation counter.** The second request
         /// is equal to the first by value, so a container comparing only the target
         /// would ignore it — which is exactly the case where the user has scrolled

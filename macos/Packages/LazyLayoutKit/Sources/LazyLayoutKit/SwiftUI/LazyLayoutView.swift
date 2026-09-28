@@ -583,9 +583,23 @@ public struct LazyLayoutView<Element, ID: Hashable & Sendable, Layout: LazyLayou
         }
         guard let target = pendingTarget else { return false }
 
+        if case let .start(animated) = target {
+            pendingTarget = nil
+            scrollToStart(animated: animated)
+            if !animated {
+                viewport = LayoutRect(
+                    x: viewport.x, y: 0,
+                    width: viewport.width, height: viewport.height
+                )
+            }
+            return true
+        }
+
+        guard case let .item(id, anchor, animated) = target else { return false }
+
         guard let y = snapshot.offset(
-            toShow: target.id,
-            anchor: target.anchor,
+            toShow: id,
+            anchor: anchor,
             viewportHeight: effectiveViewport.height,
             currentOffset: viewport.y
         ) else {
@@ -600,8 +614,8 @@ public struct LazyLayoutView<Element, ID: Hashable & Sendable, Layout: LazyLayou
             markInitialRequestConsumed(servicedToken)
             pendingIsInitial = false
         }
-        scroll(toContentPlaneY: y, animated: target.animated)
-        if target.animated {
+        scroll(toContentPlaneY: y, animated: animated)
+        if animated {
             // Keep the current cells alive while SwiftUI reports each animated
             // viewport position. Adopting the destination here would discard
             // them before the first animation frame.
@@ -647,6 +661,20 @@ public struct LazyLayoutView<Element, ID: Hashable & Sendable, Layout: LazyLayou
         transaction.disablesAnimations = true
         withTransaction(transaction) {
             scrollPosition.scrollTo(y: y)
+        }
+    }
+
+    private func scrollToStart(animated: Bool) {
+        if animated {
+            withAnimation(.easeInOut(duration: 0.45)) {
+                scrollPosition.scrollTo(edge: .top)
+            }
+        } else {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) {
+                scrollPosition.scrollTo(edge: .top)
+            }
         }
     }
 

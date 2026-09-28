@@ -113,14 +113,13 @@ func currentScrollRequestToken() -> UInt64 {
 /// and it would do so while the user is scrolling. Read-back needs a design that
 /// does not sit on that path.
 ///
-/// Programmatic scrolls are also immediate rather than animated. Animating an
-/// offset across content that was never built would animate through blank space.
+/// Programmatic scrolls are immediate by default. Callers can opt into animation;
+/// the container follows intermediate viewports to keep their cells materialized.
 public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     /// A request the caller has made and the container has not yet serviced.
-    struct Target: Equatable, Sendable {
-        let id: ID
-        let anchor: ScrollAnchor
-        let animated: Bool
+    enum Target: Equatable, Sendable {
+        case item(id: ID, anchor: ScrollAnchor, animated: Bool)
+        case start(animated: Bool)
     }
 
     private(set) var target: Target?
@@ -174,7 +173,7 @@ public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     /// back to a deep link they have already read past. Call
     /// ``scrollTo(id:anchor:)`` if you want to go there again.
     public init(initiallyScrolledTo id: ID, anchor: ScrollAnchor = .top) {
-        target = Target(id: id, anchor: anchor, animated: false)
+        target = .item(id: id, anchor: anchor, animated: false)
         token = nextScrollRequestToken()
         isInitialRequest = true
     }
@@ -188,7 +187,16 @@ public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     /// pages, re-issue the request when the page arrives; calling this again
     /// always re-fires.
     public mutating func scrollTo(id: ID, anchor: ScrollAnchor = .top, animated: Bool = false) {
-        target = Target(id: id, anchor: anchor, animated: animated)
+        target = .item(id: id, anchor: anchor, animated: animated)
+        token = nextScrollRequestToken()
+        isInitialRequest = false
+    }
+
+    /// Scrolls to the scroll container's start, including any space above the
+    /// first item. Unlike aligning the first item, this restores the initial
+    /// viewport when a window toolbar extends over the scroll view.
+    public mutating func scrollToStart(animated: Bool = false) {
+        target = .start(animated: animated)
         token = nextScrollRequestToken()
         isInitialRequest = false
     }
