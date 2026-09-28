@@ -154,7 +154,7 @@ struct OiaReadingOverlay: View {
             Color(nsColor: .windowBackgroundColor)
             LocalReadingImage(
                 row: row, libraryURL: appState.libraryURL,
-                fallbackAspectRatio: showsPlay ? 16 / 9 : 4 / 3,
+                fallbackAspectRatio: row.standaloneMediaAspectRatio ?? (showsPlay ? 16 / 9 : 4 / 3),
                 maxPixel: 3200, contentMode: .fit
             )
             .padding(38)
