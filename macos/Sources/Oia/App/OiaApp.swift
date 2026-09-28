@@ -32,7 +32,10 @@ struct OiaApp: App {
             ContentView()
                 .environment(appState)
                 .frame(minWidth: 900, minHeight: 600)
-                .containerBackground(OiaTheme.shellSurface, for: .window)
+                .containerBackground(
+                    appState.libraryURL == nil ? OiaTheme.shellSurface : OiaTheme.boardSurface,
+                    for: .window
+                )
                 .onChange(of: appearanceMode, initial: true) { _, mode in
                     NSApplication.shared.appearance = mode.nsAppearance
                 }
