@@ -268,7 +268,7 @@ struct OiaCardView: View {
 
             Text(quoteText)
                 .font(Font(OiaCardTextMetrics.quoteFont(for: cardSize)))
-                .foregroundStyle(.primary)
+                .foregroundStyle(.secondary)
                 .lineSpacing(OiaCardTextMetrics.quoteLineSpacing)
                 .multilineTextAlignment(.center)
                 .lineLimit(OiaCardTextMetrics.quoteLineLimit)

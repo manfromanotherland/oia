@@ -39,7 +39,8 @@ and versions track the app's `CFBundleShortVersionString`. See
 - Full-article board cards now show a description and estimated reading time in the reader's
   Palatino hierarchy. Missing descriptions use the start of the saved article text, and text-only
   cards fit their content without large empty areas. Article and quote cards use 20 pt padding;
-  quote text uses Baskerville Italic, and article sources and quote marks have a muted color.
+  quote text uses Georgia Italic and the article description's muted color; article sources and
+  quote marks remain subdued.
 - Textual board cards now sit on a subtly lighter neutral surface than the board in Light and Dark
   appearance.
 
