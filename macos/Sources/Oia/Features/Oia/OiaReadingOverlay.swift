@@ -32,15 +32,12 @@ struct OiaReadingOverlay: View {
     }
 
     private var gallery: some View {
-        HStack(alignment: .top, spacing: 0) {
+        NavigationSplitView(columnVisibility: inspectorVisibility) {
             OiaInspectorView(
                 row: row, isVisible: showsInspector,
                 onEditTags: onEditTags, onSearch: searchFromInspector
             )
-                .frame(width: 320)
-                .frame(maxHeight: .infinity)
-                .frame(width: showsInspector ? 320 : 0, alignment: .trailing)
-                .clipped()
+                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)
                 .background {
                     Group {
                         if reduceTransparency {
@@ -51,50 +48,34 @@ struct OiaReadingOverlay: View {
                     }
                     .ignoresSafeArea(.container, edges: .top)
                 }
-                .allowsHitTesting(showsInspector)
-                .accessibilityHidden(!showsInspector)
+                .toolbar(removing: .sidebarToggle)
+        } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .overlay(alignment: .topLeading) {
-                    GeometryReader { geometry in
-                        detailControls
-                            // Follow the detail pane's actual edge, with room for the
-                            // fixed titlebar controls after the inspector collapses.
-                            .padding(.leading, max(12, 139 - geometry.frame(in: .named("readingGallery")).minX))
-                            .padding(.top, 8)
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .ignoresSafeArea(.container, edges: .top)
+                .toolbar {
+                    ToolbarItem(placement: .navigation) {
+                        HStack(spacing: 8) {
+                            closeButton
+                            previousNextControl
+                        }
                     }
                 }
         }
+        .navigationSplitViewStyle(.balanced)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .coordinateSpace(name: "readingGallery")
+    }
+
+    private var inspectorVisibility: Binding<NavigationSplitViewVisibility> {
+        Binding(
+            get: { showsInspector ? .all : .detailOnly },
+            set: { showsInspector = $0 != .detailOnly }
+        )
     }
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
             sidebarToggle
-        }
-    }
-
-    @ViewBuilder
-    private var detailControls: some View {
-        if #available(macOS 26.0, *) {
-            HStack(spacing: 8) {
-                closeButton(labelSize: 30)
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.small)
-                modernPreviousNextControl
-            }
-        } else {
-            HStack(spacing: 8) {
-                closeButton(labelSize: 36)
-                    .buttonStyle(.bordered)
-                    .buttonBorderShape(.circle)
-                previousNextControl
-            }
         }
     }
 
@@ -115,53 +96,15 @@ struct OiaReadingOverlay: View {
         .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
     }
 
-    private func closeButton(labelSize: CGFloat) -> some View {
+    private var closeButton: some View {
         Button(action: onClose) {
             Label("Close Detail", systemImage: "xmark")
-                .frame(width: labelSize, height: labelSize)
         }
         .labelStyle(.iconOnly)
         .help("Close detail (Escape)")
         .accessibilityIdentifier(A11y.Detail.close)
         .keyboardShortcut(.cancelAction)
         .accessibilityLabel("Close Detail")
-    }
-
-    @available(macOS 26.0, *)
-    private var modernPreviousNextControl: some View {
-        GlassEffectContainer(spacing: 8) {
-            HStack(spacing: 0) {
-                Button { onMove(-1) } label: {
-                    Label("Previous item", systemImage: "chevron.left")
-                        .frame(width: 30, height: 30)
-                }
-                .help("Previous item (Left Arrow or K)")
-                .accessibilityIdentifier(A11y.Detail.previous)
-                .keyboardShortcut(.leftArrow, modifiers: [])
-                .disabled(!canMovePrevious || appState.isEditingText)
-
-                Button { onMove(1) } label: {
-                    Label("Next item", systemImage: "chevron.right")
-                        .frame(width: 30, height: 30)
-                }
-                .help("Next item (Right Arrow or J)")
-                .accessibilityIdentifier(A11y.Detail.next)
-                .keyboardShortcut(.rightArrow, modifiers: [])
-                .disabled(!canMoveNext || appState.isEditingText)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.small)
-            .labelStyle(.iconOnly)
-            .overlay {
-                HStack {
-                    Spacer(minLength: 0)
-                    Divider().frame(height: 18)
-                    Spacer(minLength: 0)
-                }
-                .allowsHitTesting(false)
-            }
-        }
     }
 
     private var previousNextControl: some View {
