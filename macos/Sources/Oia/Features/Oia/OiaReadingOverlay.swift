@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import SwiftUI
 
 struct OiaReadingOverlay: View {
     @Environment(AppState.self) private var appState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @Binding var row: ReadingRow
     var onClose: () -> Void
@@ -40,8 +42,14 @@ struct OiaReadingOverlay: View {
                 .frame(width: showsInspector ? 320 : 0, alignment: .trailing)
                 .clipped()
                 .background {
-                    OiaTheme.inspectorSidebarSurface
-                        .ignoresSafeArea(.container, edges: .top)
+                    Group {
+                        if reduceTransparency {
+                            OiaTheme.inspectorSidebarSurface
+                        } else {
+                            InspectorSidebarMaterial()
+                        }
+                    }
+                    .ignoresSafeArea(.container, edges: .top)
                 }
                 .allowsHitTesting(showsInspector)
                 .accessibilityHidden(!showsInspector)
@@ -210,6 +218,18 @@ struct OiaReadingOverlay: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         }
     }
+}
+
+private struct InspectorSidebarMaterial: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .followsWindowActiveState
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
 }
 
 private struct OiaQuoteDetailView: View {
