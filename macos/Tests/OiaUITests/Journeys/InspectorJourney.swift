@@ -22,10 +22,12 @@ final class InspectorJourney: UITestCase {
 
         toggle.click()
         XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
-        keyboard.toggleSidebar()
-        XCTAssertTrue(inspector.waitExists(), "⌘B expands the sidebar")
+        toggle.click()
+        XCTAssertTrue(inspector.waitExists(), "Toolbar button expands the sidebar")
         keyboard.toggleSidebar()
         XCTAssertTrue(inspector.waitDisappears(), "⌘B collapses the sidebar")
+        keyboard.toggleSidebar()
+        XCTAssertTrue(inspector.waitExists(), "⌘B expands the sidebar")
         keyboard.escape()
         XCTAssertTrue(app.byId(A11y.List.rows).waitExists(), "Escape closes the detail view")
     }

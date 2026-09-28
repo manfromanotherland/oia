@@ -7,6 +7,7 @@ import SwiftUI
 struct OiaInspectorView: View {
     @Environment(AppState.self) private var appState
     let row: ReadingRow
+    let isVisible: Bool
     var onEditTags: () -> Void
     var onSearch: (String) -> Void
 
@@ -45,7 +46,10 @@ struct OiaInspectorView: View {
         .scrollIndicators(.hidden)
         .scrollBounceBehavior(.basedOnSize)
         .accessibilityIdentifier(A11y.Inspector.panel)
-        .task(id: loadID) { await load() }
+        .task(id: isVisible ? loadID : "") {
+            guard isVisible else { return }
+            await load()
+        }
     }
 
     private var heading: some View {
