@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-import Foundation
+import AppKit
 import XCTest
 
 final class ReadingQuickLookURLResolverTests: XCTestCase {
@@ -73,6 +73,23 @@ final class ReadingQuickLookURLResolverTests: XCTestCase {
         let row = makeReadingRow(kind: .article)
         XCTAssertNil(ReadingQuickLookURLResolver.previewURL(for: row, libraryURL: nil))
         XCTAssertNil(resolve(row))
+    }
+
+    func testCopyUsesLocalFileAndAddressUsesItsAbsolutePath() throws {
+        let row = makeReadingRow(kind: .image, previewAsset: "assets/image.jpg")
+        _ = try writeArticle(for: row)
+        let imageURL = try writeAsset(named: "image.jpg", for: row)
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        defer { pasteboard.releaseGlobally() }
+
+        ReadingClipboard.copyFile(row, libraryURL: libraryURL, to: pasteboard)
+        XCTAssertEqual(
+            (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first,
+            imageURL
+        )
+
+        ReadingClipboard.copyAddress(row, libraryURL: libraryURL, to: pasteboard)
+        XCTAssertEqual(pasteboard.string(forType: .string), imageURL.path)
     }
 
     private func resolve(_ row: ReadingRow) -> URL? {

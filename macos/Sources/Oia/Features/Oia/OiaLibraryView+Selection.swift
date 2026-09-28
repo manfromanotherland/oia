@@ -43,6 +43,22 @@ extension OiaLibraryView {
     func performBoardShortcut(_ press: KeyPress) -> KeyPress.Result {
         guard !appState.isEditingText, presentedReading == nil else { return .ignored }
 
+        if ShortcutCatalog.copy.matches(key: press.key, modifiers: press.modifiers),
+           let row = singleSelectedRow,
+           ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
+        {
+            ReadingClipboard.copyFile(row, libraryURL: appState.libraryURL)
+            return .handled
+        }
+
+        if ShortcutCatalog.copyAddress.matches(key: press.key, modifiers: press.modifiers),
+           let row = singleSelectedRow,
+           ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
+        {
+            ReadingClipboard.copyAddress(row, libraryURL: appState.libraryURL)
+            return .handled
+        }
+
         if ShortcutCatalog.open.matches(key: press.key, modifiers: press.modifiers) {
             guard appState.selectedRows.count == 1 else { return .ignored }
             openSelection()

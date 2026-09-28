@@ -24,6 +24,24 @@ struct ArticleCommands: Commands {
 
                 Divider()
 
+                Button("Copy") {
+                    if let selectedRow {
+                        ReadingClipboard.copyFile(selectedRow, libraryURL: appState.libraryURL)
+                    }
+                }
+                .keyboardShortcut(ShortcutCatalog.copy)
+                .disabled(!canCopySelection)
+
+                Button("Copy Address") {
+                    if let selectedRow {
+                        ReadingClipboard.copyAddress(selectedRow, libraryURL: appState.libraryURL)
+                    }
+                }
+                .keyboardShortcut(ShortcutCatalog.copyAddress)
+                .disabled(!canCopySelection)
+
+                Divider()
+
                 Button("Edit Tags…") {
                     appState.showTagSheet = true
                 }
@@ -72,5 +90,10 @@ struct ArticleCommands: Commands {
 
     private var deleteTitle: String {
         selectedRows.count == 1 ? "Delete" : "Delete \(selectedRows.count) Items"
+    }
+
+    private var canCopySelection: Bool {
+        guard let selectedRow, !appState.isEditingText, boardActions != nil else { return false }
+        return ReadingClipboard.fileURL(for: selectedRow, libraryURL: appState.libraryURL) != nil
     }
 }

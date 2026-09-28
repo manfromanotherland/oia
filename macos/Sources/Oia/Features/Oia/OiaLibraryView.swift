@@ -350,6 +350,7 @@ extension OiaLibraryView {
                 }
                 .onKeyPress(
                     keys: [
+                        ShortcutCatalog.copy.primary.key,
                         ShortcutCatalog.openWithReturn.key,
                         ShortcutCatalog.focusSearchWithSlash.key,
                         ShortcutCatalog.quickLook.primary.key

@@ -99,6 +99,8 @@ enum ShortcutCatalog {
     // swiftlint:disable line_length
 
     // Item actions
+    static let copy = AppShortcut(title: "Copy", key: "c", modifiers: .command, keyGlyph: "C")
+    static let copyAddress = AppShortcut(title: "Copy Address", key: "c", modifiers: [.command, .shift], keyGlyph: "C")
     static let openWithReturn = AppShortcutKey(key: .return, modifiers: [], keyGlyph: "↩")
     static let open = AppShortcut(
         title: "Open", key: "o", modifiers: .command, keyGlyph: "O",
@@ -141,7 +143,7 @@ enum ShortcutCatalog {
 
     /// Groups in cheat-sheet display order.
     static let groups: [Group] = [
-        Group(name: "Item", shortcuts: [open, quickLook, editTags, toggleHighlights, delete, openInBrowser]),
+        Group(name: "Item", shortcuts: [open, quickLook, copy, copyAddress, editTags, toggleHighlights, delete, openInBrowser]),
         Group(
             name: "View",
             shortcuts: [

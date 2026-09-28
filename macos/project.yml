@@ -135,6 +135,7 @@ targets:
       - path: Sources/Oia/Features/Oia/LocalReadingImage.swift
       - path: Sources/Oia/Features/Oia/LocalReadingFavicon.swift
       - path: Sources/Oia/Features/Oia/ReadingQuickLookURLResolver.swift
+      - path: Sources/Oia/Features/Oia/ReadingClipboard.swift
       - path: Sources/Oia/Features/Oia/LazyMasonryBoard.swift
       - path: Sources/Oia/Features/Oia/BoardVisibilityCoordinator.swift
       - path: Sources/Oia/Features/Oia/ReadingRow+BoardGeometry.swift
