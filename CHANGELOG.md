@@ -41,8 +41,8 @@ and versions track the app's `CFBundleShortVersionString`. See
   cards fit their content without large empty areas. Article and quote cards use 20 pt padding;
   quote text uses Georgia Italic and the article description's muted color; article sources and
   quote marks remain subdued.
-- Textual board cards now sit on a subtly lighter neutral surface than the board in Light and Dark
-  appearance.
+- Textual board cards now sit on a lighter neutral surface, with a darker board and window shell
+  in Light and Dark appearance.
 
 - Card details now have a floating Liquid Glass inspector with Discover and Details tabs,
   compact tag pills, clickable image attributes and closely spaced colour swatches. Swatches

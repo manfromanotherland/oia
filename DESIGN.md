@@ -147,7 +147,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and the first local attachment or video poster. It remains in Articles and does not acquire an
   automatic tag.
 - Textual cards (articles, lightweight links, quotes, and social posts) use a neutral surface that
-  reads slightly lighter than the board in both appearances. Image and video cards retain their
+  reads slightly lighter than the board in both appearances. The board and window shell use
+  progressively darker shades of the same semantic background. Image and video cards retain their
   material-backed media treatment.
 - Cards have 8–12 pt continuous corners and a semantic separator border. Hover reveals only a
   small standard action menu; cards do not add decorative lift or shadow effects. Tags and actions

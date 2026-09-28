@@ -82,11 +82,29 @@ struct CardSRGBColor: Equatable, Sendable {
 
 enum OiaTheme {
     static let card = Color(nsColor: .controlBackgroundColor)
-    static let boardSurface = Color(nsColor: .windowBackgroundColor)
-    static let textCardSurface = Color(nsColor: .windowBackgroundColor)
-    /// Lower the Light board and lift Dark text cards by the same neutral amount.
-    static let textSurfaceContrastOpacity = 0.04
+    static let shellSurface = semanticSurface(lightBlack: 0.08, darkBlack: 0.25)
+    static let boardSurface = semanticSurface(lightBlack: 0.06, darkBlack: 0.12)
+    static let textCardSurface = semanticSurface(darkWhite: 0.05)
     static let border = Color(nsColor: .separatorColor)
+
+    private static func semanticSurface(
+        lightBlack: CGFloat = 0,
+        darkBlack: CGFloat = 0,
+        darkWhite: CGFloat = 0
+    ) -> Color {
+        Color(nsColor: NSColor(name: nil) { appearance in
+            let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            let tint: NSColor = isDark && darkWhite > 0 ? .white : .black
+            let amount = isDark ? (darkWhite > 0 ? darkWhite : darkBlack) : lightBlack
+            var surface = NSColor.windowBackgroundColor
+            appearance.performAsCurrentDrawingAppearance {
+                let base = NSColor.windowBackgroundColor.usingColorSpace(.sRGB)
+                    ?? NSColor.windowBackgroundColor
+                surface = base.blended(withFraction: amount, of: tint) ?? base
+            }
+            return surface
+        })
+    }
 
     static func articlePalette(for row: ReadingRow) -> CardThemePalette? {
         guard row.kind == .article, !row.isSocialPost else { return nil }

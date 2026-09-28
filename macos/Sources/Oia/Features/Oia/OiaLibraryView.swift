@@ -9,7 +9,6 @@ import UniformTypeIdentifiers
 struct OiaLibraryView: View {
     @Environment(AppState.self) var appState
     @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
-    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("cardSize", store: AppDefaults.store) var cardSize: CardSize = .small
@@ -75,9 +74,6 @@ extension OiaLibraryView {
         }
         .background {
             OiaTheme.boardSurface
-            if colorScheme == .light {
-                Color.black.opacity(OiaTheme.textSurfaceContrastOpacity)
-            }
         }
     }
 
