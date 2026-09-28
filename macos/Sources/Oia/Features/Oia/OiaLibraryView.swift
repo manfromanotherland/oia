@@ -12,6 +12,7 @@ struct OiaLibraryView: View {
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
     @AppStorage("cardSize", store: AppDefaults.store) var cardSize: CardSize = .small
+    @AppStorage("showsReadingInspector", store: AppDefaults.store) private var showsInspector = true
 
     @State var presentedReading: ReadingRow?
     @State private var gallerySnapshot = GallerySnapshot<ReadingRow>()
@@ -36,6 +37,13 @@ struct OiaLibraryView: View {
                 .navigationDestination(isPresented: detailPresented) {
                     overlay
                 }
+        }
+        .toolbar {
+            if presentedReading != nil {
+                ToolbarItem(placement: .navigation) {
+                    inspectorToggle
+                }
+            }
         }
         .sheet(isPresented: tagSheetPresented) {
             tagPicker
@@ -62,6 +70,23 @@ private struct SearchQueryChangeModifier: ViewModifier {
 }
 
 extension OiaLibraryView {
+    private var inspectorToggle: some View {
+        Button {
+            // Keep the sidebar change out of the toolbar click transaction.
+            DispatchQueue.main.async {
+                withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.26)) {
+                    showsInspector.toggle()
+                }
+            }
+        } label: {
+            Label("Toggle Sidebar", systemImage: "sidebar.leading")
+        }
+        .labelStyle(.iconOnly)
+        .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
+        .accessibilityIdentifier(A11y.Inspector.toggle)
+        .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
+    }
+
     private var layeredSurface: some View {
         ZStack {
             librarySurface
@@ -378,6 +403,7 @@ extension OiaLibraryView {
                     get: { presentedReading ?? row },
                     set: updatePresentedRow
                 ),
+                showsInspector: $showsInspector,
                 onClose: closeOverlay,
                 onMove: moveOverlay,
                 canMovePrevious: canMoveOverlay(-1),

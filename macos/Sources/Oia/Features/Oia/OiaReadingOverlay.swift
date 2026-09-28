@@ -9,13 +9,12 @@ struct OiaReadingOverlay: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     @Binding var row: ReadingRow
+    @Binding var showsInspector: Bool
     var onClose: () -> Void
     var onMove: (Int) -> Void
     var canMovePrevious: Bool
     var canMoveNext: Bool
     var onEditTags: () -> Void
-
-    @AppStorage("showsReadingInspector", store: AppDefaults.store) private var showsInspector = true
 
     var body: some View {
         gallery
@@ -47,6 +46,7 @@ struct OiaReadingOverlay: View {
                     }
                     .ignoresSafeArea(.container, edges: .top)
                 }
+                .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
