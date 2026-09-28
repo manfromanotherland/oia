@@ -32,14 +32,6 @@ struct ArticleCommands: Commands {
                 .keyboardShortcut(ShortcutCatalog.copy)
                 .disabled(!canCopySelection)
 
-                Button("Copy Address") {
-                    if let selectedRow {
-                        ReadingClipboard.copyAddress(selectedRow, libraryURL: appState.libraryURL)
-                    }
-                }
-                .keyboardShortcut(ShortcutCatalog.copyAddress)
-                .disabled(!canCopySelection)
-
                 Divider()
 
                 Button("Edit Tags…") {

@@ -6,7 +6,6 @@ import XCTest
 final class ShortcutCatalogTests: XCTestCase {
     func testPrimaryActionShortcutsFollowMacConventions() {
         XCTAssertTrue(ShortcutCatalog.copy.matches(key: "c", modifiers: .command))
-        XCTAssertTrue(ShortcutCatalog.copyAddress.matches(key: "c", modifiers: [.command, .shift]))
         XCTAssertTrue(ShortcutCatalog.open.matches(key: "o", modifiers: .command))
         XCTAssertTrue(ShortcutCatalog.open.matches(key: .return, modifiers: []))
         XCTAssertTrue(ShortcutCatalog.delete.matches(key: .delete, modifiers: .command))

@@ -51,14 +51,6 @@ extension OiaLibraryView {
             return .handled
         }
 
-        if ShortcutCatalog.copyAddress.matches(key: press.key, modifiers: press.modifiers),
-           let row = singleSelectedRow,
-           ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
-        {
-            ReadingClipboard.copyAddress(row, libraryURL: appState.libraryURL)
-            return .handled
-        }
-
         if ShortcutCatalog.open.matches(key: press.key, modifiers: press.modifiers) {
             guard appState.selectedRows.count == 1 else { return .ignored }
             openSelection()

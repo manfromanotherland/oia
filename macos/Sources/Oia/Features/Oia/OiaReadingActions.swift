@@ -17,12 +17,6 @@ struct OiaReadingActions: View {
         .keyboardShortcut(ShortcutCatalog.copy)
         .disabled(ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) == nil)
 
-        Button("Copy Address") {
-            ReadingClipboard.copyAddress(row, libraryURL: appState.libraryURL)
-        }
-        .keyboardShortcut(ShortcutCatalog.copyAddress)
-        .disabled(ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) == nil)
-
         Divider()
 
         Button("Edit Tags…") { onEditTags() }

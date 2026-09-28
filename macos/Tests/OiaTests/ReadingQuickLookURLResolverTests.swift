@@ -75,7 +75,7 @@ final class ReadingQuickLookURLResolverTests: XCTestCase {
         XCTAssertNil(resolve(row))
     }
 
-    func testCopyUsesLocalFileAndAddressUsesItsAbsolutePath() throws {
+    func testCopyUsesLocalFile() throws {
         let row = makeReadingRow(kind: .image, previewAsset: "assets/image.jpg")
         _ = try writeArticle(for: row)
         let imageURL = try writeAsset(named: "image.jpg", for: row)
@@ -88,8 +88,6 @@ final class ReadingQuickLookURLResolverTests: XCTestCase {
             imageURL
         )
 
-        ReadingClipboard.copyAddress(row, libraryURL: libraryURL, to: pasteboard)
-        XCTAssertEqual(pasteboard.string(forType: .string), imageURL.path)
     }
 
     private func resolve(_ row: ReadingRow) -> URL? {
