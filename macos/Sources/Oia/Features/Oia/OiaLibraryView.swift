@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import CoreImage
 import LazyLayoutKit
 import QuickLook
 import SwiftUI
@@ -25,7 +26,6 @@ struct OiaLibraryView: View {
     @State var boardNavigation = MasonryNavigationCoordinator<ReadingRow, String>()
     @State var boardModifierKeys: EventModifiers = []
     @State private var boardScrollState = BoardScrollState()
-    @State private var toolbarBlurProgress: CGFloat = 0
     @State var showsScrollToTop = false
     @State var pinchStartCardSize: CardSize?
     @State var quickLookURL: URL?
@@ -287,10 +287,6 @@ extension OiaLibraryView {
                         if showsScrollToTop != shouldShow {
                             showsScrollToTop = shouldShow
                         }
-                        let blurProgress = min(max(viewport.y / max(boardToolbarHeight, 1), 0), 1)
-                        if toolbarBlurProgress != blurProgress {
-                            toolbarBlurProgress = blurProgress
-                        }
                     },
                     estimatedHeight: estimatedCardHeight,
                     content: { row in
@@ -320,8 +316,8 @@ extension OiaLibraryView {
                 )
                 .modifier(BoardScrollTrackingModifier(scrollState: boardScrollState))
                 .overlay(alignment: .top) {
-                    ProgressiveToolbarBlur(strength: toolbarBlurProgress)
-                        .frame(height: boardToolbarHeight + 24)
+                    ProgressiveToolbarBlur()
+                        .frame(height: boardToolbarHeight)
                         .allowsHitTesting(false)
                         .accessibilityHidden(true)
                 }
@@ -551,60 +547,62 @@ extension OiaLibraryView {
     }
 }
 
-/// AppKit applies the gradient to the visual effect itself, so both the blur and
-/// its material fade toward the board instead of compositing a faded blur view.
 private struct ProgressiveToolbarBlur: NSViewRepresentable {
-    let strength: CGFloat
+    func makeNSView(context _: Context) -> BackdropView { BackdropView() }
+    func updateNSView(_: BackdropView, context _: Context) {}
 
-    func makeNSView(context _: Context) -> GradientVisualEffectView {
-        let view = GradientVisualEffectView()
-        view.blendingMode = .withinWindow
-        view.material = .headerView
-        view.state = .active
-        view.isHidden = true
-        return view
-    }
+    final class BackdropView: NSView {
+        private let backdrop = CALayer()
+        private var filteredSize: NSSize = .zero
 
-    func updateNSView(_ view: GradientVisualEffectView, context _: Context) {
-        view.strength = strength
-    }
-
-    final class GradientVisualEffectView: NSVisualEffectView {
-        var strength: CGFloat = 0 {
-            didSet {
-                guard strength != oldValue else { return }
-                isHidden = strength <= 0
-                updateMask()
-            }
+        override init(frame frameRect: NSRect) {
+            super.init(frame: frameRect)
         }
 
-        private var maskedSize: NSSize = .zero
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            backdrop.removeFromSuperlayer()
+            configureBackdrop()
+        }
 
         override func layout() {
             super.layout()
-            guard bounds.size != maskedSize else { return }
-            maskedSize = bounds.size
-            updateMask()
+            configureBackdrop()
         }
+
+        private func configureBackdrop() {
+            guard let contentView = window?.contentView else { return }
+            contentView.wantsLayer = true
+            contentView.layerUsesCoreImageFilters = true
+            if backdrop.superlayer !== contentView.layer {
+                backdrop.removeFromSuperlayer()
+                backdrop.backgroundColor = NSColor.clear.cgColor
+                backdrop.masksToBounds = true
+                contentView.layer?.addSublayer(backdrop)
+            }
+            backdrop.frame = convert(bounds, to: contentView)
+            guard bounds.size != filteredSize else { return }
+            filteredSize = bounds.size
+            guard bounds.width > 0, bounds.height > 0,
+                  let gradient = CIFilter(name: "CILinearGradient"),
+                  let blur = CIFilter(name: "CIMaskedVariableBlur"),
+                  let exposure = CIFilter(name: "CIExposureAdjust"),
+                  let saturation = CIFilter(name: "CIColorControls") else { return }
+            gradient.setValue(CIVector(x: 0, y: 0), forKey: "inputPoint0")
+            gradient.setValue(CIVector(x: 0, y: bounds.height), forKey: "inputPoint1")
+            gradient.setValue(CIColor(red: 1, green: 1, blue: 1), forKey: "inputColor0")
+            gradient.setValue(CIColor(red: 0, green: 0, blue: 0), forKey: "inputColor1")
+            blur.setValue(gradient.outputImage?.cropped(to: bounds), forKey: "inputMask")
+            blur.setValue(30, forKey: kCIInputRadiusKey)
+            exposure.setValue(-0.32, forKey: kCIInputEVKey)
+            saturation.setValue(1.25, forKey: kCIInputSaturationKey)
+            backdrop.backgroundFilters = [blur, exposure, saturation]
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) { nil }
 
         override func hitTest(_: NSPoint) -> NSView? { nil }
-
-        private func updateMask() {
-            guard strength > 0, bounds.width > 0, bounds.height > 0 else {
-                maskImage = nil
-                return
-            }
-            let alpha = strength
-            let image = NSImage(size: bounds.size, flipped: false) { rect in
-                let gradient = NSGradient(
-                    starting: .clear,
-                    ending: .white.withAlphaComponent(alpha)
-                )
-                gradient?.draw(in: rect, angle: 90)
-                return true
-            }
-            maskImage = image
-        }
     }
 }
 
