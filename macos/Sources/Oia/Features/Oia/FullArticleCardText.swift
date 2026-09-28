@@ -50,6 +50,7 @@ struct FullArticleCardText: View {
             if let readingTime = row.readingTimeLabel {
                 Spacer(minLength: 4)
                 Text("\(readingTime) read")
+                    .foregroundStyle(.tertiary)
                     .fixedSize()
             }
         }
