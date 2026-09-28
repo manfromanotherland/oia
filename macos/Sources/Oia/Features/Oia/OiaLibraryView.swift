@@ -669,6 +669,7 @@ private struct ReadingSidebarTitlebarButton: View {
     private var button: some View {
         Button(action: onToggle) {
             Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                .font(.system(size: 18))
                 .frame(width: 30, height: 30)
         }
         .labelStyle(.iconOnly)
