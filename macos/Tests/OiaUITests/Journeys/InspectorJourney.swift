@@ -16,9 +16,9 @@ final class InspectorJourney: UITestCase {
         let windowMidX = app.windows.firstMatch.frame.midX
         XCTAssertLessThan(inspector.frame.midX, windowMidX, "Inspector is on the left")
         XCTAssertLessThan(toggle.frame.midX, windowMidX, "Inspector toggle is on the left")
-        XCTAssertLessThan(toggle.frame.midX, close.frame.midX, "Close follows Collapse")
-        XCTAssertLessThan(close.frame.midX, app.byId(A11y.Detail.previous).frame.midX, "Close precedes navigation")
-        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, windowMidX, "Navigation is on the left")
+        XCTAssertLessThan(toggle.frame.midX, app.byId(A11y.Detail.previous).frame.midX, "Navigation follows Collapse")
+        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, close.frame.midX, "Close follows navigation")
+        XCTAssertLessThan(close.frame.midX, windowMidX, "Close is on the left")
         capture("Full-height sidebar inspector")
 
         toggle.click()
