@@ -47,7 +47,7 @@ test:
 ## Build the optimized, symbolicated app used by Product > Profile and the
 ## isolated SwiftUI trace driver. Keep the normal Debug app in the same build tree.
 profile-build:
-	xcodebuild build -project Oia.xcodeproj -scheme Oia -configuration Release -derivedDataPath build
+	xcodebuild build -project Oia.xcodeproj -scheme Oia -configuration Profile -derivedDataPath build
 
 ## Build a Release .app and wrap it in a distributable .dmg (dist/Óia.dmg).
 ## Ad-hoc signed only (local testing) — for a shippable build use `make release`.

@@ -46,8 +46,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--app", type=Path,
-        default=repo / "macos/build/Build/Products/Release/Óia.app/Contents/MacOS/Oia",
-        help="App executable to profile (defaults to the optimized Release build)",
+        default=repo / "macos/build/Build/Products/Profile/Óia.app/Contents/MacOS/Oia",
+        help="App executable to profile (defaults to the optimized Profile build)",
     )
     parser.add_argument("--output", type=Path, required=True, help="New results directory; never overwritten")
     parser.add_argument("--fixture", type=Path, help="Reusable generated fixture directory")
@@ -125,7 +125,13 @@ def main():
             report["rss_kb_after_replay"] = int(subprocess.check_output(
                 ["ps", "-o", "rss=", "-p", str(app_process.pid)], text=True).strip())
             if recorder:
-                stop(recorder)
+                # Let xctrace reach its own time limit and finish processing.
+                # Interrupting it immediately after the replay can leave an
+                # incomplete SwiftUI trace, even when recording succeeded.
+                try:
+                    recorder.wait(timeout=120)
+                except subprocess.TimeoutExpired as error:
+                    raise RuntimeError("Instruments did not finish processing; see instruments.log") from error
                 report["trace_exit_code"] = recorder.returncode
                 if recorder.returncode != 0 or not (output / "scroll.trace").exists():
                     raise RuntimeError("Instruments did not finish a trace successfully; see instruments.log")

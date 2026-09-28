@@ -66,7 +66,7 @@ make lint       # swiftlint lint — reports remaining violations
 
 ## Profile performance
 
-The shared `Oia` scheme uses a Release build for **Product → Profile** (`⌘I`). Choose
+The shared `Oia` scheme uses an optimized Profile build for **Product → Profile** (`⌘I`). Choose
 the **SwiftUI** Instruments template and record the interaction you want to
 measure. See [Performance profiling](docs/performance-profiling.md) for a repeatable
 workflow, trace interpretation, and the isolated board scroll fixture.

@@ -1,4 +1,8 @@
 name: Oia
+configs:
+  Debug: debug
+  Release: release
+  Profile: release
 options:
   bundleIdPrefix: is.edmundo
   deploymentTarget:
@@ -56,6 +60,11 @@ targets:
         ENABLE_HARDENED_RUNTIME: YES
         HEADER_SEARCH_PATHS: $(SRCROOT)/GeneratedBindings
         OTHER_SWIFT_FLAGS: -Xcc -fmodule-map-file=$(SRCROOT)/GeneratedBindings/oia_coreFFI.modulemap
+      configs:
+        # An ad-hoc signed profiling app must load Sparkle's bundled framework.
+        # Keep hardened runtime on for the shippable Release configuration.
+        Profile:
+          ENABLE_HARDENED_RUNTIME: NO
     entitlements:
       path: Sources/Oia/App/Oia.entitlements
     preBuildScripts:
@@ -231,7 +240,7 @@ schemes:
     run:
       config: Debug
     profile:
-      config: Release
+      config: Profile
     analyze:
       config: Debug
     archive:
