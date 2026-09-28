@@ -114,7 +114,7 @@ final class OiaCardTextMetricsTests: XCTestCase {
         let metrics = OiaCardTextMetrics()
         let title = "The Egg"
         let oneLine = "A short description."
-        let severalLines = String(repeating: "A saved paragraph with enough text to wrap. ", count: 4)
+        let severalLines = String(repeating: "A saved paragraph with enough text to wrap. ", count: 2)
         let oversized = String(repeating: "A saved paragraph with enough text to wrap. ", count: 30)
 
         let shortHeight = metrics.fullArticleTextHeight(for: title, description: oneLine, width: 220)

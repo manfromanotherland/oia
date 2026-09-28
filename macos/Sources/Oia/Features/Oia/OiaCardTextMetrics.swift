@@ -68,7 +68,7 @@ final class OiaCardTextMetrics {
         size: fullArticleBodySize * 0.85
     ) ?? NSFont.systemFont(ofSize: fullArticleBodySize * 0.85)
     static let fullArticleLineSpacing = fullArticleBodySize * ReaderLineHeight.normal.extraLeadingMultiple
-    static let fullArticlePadding: CGFloat = 16
+    static let fullArticlePadding: CGFloat = 32
     static let fullArticleSpacing: CGFloat = 10
     static let fullArticleTitleLineLimit = 4
     static let fullArticleDescriptionLineLimit = 5
