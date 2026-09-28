@@ -6,10 +6,8 @@ struct OiaReadingOverlay: View {
     @Environment(AppState.self) private var appState
 
     @Binding var row: ReadingRow
-    let rows: [ReadingRow]
     var onClose: () -> Void
     var onMove: (Int) -> Void
-    var onSelect: (ReadingRow) -> Void
     var canMovePrevious: Bool
     var canMoveNext: Bool
     var onEditTags: () -> Void
@@ -30,37 +28,22 @@ struct OiaReadingOverlay: View {
     }
 
     private var gallery: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 0) {
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if showsInspector {
-                    OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
-                        .frame(width: 320)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-                }
+        HStack(alignment: .top, spacing: 0) {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if showsInspector {
+                OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
+                    .frame(width: 320)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            OiaGalleryStrip(
-                rows: rows,
-                selectedID: row.id,
-                onSelect: onSelect
-            )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .navigation) {
-            Button(action: onClose) {
-                Label("Back to Library", systemImage: "chevron.backward")
-            }
-            .help("Back to library (Escape)")
-            .accessibilityIdentifier(A11y.Detail.close)
-            .keyboardShortcut(.cancelAction)
-
+        ToolbarItemGroup(placement: .primaryAction) {
             Button { onMove(-1) } label: {
                 Label("Previous item", systemImage: "chevron.left")
             }
@@ -76,36 +59,13 @@ struct OiaReadingOverlay: View {
             .accessibilityIdentifier(A11y.Detail.next)
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(!canMoveNext || appState.isEditingText)
-        }
 
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button(action: onEditTags) {
-                Label("Edit Tags", systemImage: "tag")
+            Button(action: onClose) {
+                Label("Close Detail", systemImage: "xmark")
             }
-            .help("Edit tags")
-            .accessibilityIdentifier(A11y.Toolbar.tags)
-
-            Menu {
-                if let url = row.sourceURL {
-                    Button {
-                        ReadingLink.open(url)
-                    } label: {
-                        Label("Open Source", systemImage: "safari")
-                    }
-                    .keyboardShortcut(ShortcutCatalog.openInBrowser)
-                }
-
-                Button(role: .destructive) {
-                    appState.requestDelete(row)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .keyboardShortcut(ShortcutCatalog.delete)
-                .disabled(appState.isDeleting)
-            } label: {
-                Label("More", systemImage: "ellipsis.circle")
-            }
-            .help("More actions")
+            .help("Close detail (Escape)")
+            .accessibilityIdentifier(A11y.Detail.close)
+            .keyboardShortcut(.cancelAction)
 
             Button {
                 showsInspector.toggle()

@@ -238,7 +238,6 @@ struct ReaderPage {
     }
 
     func delete() {
-        app.menuButtons["More"].clickWhenReady()
-        app.menuItems["Delete"].clickWhenReady()
+        app.byId(A11y.Toolbar.delete).clickWhenReady()
     }
 }

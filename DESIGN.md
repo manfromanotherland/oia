@@ -181,8 +181,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   opens its origin in the system browser instead and never enters Gallery. Opening collapses a
   multi-selection to that card. Escape or Back returns focus to the board; left/right and J/K move
   through the frozen detail-capable board order, skipping links.
-- The selected preview fills the available space above a persistent horizontal filmstrip. Clicking
-  a filmstrip thumbnail selects it, and keyboard navigation keeps the selected thumbnail visible.
+- The selected preview fills the available space. Previous and Next controls in the trailing
+  toolbar group move through the frozen detail-capable board order; Close returns to the board.
 - Ordinary articles reuse the existing native Markdown reader. Social-post articles use a native
   post detail with selectable text and every ordered local attachment. Images show the local asset aspect-fit.
   Videos show the local poster and source/media actions without silently downloading a stream.
@@ -190,8 +190,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - Metadata lives in a floating trailing Inspector, shown by default and toggled from the standard
   toolbar. Its visibility is a per-device preference. A 320 pt panel uses a 20 pt continuous corner
   radius, 24 pt exterior space, and a content-height native Liquid Glass surface. It scrolls within
-  short windows; the filmstrip spans the full window below it. macOS 15 uses system material, and
-  Reduce Transparency uses an opaque system surface.
+  short windows. Delete sits at the bottom of the Inspector and requires confirmation. macOS 15
+  uses system material, and Reduce Transparency uses an opaque system surface.
 - **Discover** separates **Your tags** from **In this image**, with a small adjacent information
   button explaining locally recognised suggestions. Tags and attributes are native capsule glass
   buttons. Attributes search the library; editing tags uses the existing optimistic tag picker.

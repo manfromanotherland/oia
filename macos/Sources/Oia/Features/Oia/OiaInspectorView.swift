@@ -27,6 +27,16 @@ struct OiaInspectorView: View {
                 } else {
                     InspectorDetails(row: row, inspector: currentInspector, failed: failed)
                 }
+                Divider()
+                Button(role: .destructive) {
+                    appState.requestDelete(row)
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .disabled(appState.isDeleting)
+                .accessibilityIdentifier(A11y.Toolbar.delete)
             }
             .font(.system(size: 13))
             .padding(20)

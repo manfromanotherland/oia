@@ -378,10 +378,8 @@ extension OiaLibraryView {
                     get: { presentedReading ?? row },
                     set: updatePresentedRow
                 ),
-                rows: gallerySnapshot.rows,
                 onClose: closeOverlay,
                 onMove: moveOverlay,
-                onSelect: open,
                 canMovePrevious: canMoveOverlay(-1),
                 canMoveNext: canMoveOverlay(1),
                 onEditTags: { tagTargetID = row.id }
