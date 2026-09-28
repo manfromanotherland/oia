@@ -100,7 +100,12 @@ struct OiaCardView: View {
             .clipShape(cardShape)
             .overlay(cardShape.stroke(OiaTheme.border, lineWidth: 1))
             .overlay { selectionRing }
-            .overlay(alignment: .topTrailing) { hoverMenu }
+            .overlay(alignment: .topTrailing) {
+                if isHovered {
+                    hoverMenu
+                        .transition(.opacity)
+                }
+            }
     }
 
     @ViewBuilder
@@ -316,8 +321,6 @@ private extension OiaCardView {
         .menuIndicator(.hidden)
         .fixedSize()
         .padding(10)
-        .opacity(isHovered ? 1 : 0)
-        .allowsHitTesting(isHovered)
         .accessibilityLabel("More actions")
     }
 
