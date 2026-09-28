@@ -8,6 +8,10 @@ import Foundation
 actor CoreBridge {
     private let database: Database
     private let libraryPath: String
+    /// A scan step may hash a complete preview, so this limits folders rather
+    /// than bytes or elapsed time. Keep the step small enough to check for a
+    /// board scroll frequently on ordinary libraries.
+    private static let reconciliationBatchSize: UInt32 = 4
 
     /// Opening SQLite can run schema migrations and prepare the visual cache.
     /// Keep that work off the main actor so a restored window can paint first.
@@ -24,21 +28,69 @@ actor CoreBridge {
 
     // ── Indexing ──────────────────────────────────────────────────────────
 
-    func rebuild() throws {
-        try database.rebuild(libraryPath: libraryPath)
+    func rebuild() async throws {
+        try await InteractionIdleGate.shared.waitUntilIdle()
+        let sessionID = try await Self.background { [database, libraryPath] in
+            try database.beginRebuild(libraryPath: libraryPath)
+        }
+        do {
+            while true {
+                try await InteractionIdleGate.shared.waitUntilIdle()
+                let complete = try await Self.background { [database] in
+                    try database.rebuildBatch(
+                        sessionId: sessionID,
+                        maxReadings: Self.reconciliationBatchSize
+                    )
+                }
+                if complete { return }
+            }
+        } catch {
+            // A cancelled boot must release its partial in-memory scan. This
+            // cleanup runs even when the caller is already cancelled. The
+            // token leaves any newer session on this bridge untouched.
+            await Task.detached(priority: .utility) { [database] in
+                database.abortReconciliation(sessionId: sessionID)
+            }.value
+            throw error
+        }
     }
 
     @discardableResult
     func sync() async throws -> UInt32 {
-        try await Self.background { [database, libraryPath] in
-            try database.sync(libraryPath: libraryPath)
+        try await InteractionIdleGate.shared.waitUntilIdle()
+        let sessionID = try await Self.background { [database, libraryPath] in
+            try database.beginSync(libraryPath: libraryPath)
+        }
+        do {
+            while true {
+                try await InteractionIdleGate.shared.waitUntilIdle()
+                let changed = try await Self.background { [database] in
+                    try database.syncBatch(
+                        sessionId: sessionID,
+                        maxReadings: Self.reconciliationBatchSize
+                    )
+                }
+                if let changed { return changed }
+            }
+        } catch {
+            await Task.detached(priority: .utility) { [database] in
+                database.abortReconciliation(sessionId: sessionID)
+            }.value
+            throw error
         }
     }
 
     func sync(paths: [String]) async throws -> UInt32 {
-        try await Self.background { [database, libraryPath] in
-            try database.syncPaths(libraryPath: libraryPath, changedPaths: paths)
+        try await InteractionIdleGate.shared.waitUntilIdle()
+        let changed = try await Self.background { [database, libraryPath] in
+            try database.syncPathsIfPrecise(libraryPath: libraryPath, changedPaths: paths)
         }
+        if let changed { return changed }
+        // An ancestor/unknown FSEvents path needs a full recovery scan. Route
+        // it through the same paced path instead of Rust's synchronous legacy
+        // fallback, retaining the old nonempty-event refresh signal.
+        let fullChanged = try await sync()
+        return max(fullChanged, paths.isEmpty ? 0 : 1)
     }
 
     func pendingVisualAnalysis(

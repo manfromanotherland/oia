@@ -26,17 +26,33 @@ final class LargeLibraryCheck: UITestCase {
     }
 
     func testWarmLaunchShowsCachedCardBeforeReconciliation() throws {
-        let expected = Fixtures.standardCorpus[0]
-        try launchApp(articles: [expected])
+        let articles = Fixtures.bulkCorpus(count: 120)
+        try launchApp(articles: articles)
+        let events = library.root.appendingPathComponent("startup-events", isDirectory: true)
+        try FileManager.default.createDirectory(at: events, withIntermediateDirectories: true)
 
         relaunchAppWithoutWaiting { options in
             options.environment["OIA_TEST_TRUSTED_CACHE_LIBRARY"] = library.libraryURL.path
-            options.environment["OIA_TEST_LIBRARY_RECONCILIATION_DELAY_MS"] = "3000"
+            options.environment["OIA_TEST_LIBRARY_RECONCILIATION_DELAY_MS"] = "15000"
+            options.environment["OIA_TEST_STARTUP_EVENTS_DIR"] = events.path
         }
 
         XCTAssertTrue(
-            list.row(expected.id).waitForExistence(timeout: 1.5),
+            list.row(Fixtures.id(119)).waitForExistence(timeout: 1.5),
             "a warm launch should show the cached card before file reconciliation"
+        )
+        let firstCard = list.row(Fixtures.id(119))
+        let firstCardY = firstCard.frame.minY
+        list.scrollDown()
+        XCTAssertTrue(
+            !firstCard.exists || firstCard.frame.minY < firstCardY - 10,
+            "the cached board should move during a scroll before reconciliation"
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: events.appendingPathComponent("reconcile-finished").path
+            ),
+            "scrolling the cached board should not wait for the file scan"
         )
     }
 

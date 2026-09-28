@@ -156,6 +156,9 @@ extension AppState {
 
         if useCachedIndex {
             await presentCachedLibrary(at: url, using: openedBridge)
+            // Let the first cached frame paint and give an immediate gesture a
+            // chance to register with the idle gate before scan batches begin.
+            try await Task.sleep(for: .milliseconds(250))
         }
 
         // Keep cached reads and interactions on their own actor while the full

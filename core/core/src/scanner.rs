@@ -2,11 +2,13 @@
 
 use std::{
     collections::{HashMap, HashSet},
+    io::Read,
     path::{Component, Path, PathBuf},
     time::SystemTime,
 };
 
 use anyhow::Result;
+use rustix::fs::{Mode, OFlags};
 
 use crate::{parse_reading, types::LibraryRoot, visual_index::VisualAsset, Metadata};
 
@@ -43,12 +45,25 @@ pub enum ScanDiff {
 /// than aborting the whole scan, so a single corrupt file doesn't break the
 /// indexer.
 pub fn scan_library(library: &LibraryRoot) -> Result<Vec<ScannedReading>> {
+    let mut readings = Vec::new();
+    for directory in reading_directories(library)? {
+        if let Some(reading) = scan_reading_directory(library, &directory)? {
+            readings.push(reading);
+        }
+    }
+    Ok(readings)
+}
+
+/// Enumerate candidate reading folders without opening Markdown or preview
+/// bytes. A staged reconciliation can keep this list and inspect a few folders
+/// at a time while the UI remains responsive.
+pub(crate) fn reading_directories(library: &LibraryRoot) -> Result<Vec<PathBuf>> {
     let articles_dir = library.articles_dir();
     if !articles_dir.is_dir() {
         return Ok(vec![]);
     }
 
-    let mut results = Vec::new();
+    let mut directories = Vec::new();
     // Fan-out layout: articles/<2-char prefix>/<id>/article.md. Each reading is a
     // self-contained folder, so walk two levels of sub-directories (bucket → the
     // reading folder) and read the `article.md` inside each reading folder. The
@@ -64,13 +79,11 @@ pub fn scan_library(library: &LibraryRoot) -> Result<Vec<ScannedReading>> {
             if !reading_dir.file_type()?.is_dir() {
                 continue; // ignore stray files sitting directly in a bucket
             }
-            if let Some(reading) = scan_reading_directory(library, &reading_dir.path())? {
-                results.push(reading);
-            }
+            directories.push(reading_dir.path());
         }
     }
 
-    Ok(results)
+    Ok(directories)
 }
 
 /// Resolve precise file events into reading folders. Ancestor/root/unknown
@@ -143,24 +156,24 @@ fn is_real_directory(path: &Path) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_dir())
 }
 
-fn scan_reading_directory(
+pub(crate) fn scan_reading_directory(
     library: &LibraryRoot,
     directory: &Path,
 ) -> Result<Option<ScannedReading>> {
     let path = directory.join("article.md");
-    let file_meta = match std::fs::metadata(&path) {
-        Ok(m) => m,
-        Err(_) => return Ok(None), // a folder without an article.md is not a reading
+    let mut article = match open_reading_article(library, directory)? {
+        Some(file) => file,
+        None => return Ok(None), // a folder without a safe article.md is not a reading
     };
-
-    let modified_at = file_meta.modified()?;
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
+    let modified_at = article.metadata()?.modified()?;
+    let mut content = String::new();
+    match article.read_to_string(&mut content) {
+        Ok(_) => {}
         Err(e) => {
             eprintln!("scanner: skipping {}: {e}", path.display());
             return Ok(None);
         }
-    };
+    }
     let reading = match parse_reading(&content) {
         Ok(r) => r,
         Err(e) => {
@@ -227,6 +240,46 @@ fn scan_reading_directory(
         metadata: reading.metadata,
         body: reading.body,
     }))
+}
+
+/// Pin each directory component before reading Markdown. A staged scan may
+/// pause after enumeration, while an external sync can replace a folder; do
+/// not follow a newly inserted symlink out of the selected library.
+fn open_reading_article(library: &LibraryRoot, directory: &Path) -> Result<Option<std::fs::File>> {
+    let Ok(relative) = directory.strip_prefix(library.articles_dir()) else {
+        return Ok(None);
+    };
+    let mut parts = relative.components();
+    let (Some(Component::Normal(bucket)), Some(Component::Normal(reading)), None) =
+        (parts.next(), parts.next(), parts.next())
+    else {
+        return Ok(None);
+    };
+    let flags = OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC | OFlags::NOFOLLOW;
+    let root = rustix::fs::open(
+        library.path(),
+        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?;
+    let Ok(articles) = rustix::fs::openat(&root, "articles", flags, Mode::empty()) else {
+        return Ok(None);
+    };
+    let Ok(bucket) = rustix::fs::openat(&articles, bucket, flags, Mode::empty()) else {
+        return Ok(None);
+    };
+    let Ok(reading) = rustix::fs::openat(&bucket, reading, flags, Mode::empty()) else {
+        return Ok(None);
+    };
+    let Ok(article) = rustix::fs::openat(
+        &reading,
+        "article.md",
+        OFlags::RDONLY | OFlags::CLOEXEC | OFlags::NOFOLLOW,
+        Mode::empty(),
+    ) else {
+        return Ok(None);
+    };
+    let file = std::fs::File::from(article);
+    Ok(file.metadata()?.is_file().then_some(file))
 }
 
 pub(crate) fn inspect_media_aspect_ratio(
@@ -593,5 +646,55 @@ mod tests {
             diff(&with_note, &removed_note)[..],
             [ScanDiff::Changed(_)]
         ));
+    }
+
+    #[test]
+    fn scan_rehashes_preview_when_bytes_change_without_size_or_mtime_change() {
+        let dir = TempDir::new().unwrap();
+        let lib = make_library(&dir);
+        let id = new_id();
+        let mut metadata = sample_metadata(&id, "https://example.com/image");
+        metadata.kind = crate::ReadingKind::Image;
+        metadata.preview_asset = Some("assets/preview.bin".into());
+        write_reading(&lib, metadata, "same body".into()).unwrap();
+        fs::create_dir_all(lib.assets_dir(&id)).unwrap();
+        let asset = lib.assets_dir(&id).join("preview.bin");
+        fs::write(&asset, b"before").unwrap();
+        let modified = fs::metadata(&asset).unwrap().modified().unwrap();
+        let first = scan_library(&lib).unwrap();
+
+        fs::write(&asset, b"after!").unwrap();
+        fs::File::open(&asset)
+            .unwrap()
+            .set_modified(modified)
+            .unwrap();
+        let second = scan_library(&lib).unwrap();
+
+        assert_eq!(fs::metadata(&asset).unwrap().len(), 6);
+        assert_eq!(fs::metadata(&asset).unwrap().modified().unwrap(), modified);
+        assert_ne!(first[0].visual_asset, second[0].visual_asset);
+        assert!(matches!(diff(&first, &second)[..], [ScanDiff::Changed(_)]));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn enumerated_reading_replaced_by_symlink_is_not_scanned() {
+        use std::os::unix::fs::symlink;
+
+        let dir = TempDir::new().unwrap();
+        let lib = make_library(&dir);
+        let id = new_id();
+        write_reading(
+            &lib,
+            sample_metadata(&id, "https://example.com/safe"),
+            "safe body".into(),
+        )
+        .unwrap();
+        let directory = reading_directories(&lib).unwrap().pop().unwrap();
+        let moved = dir.path().join("moved-reading");
+        fs::rename(&directory, &moved).unwrap();
+        symlink(&moved, &directory).unwrap();
+
+        assert!(scan_reading_directory(&lib, &directory).unwrap().is_none());
     }
 }
