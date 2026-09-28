@@ -45,6 +45,10 @@ struct Keyboard {
         app.typeKey("r", modifierFlags: [.command, .shift])
     } // ⌘⇧R
 
+    func toggleSidebar() {
+        app.typeKey("b", modifierFlags: .command)
+    } // ⌘B
+
     func previousItem() {
         app.typeKey("k", modifierFlags: [])
     } // K

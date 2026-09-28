@@ -179,10 +179,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - Double-click, `⌘O`, or Return opens a full-window Gallery detail for articles, images, videos,
   and quotes while preserving the board behind the navigation destination. A lightweight link
   opens its origin in the system browser instead and never enters Gallery. Opening collapses a
-  multi-selection to that card. Escape or Back returns focus to the board; left/right and J/K move
+  multi-selection to that card. Escape or Close returns focus to the board; left/right and J/K move
   through the frozen detail-capable board order, skipping links.
-- The selected preview fills the available space. Previous and Next controls in the trailing
-  toolbar group move through the frozen detail-capable board order; Close returns to the board.
+- The selected preview fills the available space. Previous and Next controls on the left move
+  through the frozen detail-capable board order; Close stays on the right. `⌘B` toggles the
+  leading inspector sidebar with a brief slide, or immediately when Reduce Motion is enabled.
 - Ordinary articles reuse the existing native Markdown reader. Social-post articles use a native
   post detail with selectable text and every ordered local attachment. Images show the local asset aspect-fit.
   Videos show the local poster and source/media actions without silently downloading a stream.

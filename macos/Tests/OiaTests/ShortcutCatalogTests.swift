@@ -29,6 +29,11 @@ final class ShortcutCatalogTests: XCTestCase {
         XCTAssertEqual(ShortcutCatalog.quickLook.display, "Space")
     }
 
+    func testSidebarUsesCommandB() {
+        XCTAssertTrue(ShortcutCatalog.toggleSidebar.matches(key: "b", modifiers: .command))
+        XCTAssertEqual(ShortcutCatalog.toggleSidebar.display, "⌘B")
+    }
+
     func testEveryScopeHasItsOrderedCommandNumber() {
         XCTAssertEqual(
             LibraryScope.allCases.map(\.label),

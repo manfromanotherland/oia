@@ -127,9 +127,11 @@ struct NavigationCommands: Commands {
                 Divider()
 
                 Button(
-                    detailNavigationActions.showsInspector ? "Hide Inspector" : "Show Inspector",
+                    detailNavigationActions.showsInspector ? "Hide Sidebar" : "Show Sidebar",
                     action: detailNavigationActions.toggleInspector
                 )
+                .keyboardShortcut(ShortcutCatalog.toggleSidebar)
+                .disabled(appState.isEditingText)
             }
         }
     }

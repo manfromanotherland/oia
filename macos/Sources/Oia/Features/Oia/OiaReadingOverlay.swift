@@ -4,6 +4,7 @@ import SwiftUI
 
 struct OiaReadingOverlay: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     @Binding var row: ReadingRow
     var onClose: () -> Void
@@ -38,6 +39,7 @@ struct OiaReadingOverlay: View {
                         OiaTheme.inspectorSidebarSurface
                             .ignoresSafeArea(.container, edges: .top)
                     }
+                    .transition(.move(edge: .leading).combined(with: .opacity))
             }
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -48,15 +50,13 @@ struct OiaReadingOverlay: View {
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            Button {
-                showsInspector.toggle()
-            } label: {
+            Button(action: toggleInspector) {
                 Label(
-                    showsInspector ? "Hide Inspector" : "Show Inspector",
+                    showsInspector ? "Hide Sidebar" : "Show Sidebar",
                     systemImage: "sidebar.leading"
                 )
             }
-            .help(showsInspector ? "Hide inspector" : "Show inspector")
+            .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
             .accessibilityIdentifier(A11y.Inspector.toggle)
         }
 
@@ -107,8 +107,14 @@ struct OiaReadingOverlay: View {
             showsInspector: showsInspector,
             movePrevious: { onMove(-1) },
             moveNext: { onMove(1) },
-            toggleInspector: { showsInspector.toggle() }
+            toggleInspector: toggleInspector
         )
+    }
+
+    private func toggleInspector() {
+        withAnimation(reduceMotion ? nil : .smooth(duration: 0.26)) {
+            showsInspector.toggle()
+        }
     }
 
     @ViewBuilder
