@@ -67,6 +67,10 @@ struct OiaReadingOverlay: View {
             }
         }
 
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
+        }
+
         ToolbarItem(placement: .primaryAction) {
             Button(action: onClose) {
                 Label("Close Detail", systemImage: "xmark")
@@ -74,6 +78,10 @@ struct OiaReadingOverlay: View {
             .help("Close detail (Escape)")
             .accessibilityIdentifier(A11y.Detail.close)
             .keyboardShortcut(.cancelAction)
+        }
+
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.fixed, placement: .primaryAction)
         }
 
         ToolbarItem(placement: .primaryAction) {
