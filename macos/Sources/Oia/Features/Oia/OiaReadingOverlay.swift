@@ -55,61 +55,106 @@ struct OiaReadingOverlay: View {
                 .accessibilityHidden(!showsInspector)
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topLeading) {
+                    GeometryReader { geometry in
+                        detailControls
+                            // Follow the detail pane's actual edge, with room for the
+                            // fixed titlebar controls after the inspector collapses.
+                            .padding(.leading, max(12, 135 - geometry.frame(in: .named("readingGallery")).minX))
+                            .padding(.top, 8)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .ignoresSafeArea(.container, edges: .top)
+                    }
+                }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .coordinateSpace(name: "readingGallery")
     }
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            Button {
-                // The toolbar's click transaction can suppress content animations.
-                // Toggle on the next main turn so the sidebar gets its own transaction.
-                DispatchQueue.main.async { toggleInspector() }
-            } label: {
-                Label(
-                    showsInspector ? "Hide Sidebar" : "Show Sidebar",
-                    systemImage: "sidebar.leading"
-                )
-            }
-            .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
-            .accessibilityIdentifier(A11y.Inspector.toggle)
+            sidebarToggle
         }
+    }
 
-        // Reserve the inspector's titlebar width only while it is visible.
-        if showsInspector {
-            if #available(macOS 26.0, *) {
-                ToolbarItem(placement: .navigation) {
-                    Color.clear.frame(width: 180, height: 1)
-                        .accessibilityHidden(true)
-                }
-                .sharedBackgroundVisibility(.hidden)
-            } else {
-                ToolbarItem(placement: .navigation) {
-                    Color.clear.frame(width: 180, height: 1)
-                        .accessibilityHidden(true)
-                }
+    @ViewBuilder
+    private var detailControls: some View {
+        if #available(macOS 26.0, *) {
+            HStack(spacing: 8) {
+                closeButton
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .controlSize(.small)
+                modernPreviousNextControl
             }
-        } else if #available(macOS 26.0, *) {
-            ToolbarItem(placement: .navigation) {
-                Color.clear.frame(width: 8, height: 1)
-                    .accessibilityHidden(true)
+        } else {
+            HStack(spacing: 8) {
+                closeButton
+                    .buttonStyle(.bordered)
+                    .buttonBorderShape(.circle)
+                previousNextControl
             }
-            .sharedBackgroundVisibility(.hidden)
         }
+    }
 
-        ToolbarItem(placement: .navigation) {
-            Button(action: onClose) {
-                Label("Close Detail", systemImage: "xmark")
-            }
-            .help("Close detail (Escape)")
-            .accessibilityIdentifier(A11y.Detail.close)
-            .keyboardShortcut(.cancelAction)
+    private var sidebarToggle: some View {
+        Button {
+            // The toolbar's click transaction can suppress content animations.
+            // Toggle on the next main turn so the sidebar gets its own transaction.
+            DispatchQueue.main.async { toggleInspector() }
+        } label: {
+            Label(
+                showsInspector ? "Hide Sidebar" : "Show Sidebar",
+                systemImage: "sidebar.leading"
+            )
         }
+        .labelStyle(.iconOnly)
+        .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
+        .accessibilityIdentifier(A11y.Inspector.toggle)
+        .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
+    }
 
-        ToolbarItem(placement: .navigation) {
-            previousNextControl
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Label("Close Detail", systemImage: "xmark")
+                .frame(width: 26, height: 26)
         }
+        .labelStyle(.iconOnly)
+        .help("Close detail (Escape)")
+        .accessibilityIdentifier(A11y.Detail.close)
+        .keyboardShortcut(.cancelAction)
+        .accessibilityLabel("Close Detail")
+    }
+
+    @available(macOS 26.0, *)
+    private var modernPreviousNextControl: some View {
+        HStack(spacing: 0) {
+            Button { onMove(-1) } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 32, height: 36)
+            }
+            .help("Previous item (Left Arrow or K)")
+            .accessibilityLabel("Previous item")
+            .accessibilityIdentifier(A11y.Detail.previous)
+            .keyboardShortcut(.leftArrow, modifiers: [])
+            .disabled(!canMovePrevious || appState.isEditingText)
+
+            Divider().frame(height: 18)
+
+            Button { onMove(1) } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 32, height: 36)
+            }
+            .help("Next item (Right Arrow or J)")
+            .accessibilityLabel("Next item")
+            .accessibilityIdentifier(A11y.Detail.next)
+            .keyboardShortcut(.rightArrow, modifiers: [])
+            .disabled(!canMoveNext || appState.isEditingText)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 4)
+        .glassEffect(in: Capsule())
     }
 
     private var previousNextControl: some View {

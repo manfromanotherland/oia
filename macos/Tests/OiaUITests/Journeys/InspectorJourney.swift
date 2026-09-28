@@ -16,13 +16,21 @@ final class InspectorJourney: UITestCase {
         let windowMidX = app.windows.firstMatch.frame.midX
         XCTAssertLessThan(inspector.frame.midX, windowMidX, "Inspector is on the left")
         XCTAssertLessThan(toggle.frame.midX, windowMidX, "Inspector toggle is on the left")
-        XCTAssertLessThan(toggle.frame.midX, app.byId(A11y.Detail.previous).frame.midX, "Navigation follows Collapse")
-        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, close.frame.midX, "Close follows navigation")
+        XCTAssertGreaterThanOrEqual(close.frame.minX, inspector.frame.maxX, "Close sits outside the inspector")
+        XCTAssertLessThan(toggle.frame.midX, close.frame.midX, "Close follows the sidebar toggle")
+        XCTAssertLessThan(close.frame.midX, app.byId(A11y.Detail.previous).frame.midX, "Navigation follows Close")
         XCTAssertLessThan(close.frame.midX, windowMidX, "Close is on the left")
-        capture("Full-height sidebar inspector")
 
         toggle.click()
         XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
+        let controlsBesideToggle = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in close.frame.minX - toggle.frame.maxX < 16 },
+            object: nil
+        )
+        XCTAssertEqual(
+            XCTWaiter.wait(for: [controlsBesideToggle], timeout: 2), .completed,
+            "Close moves beside the sidebar toggle"
+        )
         toggle.click()
         XCTAssertTrue(inspector.waitExists(), "Toolbar button expands the sidebar")
         keyboard.toggleSidebar()
