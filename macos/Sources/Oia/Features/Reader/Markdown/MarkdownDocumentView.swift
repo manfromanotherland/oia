@@ -240,6 +240,10 @@ struct MarkdownDocumentView<Header: View, Footer: View>: View {
                 .background(SelectionClearingBackground())
             }
         }
+        // SwiftUI can apply the app accent to links inside image-bearing blocks
+        // and tables even when their attributed text requests primary color.
+        // Keep every reader link in the same neutral ink as the AppKit text runs.
+        .tint(.primary)
         .environment(\.openURL, OpenURLAction { url in
             NSWorkspace.shared.open(url)
             return .handled

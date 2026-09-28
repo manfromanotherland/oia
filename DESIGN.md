@@ -188,8 +188,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - **Discover** separates **Your tags** from **In this image**, with a small adjacent information
   button explaining locally recognised suggestions. Tags and attributes are native capsule glass
   buttons. Attributes search the library; editing tags uses the existing optimistic tag picker.
-  Up to five distinct colours appear as closely spaced flat circles with a subtle outline. Their
-  fills stay colour-accurate; hovering strengthens only the outline. Selecting one starts
+  Up to five distinct colours appear for media and links as closely spaced flat circles with a
+  subtle outline; full articles omit the colour section. Swatch fills stay colour-accurate;
+  hovering strengthens only the outline. Selecting one starts
   `colour:#RRGGBB` search, ranked by perceptual shade similarity.
 - **Details** shows friendly local format, display-oriented dimensions, size and save date. Internal
   asset schemes and hashed filenames never appear. The source appears once as a hostname followed
@@ -373,11 +374,13 @@ At the top of the scrolling reader, each article shows:
 
 - **Title** at the restrained H1 scale, in the selected reader face. It shares the body's width and
   grows with the chosen body size.
-- **Metadata** shows estimated reading time when available, in a quiet secondary style. Its word
-  count is available on hover.
 - **Tags** appear as a read-only text summary. The toolbar's `#` button opens the tag picker for
   edits, so managing tags does not reflow the article header.
 - The header has enough space below it to start the body clearly, without a decorative divider.
+
+The trailing inspector shows estimated reading time for full articles, in a quiet secondary style
+beside the source and save date. Its word count is available on hover. Article bodies show links in
+neutral underlined text in both the selectable text run and image-bearing blocks.
 
 ### Text selection
 

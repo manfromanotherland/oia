@@ -30,7 +30,8 @@ struct OversizeNotice: View {
                 Button("Open in Browser") {
                     ReadingLink.open(url)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
+                .tint(.primary)
                 .padding(.top, 4)
                 .accessibilityIdentifier(A11y.Detail.oversizeOpenInBrowser)
             }
