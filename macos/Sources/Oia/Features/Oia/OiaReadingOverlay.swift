@@ -86,7 +86,7 @@ struct OiaReadingOverlay: View {
                     .buttonStyle(.glass)
                     .buttonBorderShape(.circle)
                     .controlSize(.small)
-                previousNextControl
+                modernPreviousNextControl
             }
         } else {
             HStack(spacing: 8) {
@@ -125,6 +125,43 @@ struct OiaReadingOverlay: View {
         .accessibilityIdentifier(A11y.Detail.close)
         .keyboardShortcut(.cancelAction)
         .accessibilityLabel("Close Detail")
+    }
+
+    @available(macOS 26.0, *)
+    private var modernPreviousNextControl: some View {
+        GlassEffectContainer(spacing: 8) {
+            HStack(spacing: 0) {
+                Button { onMove(-1) } label: {
+                    Label("Previous item", systemImage: "chevron.left")
+                        .frame(width: 30, height: 30)
+                }
+                .help("Previous item (Left Arrow or K)")
+                .accessibilityIdentifier(A11y.Detail.previous)
+                .keyboardShortcut(.leftArrow, modifiers: [])
+                .disabled(!canMovePrevious || appState.isEditingText)
+
+                Button { onMove(1) } label: {
+                    Label("Next item", systemImage: "chevron.right")
+                        .frame(width: 30, height: 30)
+                }
+                .help("Next item (Right Arrow or J)")
+                .accessibilityIdentifier(A11y.Detail.next)
+                .keyboardShortcut(.rightArrow, modifiers: [])
+                .disabled(!canMoveNext || appState.isEditingText)
+            }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.small)
+            .labelStyle(.iconOnly)
+            .overlay {
+                HStack {
+                    Spacer(minLength: 0)
+                    Divider().frame(height: 18)
+                    Spacer(minLength: 0)
+                }
+                .allowsHitTesting(false)
+            }
+        }
     }
 
     private var previousNextControl: some View {
