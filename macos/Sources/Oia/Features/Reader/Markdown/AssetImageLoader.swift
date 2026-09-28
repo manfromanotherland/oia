@@ -25,10 +25,12 @@ enum AssetImageLoader {
     static func readingFolderURL(libraryURL: URL?, readingID: String) -> URL? {
         guard let libraryURL, !readingID.isEmpty else { return nil }
         let prefix = String(readingID.prefix(2))
+        // Card bodies resolve these URLs repeatedly. Inferring whether each
+        // component is a directory makes Foundation query the filesystem.
         return libraryURL
-            .appendingPathComponent("articles")
-            .appendingPathComponent(prefix)
-            .appendingPathComponent(readingID)
+            .appendingPathComponent("articles", isDirectory: true)
+            .appendingPathComponent(prefix, isDirectory: true)
+            .appendingPathComponent(readingID, isDirectory: true)
     }
 
     /// Resolve a local asset reference to an on-disk URL under the reading's
@@ -49,8 +51,8 @@ enum AssetImageLoader {
         let filename = String(source.dropFirst(prefix.count))
         guard isSafeAssetFilename(filename) else { return nil }
         return assetBaseURL
-            .appendingPathComponent("assets")
-            .appendingPathComponent(filename)
+            .appendingPathComponent("assets", isDirectory: true)
+            .appendingPathComponent(filename, isDirectory: false)
     }
 
     /// A safe asset filename is a single path component: non-empty, no `/`
