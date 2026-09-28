@@ -6,10 +6,8 @@ struct OiaReadingOverlay: View {
     @Environment(AppState.self) private var appState
 
     @Binding var row: ReadingRow
-    let rows: [ReadingRow]
     var onClose: () -> Void
     var onMove: (Int) -> Void
-    var onSelect: (ReadingRow) -> Void
     var canMovePrevious: Bool
     var canMoveNext: Bool
     var onEditTags: () -> Void
@@ -17,10 +15,9 @@ struct OiaReadingOverlay: View {
     @AppStorage("showsReadingInspector", store: AppDefaults.store) private var showsInspector = true
 
     var body: some View {
-        gallery
+        readingContent
             .background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(row.displayTitle)
-            .navigationBarBackButtonHidden(true)
             .toolbar { detailToolbar }
             .focusedSceneValue(\.detailNavigationActions, detailNavigationActions)
             .onExitCommand {
@@ -29,35 +26,27 @@ struct OiaReadingOverlay: View {
             }
     }
 
-    private var gallery: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 0) {
-                detail
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if showsInspector {
-                    OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
-                        .frame(width: 320)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 24)
-                }
+    private var readingContent: some View {
+        HStack(alignment: .top, spacing: 0) {
+            detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if showsInspector {
+                OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
+                    .frame(width: 320)
+                    .padding(.horizontal, 24)
+                    .padding(.top, 24)
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-
-            OiaGalleryStrip(
-                rows: rows,
-                selectedID: row.id,
-                onSelect: onSelect
-            )
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItemGroup(placement: .navigation) {
             Button(action: onClose) {
-                Label("Back to Library", systemImage: "chevron.backward")
+                Label("Close Reading", systemImage: "xmark")
             }
-            .help("Back to library (Escape)")
+            .help("Close reading (Escape)")
             .accessibilityIdentifier(A11y.Detail.close)
             .keyboardShortcut(.cancelAction)
 

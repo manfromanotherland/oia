@@ -14,6 +14,7 @@ struct OiaLibraryView: View {
     @AppStorage("cardSize", store: AppDefaults.store) var cardSize: CardSize = .small
 
     @State var presentedReading: ReadingRow?
+    @Namespace private var cardOpening
     @State private var gallerySnapshot = GallerySnapshot<ReadingRow>()
     @State private var tagTargetID: String?
     @State private var isDropTargeted = false
@@ -33,9 +34,6 @@ struct OiaLibraryView: View {
     var body: some View {
         NavigationStack {
             deletionSurface
-                .navigationDestination(isPresented: detailPresented) {
-                    overlay
-                }
         }
         .sheet(isPresented: tagSheetPresented) {
             tagPicker
@@ -81,7 +79,6 @@ extension OiaLibraryView {
 
     private var ingestibleSurface: some View {
         layeredSurface
-            .animation(.easeInOut(duration: 0.2), value: presentedReading?.id)
             .onDrop(of: supportedDropTypes, isTargeted: $isDropTargeted) { providers in
                 guard !providers.isEmpty else { return false }
                 save(providers)
@@ -134,7 +131,17 @@ extension OiaLibraryView {
 
 extension OiaLibraryView {
     private var librarySurface: some View {
-        detailSurface
+        ZStack {
+            detailSurface
+                .allowsHitTesting(presentedReading == nil)
+                .accessibilityHidden(presentedReading != nil)
+
+            if presentedReading != nil {
+                overlay
+                    .zIndex(1)
+                    .transition(.opacity)
+            }
+        }
     }
 
     @ViewBuilder
@@ -310,6 +317,7 @@ extension OiaLibraryView {
                             onEditTags: { tagTargetID = row.id }
                         )
                         .environment(appState)
+                        .matchedGeometryEffect(id: row.id, in: cardOpening)
                         .accessibilityIdentifier(A11y.List.row(row.id))
                     }
                 )
@@ -373,19 +381,19 @@ extension OiaLibraryView {
     @ViewBuilder
     private var overlay: some View {
         if let row = presentedReading {
-            OiaReadingOverlay(
+            let readingOverlay = OiaReadingOverlay(
                 row: Binding(
                     get: { presentedReading ?? row },
                     set: updatePresentedRow
                 ),
-                rows: gallerySnapshot.rows,
                 onClose: closeOverlay,
                 onMove: moveOverlay,
-                onSelect: open,
                 canMovePrevious: canMoveOverlay(-1),
                 canMoveNext: canMoveOverlay(1),
                 onEditTags: { tagTargetID = row.id }
             )
+            readingOverlay
+                .matchedGeometryEffect(id: row.id, in: cardOpening, isSource: false)
         }
     }
 
@@ -420,17 +428,6 @@ extension OiaLibraryView {
                 if !showing {
                     tagTargetID = nil
                     appState.showTagSheet = false
-                }
-            }
-        )
-    }
-
-    private var detailPresented: Binding<Bool> {
-        Binding(
-            get: { presentedReading != nil },
-            set: { isPresented in
-                if !isPresented {
-                    closeOverlay()
                 }
             }
         )
@@ -484,11 +481,19 @@ extension OiaLibraryView {
             gallerySnapshot = GallerySnapshot(appState.readings.filter { !LibraryScope.links.contains($0) })
         }
         boardFocused = false
-        updatePresentedRow(row)
+        if presentedReading == nil {
+            withAnimation(accessibilityReduceMotion ? nil : .spring(response: 0.48, dampingFraction: 0.86)) {
+                updatePresentedRow(row)
+            }
+        } else {
+            updatePresentedRow(row)
+        }
     }
 
     func closeOverlay() {
-        presentedReading = nil
+        withAnimation(accessibilityReduceMotion ? nil : .spring(response: 0.42, dampingFraction: 0.9)) {
+            presentedReading = nil
+        }
         gallerySnapshot = GallerySnapshot()
         appState.showHighlights = false
         if let id = appState.selectedId {
