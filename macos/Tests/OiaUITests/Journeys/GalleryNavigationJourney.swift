@@ -3,34 +3,34 @@
 import XCTest
 
 final class GalleryNavigationJourney: UITestCase {
-    func testNavigateReadingsWithKeyboard() throws {
+    func testNavigateGalleryWithKeyboard() throws {
         try launchApp(articles: Fixtures.standardCorpus)
 
         list.open(Fixtures.Ids.minimal)
-        XCTAssertTrue(app.byId(A11y.Detail.next).waitExists(), "Reading detail opens")
-        assertReadingShows("Minimal")
+        XCTAssertTrue(app.byId(A11y.Detail.next).waitExists(), "Gallery detail opens")
+        assertGalleryShows("Minimal")
 
         keyboard.nextItem()
-        assertReadingShows("Café Über 日本語 🎉")
+        assertGalleryShows("Café Über 日本語 🎉")
 
         keyboard.previousItem()
-        assertReadingShows("Minimal")
+        assertGalleryShows("Minimal")
 
         keyboard.arrowRight()
-        assertReadingShows("Café Über 日本語 🎉")
+        assertGalleryShows("Café Über 日本語 🎉")
 
         keyboard.arrowLeft()
-        assertReadingShows("Minimal")
+        assertGalleryShows("Minimal")
     }
 
-    private func assertReadingShows(
+    private func assertGalleryShows(
         _ title: String,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         XCTAssertTrue(
             wait { reader.titleText == title },
-            "Reading detail moved to \(title)",
+            "Gallery moved to \(title)",
             file: file,
             line: line
         )
