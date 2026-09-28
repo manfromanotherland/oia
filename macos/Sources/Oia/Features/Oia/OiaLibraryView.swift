@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
-import CoreImage
 import LazyLayoutKit
 import QuickLook
 import SwiftUI
@@ -315,12 +314,6 @@ extension OiaLibraryView {
                     }
                 )
                 .modifier(BoardScrollTrackingModifier(scrollState: boardScrollState))
-                .overlay(alignment: .top) {
-                    ProgressiveToolbarBlur()
-                        .frame(height: boardToolbarHeight)
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                }
                 .focusable()
                 .focused($boardFocused)
                 .focusEffectDisabled()
@@ -544,65 +537,6 @@ extension OiaLibraryView {
         } else {
             closeOverlay()
         }
-    }
-}
-
-private struct ProgressiveToolbarBlur: NSViewRepresentable {
-    func makeNSView(context _: Context) -> BackdropView { BackdropView() }
-    func updateNSView(_: BackdropView, context _: Context) {}
-
-    final class BackdropView: NSView {
-        private let backdrop = CALayer()
-        private var filteredSize: NSSize = .zero
-
-        override init(frame frameRect: NSRect) {
-            super.init(frame: frameRect)
-        }
-
-        override func viewDidMoveToWindow() {
-            super.viewDidMoveToWindow()
-            backdrop.removeFromSuperlayer()
-            configureBackdrop()
-        }
-
-        override func layout() {
-            super.layout()
-            configureBackdrop()
-        }
-
-        private func configureBackdrop() {
-            guard let contentView = window?.contentView else { return }
-            contentView.wantsLayer = true
-            contentView.layerUsesCoreImageFilters = true
-            if backdrop.superlayer !== contentView.layer {
-                backdrop.removeFromSuperlayer()
-                backdrop.backgroundColor = NSColor.clear.cgColor
-                backdrop.masksToBounds = true
-                contentView.layer?.addSublayer(backdrop)
-            }
-            backdrop.frame = convert(bounds, to: contentView)
-            guard bounds.size != filteredSize else { return }
-            filteredSize = bounds.size
-            guard bounds.width > 0, bounds.height > 0,
-                  let gradient = CIFilter(name: "CILinearGradient"),
-                  let blur = CIFilter(name: "CIMaskedVariableBlur"),
-                  let exposure = CIFilter(name: "CIExposureAdjust"),
-                  let saturation = CIFilter(name: "CIColorControls") else { return }
-            gradient.setValue(CIVector(x: 0, y: 0), forKey: "inputPoint0")
-            gradient.setValue(CIVector(x: 0, y: bounds.height), forKey: "inputPoint1")
-            gradient.setValue(CIColor(red: 1, green: 1, blue: 1), forKey: "inputColor0")
-            gradient.setValue(CIColor(red: 0, green: 0, blue: 0), forKey: "inputColor1")
-            blur.setValue(gradient.outputImage?.cropped(to: bounds), forKey: "inputMask")
-            blur.setValue(30, forKey: kCIInputRadiusKey)
-            exposure.setValue(-0.32, forKey: kCIInputEVKey)
-            saturation.setValue(1.25, forKey: kCIInputSaturationKey)
-            backdrop.backgroundFilters = [blur, exposure, saturation]
-        }
-
-        @available(*, unavailable)
-        required init?(coder _: NSCoder) { nil }
-
-        override func hitTest(_: NSPoint) -> NSView? { nil }
     }
 }
 
