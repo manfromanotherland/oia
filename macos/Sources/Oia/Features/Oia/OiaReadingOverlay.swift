@@ -82,42 +82,26 @@ struct OiaReadingOverlay: View {
         }
     }
 
-    @ViewBuilder
     private var previousNextControl: some View {
-        if #available(macOS 26.0, *) {
-            previousNextButtons.glassEffect(.regular, in: Capsule())
-        } else {
-            previousNextButtons.background(.regularMaterial, in: Capsule())
-        }
-    }
-
-    private var previousNextButtons: some View {
-        HStack(spacing: 0) {
+        ControlGroup("Navigate") {
             Button { onMove(-1) } label: {
-                Image(systemName: "chevron.left")
-                    .frame(width: 36, height: 30)
-                    .contentShape(Rectangle())
+                Label("Previous item", systemImage: "chevron.left")
             }
-            .accessibilityLabel("Previous item")
             .help("Previous item (Left Arrow or K)")
             .accessibilityIdentifier(A11y.Detail.previous)
             .keyboardShortcut(.leftArrow, modifiers: [])
             .disabled(!canMovePrevious || appState.isEditingText)
 
-            Divider().frame(height: 18)
-
             Button { onMove(1) } label: {
-                Image(systemName: "chevron.right")
-                    .frame(width: 36, height: 30)
-                    .contentShape(Rectangle())
+                Label("Next item", systemImage: "chevron.right")
             }
-            .accessibilityLabel("Next item")
             .help("Next item (Right Arrow or J)")
             .accessibilityIdentifier(A11y.Detail.next)
             .keyboardShortcut(.rightArrow, modifiers: [])
             .disabled(!canMoveNext || appState.isEditingText)
         }
-        .buttonStyle(.plain)
+        .controlGroupStyle(.navigation)
+        .labelStyle(.iconOnly)
     }
 
     private var detailNavigationActions: DetailNavigationActions {
