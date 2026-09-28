@@ -22,7 +22,6 @@ struct OiaReadingOverlay: View {
             .background(Color(nsColor: .windowBackgroundColor))
             .navigationTitle(row.displayTitle)
             .navigationBarBackButtonHidden(true)
-            .toolbar { detailToolbar }
             .toolbarBackground(.hidden, for: .windowToolbar)
             .focusedSceneValue(\.detailNavigationActions, detailNavigationActions)
             .onExitCommand {
@@ -48,16 +47,21 @@ struct OiaReadingOverlay: View {
                     }
                     .ignoresSafeArea(.container, edges: .top)
                 }
-                .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .toolbar {
+                    if #available(macOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .navigation)
+                    }
                     ToolbarItem(placement: .navigation) {
-                        HStack(spacing: 8) {
-                            closeButton
-                            previousNextControl
-                        }
+                        closeButton
+                    }
+                    if #available(macOS 26.0, *) {
+                        ToolbarSpacer(.fixed, placement: .navigation)
+                    }
+                    ToolbarItem(placement: .navigation) {
+                        previousNextControl
                     }
                 }
         }
@@ -70,30 +74,6 @@ struct OiaReadingOverlay: View {
             get: { showsInspector ? .all : .detailOnly },
             set: { showsInspector = $0 != .detailOnly }
         )
-    }
-
-    @ToolbarContentBuilder
-    private var detailToolbar: some ToolbarContent {
-        ToolbarItem(placement: .navigation) {
-            sidebarToggle
-        }
-    }
-
-    private var sidebarToggle: some View {
-        Button {
-            // The toolbar's click transaction can suppress content animations.
-            // Toggle on the next main turn so the sidebar gets its own transaction.
-            DispatchQueue.main.async { toggleInspector() }
-        } label: {
-            Label(
-                showsInspector ? "Hide Sidebar" : "Show Sidebar",
-                systemImage: "sidebar.leading"
-            )
-        }
-        .labelStyle(.iconOnly)
-        .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
-        .accessibilityIdentifier(A11y.Inspector.toggle)
-        .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
     }
 
     private var closeButton: some View {
