@@ -69,20 +69,16 @@ struct OiaReadingOverlay: View {
         }
 
         ToolbarItem(placement: .navigation) {
-            previousNextControl
-        }
-
-        if #available(macOS 26.0, *) {
-            ToolbarSpacer(.flexible, placement: .primaryAction)
-        }
-
-        ToolbarItem(placement: .primaryAction) {
             Button(action: onClose) {
                 Label("Close Detail", systemImage: "xmark")
             }
             .help("Close detail (Escape)")
             .accessibilityIdentifier(A11y.Detail.close)
             .keyboardShortcut(.cancelAction)
+        }
+
+        ToolbarItem(placement: .navigation) {
+            previousNextControl
         }
     }
 
