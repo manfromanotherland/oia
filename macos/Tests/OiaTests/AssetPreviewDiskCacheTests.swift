@@ -4,6 +4,68 @@ import AppKit
 import XCTest
 
 final class AssetPreviewDiskCacheTests: XCTestCase {
+    @MainActor
+    func testScheduledPreviewWaitsForIdleAndPersistsTheLatestScrollCandidate() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gate = InteractionIdleGate(idleGrace: .zero)
+        let sourceID = UUID()
+        gate.setScrolling(true, sourceID: sourceID)
+        let cacheRoot = root.appendingPathComponent("cache")
+        let cache = AssetPreviewDiskCache(rootURL: cacheRoot, interactionGate: gate)
+        var keys: [AssetPreviewDiskKey] = []
+
+        for index in 0 ..< 3 {
+            let source = root.appendingPathComponent("source-\(index).png")
+            try rasterData(color: .systemPink).write(to: source)
+            let key = try diskKey(source)
+            let decoded = try XCTUnwrap(AssetImageLoader.downsampledImage(at: source, maxPixel: 32))
+            keys.append(key)
+            cache.scheduleStore(decoded, for: key)
+        }
+
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertTrue(cache.hasScheduledStoreWork())
+        for key in keys {
+            let file = cacheRoot.appendingPathComponent(key.filename)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        }
+
+        gate.setScrolling(false, sourceID: sourceID)
+        try await waitForScheduledStores(cache)
+        let latestFile = cacheRoot.appendingPathComponent(try XCTUnwrap(keys.last).filename)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: latestFile.path))
+        XCTAssertGreaterThan(cache.storedByteCount(), 0)
+        XCTAssertNotNil(AssetPreviewDiskCache(rootURL: cacheRoot).image(for: try XCTUnwrap(keys.last)))
+        for key in keys.dropLast() {
+            let file = cacheRoot.appendingPathComponent(key.filename)
+            XCTAssertFalse(FileManager.default.fileExists(atPath: file.path))
+        }
+    }
+
+    @MainActor
+    func testScheduledPreviewRejectsSourceReplacedDuringScroll() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let gate = InteractionIdleGate(idleGrace: .zero)
+        let sourceID = UUID()
+        gate.setScrolling(true, sourceID: sourceID)
+        let source = root.appendingPathComponent("source.png")
+        try rasterData(color: .systemPink).write(to: source)
+        let key = try diskKey(source)
+        let cacheRoot = root.appendingPathComponent("cache")
+        let cache = AssetPreviewDiskCache(rootURL: cacheRoot, interactionGate: gate)
+        let decoded = try XCTUnwrap(AssetImageLoader.downsampledImage(at: source, maxPixel: 32))
+        cache.scheduleStore(decoded, for: key)
+
+        try await Task.sleep(for: .milliseconds(100))
+        try rasterData(color: .systemBlue).write(to: source, options: .atomic)
+        gate.setScrolling(false, sourceID: sourceID)
+        try await waitForScheduledStores(cache)
+        let oldFile = cacheRoot.appendingPathComponent(key.filename)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: oldFile.path))
+    }
+
     func testPersistentPreviewSurvivesCacheRecreationButNotSourceReplacement() throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -119,6 +181,15 @@ final class AssetPreviewDiskCacheTests: XCTestCase {
             AssetPreviewDecodeKey(kind: .image, url: url, maxPixel: CGFloat(maxPixel)),
             fingerprint: XCTUnwrap(AssetPreviewSourceFingerprint.read(at: url))
         )
+    }
+
+    @MainActor
+    private func waitForScheduledStores(_ cache: AssetPreviewDiskCache) async throws {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(3))
+        while cache.hasScheduledStoreWork(), ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(cache.hasScheduledStoreWork(), "Scheduled preview work should finish after idle")
     }
 
     private func temporaryDirectory() throws -> URL {

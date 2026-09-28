@@ -46,20 +46,31 @@ final class AssetPreviewDiskCache: @unchecked Sendable {
 
     let rootURL: URL
     private let byteLimit: Int
+    private let interactionGate: InteractionIdleGate?
     private let lock = NSLock()
     private var entries: [String: Entry]?
     private var totalBytes = 0
-    private var pendingWrites = 0
-    private let writer = DispatchQueue(label: "is.edmundo.oia.preview-cache", qos: .utility)
+    private var pendingStore: PendingStore?
+    private var isDraining = false
 
     private struct Entry {
         let bytes: Int
         var lastAccess: Date
     }
 
-    init(rootURL: URL, byteLimit: Int = 512 * 1024 * 1024) {
+    private struct PendingStore {
+        let decoded: AssetImageLoader.Decoded
+        let key: AssetPreviewDiskKey
+    }
+
+    init(
+        rootURL: URL,
+        byteLimit: Int = 512 * 1024 * 1024,
+        interactionGate: InteractionIdleGate? = nil
+    ) {
         self.rootURL = rootURL
         self.byteLimit = max(0, byteLimit)
+        self.interactionGate = interactionGate
     }
 
     func image(for key: AssetPreviewDiskKey) -> AssetImageLoader.Decoded? {
@@ -83,28 +94,70 @@ final class AssetPreviewDiskCache: @unchecked Sendable {
         return decoded
     }
 
-    /// Two queued writes cap extra retained bitmaps. Persistence never delays publication.
+    /// Keep the newest pending preview while scrolling. The drain may hold one
+    /// more bitmap while encoding, so retained work stays bounded at two.
+    /// Persistence never delays publication.
     func scheduleStore(_ decoded: AssetImageLoader.Decoded, for key: AssetPreviewDiskKey) {
-        guard key.maxPixel <= 1024 else { return }
+        guard key.maxPixel <= 1024, byteLimit > 0 else { return }
         lock.lock()
-        guard pendingWrites < 2 else {
-            lock.unlock()
-            return
-        }
-        pendingWrites += 1
+        pendingStore = PendingStore(decoded: decoded, key: key)
+        let shouldStart = !isDraining
+        if shouldStart { isDraining = true }
         lock.unlock()
-        writer.async { [self] in
-            store(decoded, for: key)
-            lock.lock()
-            pendingWrites -= 1
-            lock.unlock()
+
+        if shouldStart {
+            Task.detached(priority: .utility) { [self] in
+                await drainPendingStores()
+            }
         }
     }
 
+    private func drainPendingStores() async {
+        let gate: InteractionIdleGate
+        if let interactionGate {
+            gate = interactionGate
+        } else {
+            gate = await InteractionIdleGate.shared
+        }
+
+        while true {
+            // Check before every encode, including work queued during a prior
+            // encode. A new gesture must not release the rest of the queue.
+            do {
+                try await gate.waitUntilIdle()
+            } catch {
+                stopDraining()
+                return
+            }
+
+            guard let pending = takePendingStore() else { return }
+            store(pending.decoded, for: pending.key)
+        }
+    }
+
+    private func takePendingStore() -> PendingStore? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let pending = pendingStore else {
+            isDraining = false
+            return nil
+        }
+        pendingStore = nil
+        return pending
+    }
+
+    private func stopDraining() {
+        lock.lock()
+        defer { lock.unlock() }
+        pendingStore = nil
+        isDraining = false
+    }
+
     func store(_ decoded: AssetImageLoader.Decoded, for key: AssetPreviewDiskKey) {
-        guard key.maxPixel <= 1024,
+        guard key.maxPixel <= 1024, byteLimit > 0,
               AssetPreviewSourceFingerprint.read(at: key.sourceURL) == key.fingerprint,
-              let data = pngData(decoded.image), data.count <= byteLimit else { return }
+              let data = pngData(decoded.image), data.count <= byteLimit,
+              AssetPreviewSourceFingerprint.read(at: key.sourceURL) == key.fingerprint else { return }
         lock.lock()
         defer { lock.unlock() }
         loadEntriesIfNeeded()
@@ -125,6 +178,12 @@ final class AssetPreviewDiskCache: @unchecked Sendable {
         defer { lock.unlock() }
         loadEntriesIfNeeded()
         return totalBytes
+    }
+
+    func hasScheduledStoreWork() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isDraining
     }
 
     private func remove(_ filename: String) {
