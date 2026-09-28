@@ -349,15 +349,15 @@ extension OiaLibraryView {
                     if showsScrollToTop {
                         Button(action: scrollBoardToTop) {
                             Image(systemName: "arrow.up")
-                                .font(.system(size: 15, weight: .semibold))
-                                .frame(width: 44, height: 44)
+                                .font(.system(size: 17, weight: .semibold))
+                                .frame(width: 36, height: 36)
                         }
                         .buttonStyle(.plain)
                         .modifier(ScrollToTopGlass())
                         .help("Scroll to Top (\(ShortcutCatalog.scrollToTop.display))")
                         .accessibilityLabel("Scroll to Top")
                         .accessibilityIdentifier(A11y.List.scrollToTop)
-                        .padding(24)
+                        .padding(8)
                         .transition(.scale(scale: 0.7).combined(with: .opacity))
                     }
                 }
