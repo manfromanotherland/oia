@@ -20,16 +20,17 @@ final class InspectorJourney: UITestCase {
         XCTAssertLessThan(toggle.frame.midX, close.frame.midX, "Close follows the sidebar toggle")
         XCTAssertLessThan(close.frame.midX, app.byId(A11y.Detail.previous).frame.midX, "Navigation follows Close")
         XCTAssertLessThan(close.frame.midX, windowMidX, "Close is on the left")
+        let expandedCloseX = close.frame.midX
 
         toggle.click()
         XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
-        let controlsBesideToggle = XCTNSPredicateExpectation(
-            predicate: NSPredicate { _, _ in close.frame.minX - toggle.frame.maxX < 16 },
+        let controlsFollowDetail = XCTNSPredicateExpectation(
+            predicate: NSPredicate { _, _ in close.frame.midX < expandedCloseX - 100 },
             object: nil
         )
         XCTAssertEqual(
-            XCTWaiter.wait(for: [controlsBesideToggle], timeout: 2), .completed,
-            "Close moves beside the sidebar toggle"
+            XCTWaiter.wait(for: [controlsFollowDetail], timeout: 2), .completed,
+            "Close follows the collapsing detail pane"
         )
         toggle.click()
         XCTAssertTrue(inspector.waitExists(), "Toolbar button expands the sidebar")

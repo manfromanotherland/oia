@@ -60,7 +60,7 @@ struct OiaReadingOverlay: View {
                         detailControls
                             // Follow the detail pane's actual edge, with room for the
                             // fixed titlebar controls after the inspector collapses.
-                            .padding(.leading, max(12, 135 - geometry.frame(in: .named("readingGallery")).minX))
+                            .padding(.leading, max(12, 139 - geometry.frame(in: .named("readingGallery")).minX))
                             .padding(.top, 8)
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                             .ignoresSafeArea(.container, edges: .top)
@@ -83,9 +83,8 @@ struct OiaReadingOverlay: View {
         if #available(macOS 26.0, *) {
             HStack(spacing: 8) {
                 closeButton
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .controlSize(.small)
+                    .buttonStyle(.plain)
+                    .glassEffect(in: Circle())
                 modernPreviousNextControl
             }
         } else {
@@ -118,7 +117,7 @@ struct OiaReadingOverlay: View {
     private var closeButton: some View {
         Button(action: onClose) {
             Label("Close Detail", systemImage: "xmark")
-                .frame(width: 26, height: 26)
+                .frame(width: 36, height: 36)
         }
         .labelStyle(.iconOnly)
         .help("Close detail (Escape)")
