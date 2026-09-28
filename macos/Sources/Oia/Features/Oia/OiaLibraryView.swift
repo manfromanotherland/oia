@@ -351,8 +351,7 @@ extension OiaLibraryView {
                                 .frame(width: 44, height: 44)
                         }
                         .buttonStyle(.plain)
-                        .background(.regularMaterial, in: Circle())
-                        .overlay { Circle().strokeBorder(Color(nsColor: .separatorColor), lineWidth: 1) }
+                        .modifier(ScrollToTopGlass())
                         .help("Scroll to Top (\(ShortcutCatalog.scrollToTop.display))")
                         .accessibilityLabel("Scroll to Top")
                         .accessibilityIdentifier(A11y.List.scrollToTop)
@@ -534,6 +533,23 @@ extension OiaLibraryView {
             moveOverlay(-1)
         } else {
             closeOverlay()
+        }
+    }
+}
+
+private struct ScrollToTopGlass: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        let shape = Circle()
+        if reduceTransparency {
+            content.background(Color(nsColor: .controlBackgroundColor), in: shape)
+                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
+        } else if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content.background(.regularMaterial, in: shape)
+                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
         }
     }
 }
