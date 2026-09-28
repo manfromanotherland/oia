@@ -177,11 +177,10 @@ struct MarkdownTheme {
     // The reader's non-body pieces are sized from the body so they rescale with
     // it (Small … Giant) instead of holding a fixed size while the copy grows.
 
-    /// The header title is the reading's sole h1 — the top of the heading scale —
-    /// so it borrows the level-1 heading tokens (and, like the body, follows the
-    /// chosen reader font).
+    /// Give the article title more presence than headings within the body while
+    /// keeping it tied to the chosen reader font and body size.
     var titleFont: Font {
-        headingFont(1)
+        font.swiftUIFont(size: bodySize * 1.5, weight: .bold)
     }
 
     var titleTracking: CGFloat {

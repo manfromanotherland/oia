@@ -291,7 +291,8 @@ heading connected to the text that follows.
 
 | Level | Approximate scale | Treatment |
 |-------|-------------------|-----------|
-| H1 / article title | `1.25em` | bold in the chosen reader face, modestly larger than the body |
+| Article title | `1.5em` | bold in the chosen reader face, prominent above the body |
+| H1 in body | `1.25em` | bold; retained for older or manually written files |
 | H2 | `1.12em` | bold, major section |
 | H3 | `1em` | bold |
 | H4–H5 | `1em` | semibold italic |
@@ -374,8 +375,8 @@ quote or list stays on its own line in the SwiftUI fallback renderer.
 
 At the top of the scrolling reader, each article shows:
 
-- **Title** at the restrained H1 scale, in the selected reader face. It shares the body's width and
-  grows with the chosen body size.
+- **Title** at `1.5em` in the selected reader face. It shares the body's width and grows with the
+  chosen body size.
 - **Tags** appear as a read-only text summary. The toolbar's `#` button opens the tag picker for
   edits, so managing tags does not reflow the article header.
 - The header has enough space below it to start the body clearly, without a decorative divider.
