@@ -9,6 +9,7 @@ import SwiftUI
 struct CompactSearchToolbarConfiguration: NSViewRepresentable {
     let isSearchExpanded: Bool
     let searchTokens: [BoardSearchToken]
+    let onToolbarHeightChange: (CGFloat) -> Void
 
     /// Give the toolbar its expanded allocation before moving focus to the field.
     /// Focusing first lets AppKit draw the full field past the window's right edge
@@ -28,14 +29,16 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
     func makeNSView(context _: Context) -> NSView {
         SearchToolbarConfigurationView(
             isSearchExpanded: isSearchExpanded,
-            searchTokens: searchTokens
+            searchTokens: searchTokens,
+            onToolbarHeightChange: onToolbarHeightChange
         )
     }
 
     func updateNSView(_ view: NSView, context _: Context) {
         (view as? SearchToolbarConfigurationView)?.update(
             isSearchExpanded: isSearchExpanded,
-            searchTokens: searchTokens
+            searchTokens: searchTokens,
+            onToolbarHeightChange: onToolbarHeightChange
         )
     }
 
@@ -47,11 +50,18 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             "is.edmundo.oia.search.trailing-toolbar-edge"
         private var isSearchExpanded: Bool
         private var searchTokens: [BoardSearchToken]
+        private var onToolbarHeightChange: (CGFloat) -> Void
+        private var reportedToolbarHeight: CGFloat?
         nonisolated(unsafe) private var mouseMonitor: Any?
 
-        init(isSearchExpanded: Bool, searchTokens: [BoardSearchToken]) {
+        init(
+            isSearchExpanded: Bool,
+            searchTokens: [BoardSearchToken],
+            onToolbarHeightChange: @escaping (CGFloat) -> Void
+        ) {
             self.isSearchExpanded = isSearchExpanded
             self.searchTokens = searchTokens
+            self.onToolbarHeightChange = onToolbarHeightChange
             super.init(frame: .zero)
 
             NotificationCenter.default.addObserver(
@@ -123,9 +133,14 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
             nil
         }
 
-        func update(isSearchExpanded: Bool, searchTokens: [BoardSearchToken]) {
+        func update(
+            isSearchExpanded: Bool,
+            searchTokens: [BoardSearchToken],
+            onToolbarHeightChange: @escaping (CGFloat) -> Void
+        ) {
             self.isSearchExpanded = isSearchExpanded
             self.searchTokens = searchTokens
+            self.onToolbarHeightChange = onToolbarHeightChange
             configureCurrentToolbar()
             DispatchQueue.main.async { [weak self] in
                 self?.decorateColorTokens()
@@ -177,6 +192,17 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
         }
 
         func configureCurrentToolbar() {
+            window?.titlebarAppearsTransparent = true
+            window?.titlebarSeparatorStyle = .none
+            if let window {
+                let height = window.frame.height - window.contentLayoutRect.maxY
+                if height > 0, height != reportedToolbarHeight {
+                    reportedToolbarHeight = height
+                    DispatchQueue.main.async { [weak self] in
+                        self?.onToolbarHeightChange(height)
+                    }
+                }
+            }
             window?.toolbar?.items
                 .compactMap { $0 as? NSSearchToolbarItem }
                 .forEach { configure($0) }

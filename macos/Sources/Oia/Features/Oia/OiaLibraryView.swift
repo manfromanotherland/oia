@@ -18,6 +18,8 @@ struct OiaLibraryView: View {
     @State private var tagTargetID: String?
     @State private var isDropTargeted = false
     @State var cardTextMetrics = OiaCardTextMetrics()
+    // Used until AppKit reports the unified toolbar's actual height.
+    @State private var boardToolbarHeight: CGFloat = 52
     @State private var videoPlaybackPositions = VideoPlaybackPositionStore()
     @State var boardPosition = LazyLayoutPosition<String>()
     @State var boardNavigation = MasonryNavigationCoordinator<ReadingRow, String>()
@@ -175,10 +177,14 @@ extension OiaLibraryView {
                 appState.searchQuery = completion.text
             }
             .toolbar { boardToolbar }
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .background {
                 CompactSearchToolbarConfiguration(
                     isSearchExpanded: isSearchExpanded,
-                    searchTokens: appState.searchTokens
+                    searchTokens: appState.searchTokens,
+                    onToolbarHeightChange: { height in
+                        if boardToolbarHeight != height { boardToolbarHeight = height }
+                    }
                 )
                 .frame(width: 0, height: 0)
             }
@@ -265,7 +271,7 @@ extension OiaLibraryView {
                     minimumColumnWidth: cardSize.minimumColumnWidth,
                     spacing: Self.boardSpacing,
                     contentInsets: EdgeInsets(
-                        top: Self.boardTopSpacing,
+                        top: Self.boardTopSpacing + boardToolbarHeight,
                         leading: Self.boardSpacing,
                         bottom: Self.boardSpacing,
                         trailing: Self.boardSpacing
@@ -360,6 +366,7 @@ extension OiaLibraryView {
                     value: showsScrollToTop
                 )
             }
+            .ignoresSafeArea(.container, edges: .top)
         }
     }
 
