@@ -104,9 +104,17 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                     let clickedSearch = field.bounds.contains(
                         field.convert(event.locationInWindow, from: nil)
                     )
-                    if !self.isSearchExpanded, clickedSearch {
-                        self.isSearchExpanded = true
-                        CompactSearchToolbarConfiguration.beginSearchInteraction(in: self.window)
+                    if clickedSearch {
+                        if !self.isSearchExpanded {
+                            self.isSearchExpanded = true
+                            CompactSearchToolbarConfiguration.beginSearchInteraction(in: self.window)
+                        } else {
+                            // The board fills the transparent titlebar's content area.
+                            // Once search is expanded, AppKit can hit-test a card
+                            // behind the visible field. Deliver the click to the
+                            // field explicitly and consume the board's event.
+                            field.mouseDown(with: event)
+                        }
                         return nil
                     }
 
