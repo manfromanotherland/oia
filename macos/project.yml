@@ -127,6 +127,7 @@ targets:
       - path: Sources/Oia/Bridge/Mappers/ReadingSourceProfile.swift
       - path: Sources/Oia/Features/Oia/OiaTheme.swift
       - path: Sources/Oia/Features/Oia/OiaCardTextMetrics.swift
+      - path: Sources/Oia/Features/Oia/FullArticleCardText.swift
       - path: Sources/Oia/Resources/Newsreader-VariableFont_opsz-wght.ttf
         buildPhase: resources
       - path: Sources/Oia/Features/Oia/ReadingRow+MediaGeometry.swift

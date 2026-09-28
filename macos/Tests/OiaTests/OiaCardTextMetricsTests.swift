@@ -80,6 +80,54 @@ final class OiaCardTextMetricsTests: XCTestCase {
         }
     }
 
+    func testFullArticleHeightMatchesRenderedTextAtDifferentWidths() {
+        let metrics = OiaCardTextMetrics()
+        let examples: [(String, String?, CGFloat)] = [
+            ("The Egg", "A brief story about a life and the people who shared it.", 220),
+            (
+                "About the Raskin Center for Humane Interfaces",
+                "History and mission of the Raskin Center for Humane Interfaces, "
+                    + "founded to continue Jef Raskin's work in human-computer interaction.",
+                320
+            ),
+            (
+                "Do not remain nameless to yourself",
+                String(repeating: "A passage of saved article text. ", count: 20),
+                403
+            ),
+            ("A heading without article text", nil, 220),
+            ("A heading with a hard\nline break", "A first line.\nA second line.\nA third line.", 300),
+            ("A longunbrokentitlethatmustwrapatthesmallestcardwidth", "A short preview.", 180)
+        ]
+
+        for (title, description, width) in examples {
+            XCTAssertEqual(
+                metrics.fullArticleTextHeight(for: title, description: description, width: width),
+                renderedFullArticleTextHeight(for: title, description: description, width: width),
+                accuracy: 1,
+                "Height mismatch for: \(title)"
+            )
+        }
+    }
+
+    func testFullArticleHeightGrowsOnlyWithVisibleDescriptionLines() {
+        let metrics = OiaCardTextMetrics()
+        let title = "The Egg"
+        let oneLine = "A short description."
+        let severalLines = String(repeating: "A saved paragraph with enough text to wrap. ", count: 4)
+        let oversized = String(repeating: "A saved paragraph with enough text to wrap. ", count: 30)
+
+        let shortHeight = metrics.fullArticleTextHeight(for: title, description: oneLine, width: 220)
+        let severalHeight = metrics.fullArticleTextHeight(for: title, description: severalLines, width: 220)
+        let oversizedHeight = metrics.fullArticleTextHeight(for: title, description: oversized, width: 220)
+        XCTAssertLessThan(shortHeight, severalHeight)
+        XCTAssertLessThanOrEqual(severalHeight, oversizedHeight)
+        XCTAssertLessThan(
+            metrics.fullArticleTextHeight(for: title, description: severalLines, width: 403),
+            severalHeight
+        )
+    }
+
     func testQuoteHeightMatchesTheRenderedStack() {
         let metrics = OiaCardTextMetrics()
 
@@ -289,6 +337,21 @@ extension OiaCardTextMetricsTests {
         }
         .padding(OiaCardTextMetrics.articleFooterPadding)
         .frame(width: width, alignment: .leading)
+
+        return ceil(NSHostingView(rootView: view).fittingSize.height)
+    }
+
+    private func renderedFullArticleTextHeight(
+        for title: String,
+        description: String?,
+        width: CGFloat
+    ) -> CGFloat {
+        var row = makeReadingRow(wordCount: 2_500)
+        row.title = title
+        row.cardDescription = description
+        row.site = "example.com"
+        let view = FullArticleCardText(row: row, libraryURL: nil, isVisible: false)
+            .frame(width: width, alignment: .leading)
 
         return ceil(NSHostingView(rootView: view).fittingSize.height)
     }

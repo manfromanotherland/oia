@@ -169,11 +169,45 @@ struct OiaCardView: View {
                 isVisible: isInViewport,
                 scrollState: scrollState
             )
+        } else if row.isFullArticle {
+            fullArticleCard(in: size)
         } else if row.previewAsset != nil {
             previewArticleCard(in: size)
         } else {
             textArticleCard
         }
+    }
+
+    private func fullArticleCard(in size: CGSize) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if row.previewAsset != nil {
+                let aspectRatio = row.articlePreviewAspectRatio ?? ReadingRow.socialPreviewAspectRatio
+                let previewHeight = row.articlePreviewHeight(for: size.width)
+                    ?? size.width / ReadingRow.socialPreviewAspectRatio
+                LocalReadingImage(
+                    row: row, libraryURL: appState.libraryURL,
+                    fallbackAspectRatio: aspectRatio,
+                    maxPixel: AssetPreviewLoadPlan.displayMaxPixel(
+                        for: CGSize(width: size.width, height: previewHeight),
+                        displayScale: displayScale
+                    ),
+                    contentMode: .fit,
+                    loadsProgressively: true,
+                    isVisible: isInViewport,
+                    scrollState: scrollState
+                )
+                .frame(width: size.width, height: previewHeight)
+                .clipped()
+            }
+
+            FullArticleCardText(
+                row: row,
+                libraryURL: appState.libraryURL,
+                isVisible: isInViewport
+            )
+        }
+        .frame(width: size.width, height: size.height, alignment: .topLeading)
+        .clipped()
     }
 
     private func previewArticleCard(in size: CGSize) -> some View {
@@ -357,6 +391,17 @@ private extension OiaCardView {
                 )
             }
             return parts.joined(separator: ", ")
+        }
+        if row.isFullArticle {
+            return [
+                "Article",
+                row.displayTitle,
+                row.cardDescription,
+                row.displaySite,
+                row.readingTimeLabel.map { "\($0) read" }
+            ]
+            .compactMap(\.self)
+            .joined(separator: ", ")
         }
         return [row.kind.singularLabel, row.displayTitle, row.displaySite]
             .compactMap(\.self)

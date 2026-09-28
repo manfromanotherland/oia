@@ -64,6 +64,77 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 9 {
         migrate_v9(conn)?;
     }
+    if version < 10 {
+        migrate_v10(conn)?;
+    }
+    Ok(())
+}
+
+/// v10: cache bounded descriptions for full-article cards. The projection can
+/// always be rebuilt from `body_text` and frontmatter metadata; no library file
+/// is changed. Existing rows are backfilled in small batches on upgrade.
+fn migrate_v10(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN; ALTER TABLE readings ADD COLUMN card_description TEXT;")?;
+    let backfill = (|| -> Result<()> {
+        let mut after_id = String::new();
+        loop {
+            let batch = {
+                let mut stmt = conn.prepare(
+                    "SELECT id, title, excerpt, word_count, body_text, source_profile_json
+                     FROM readings
+                     WHERE id > ?1 AND kind = 'article' AND lightweight = 0
+                     ORDER BY id LIMIT 8",
+                )?;
+                let rows = stmt.query_map([&after_id], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<u32>>(3)?,
+                        row.get::<_, String>(4)?,
+                        row.get::<_, Option<String>>(5)?,
+                    ))
+                })?;
+                rows.collect::<rusqlite::Result<Vec<_>>>()?
+            };
+            if batch.is_empty() {
+                break;
+            }
+            for (id, title, excerpt, word_count, body, profile_json) in &batch {
+                let source_type = profile_json
+                    .as_deref()
+                    .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+                    .and_then(|profile| {
+                        profile
+                            .get("source_type")
+                            .and_then(serde_json::Value::as_str)
+                            .map(str::to_owned)
+                    });
+                let card = crate::card_description::project_article_card(
+                    crate::ReadingKind::Article,
+                    false,
+                    source_type.as_deref(),
+                    title,
+                    excerpt.as_deref(),
+                    *word_count,
+                    body,
+                );
+                conn.execute(
+                    "UPDATE readings SET card_description=?2, word_count=?3 WHERE id=?1",
+                    rusqlite::params![id, card.description, card.word_count],
+                )?;
+            }
+            after_id = batch.last().expect("nonempty batch").0.clone();
+        }
+        Ok(())
+    })();
+    match backfill {
+        Ok(()) => conn.execute_batch("PRAGMA user_version = 10; COMMIT;")?,
+        Err(error) => {
+            conn.execute_batch("ROLLBACK;")?;
+            return Err(error);
+        }
+    }
     Ok(())
 }
 
@@ -414,7 +485,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
 
         // readings table exists
         let count: i64 = conn
@@ -529,7 +600,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -632,6 +703,7 @@ mod tests {
             "predominant_color",
             "media_aspect_ratio",
             "source_profile_json",
+            "card_description",
         ] {
             assert!(columns.contains(&col.to_string()), "missing column: {col}");
         }
@@ -693,8 +765,84 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
         assert_eq!(projected, None);
+    }
+
+    #[test]
+    fn v10_backfills_article_cards_without_changing_saved_excerpts() {
+        let dir = TempDir::new().unwrap();
+        let db_path = dir.path().join("index.db");
+        {
+            let conn = Connection::open(&db_path).unwrap();
+            migrate_v1(&conn).unwrap();
+            migrate_v2(&conn).unwrap();
+            migrate_v3(&conn).unwrap();
+            migrate_v4(&conn).unwrap();
+            migrate_v5(&conn).unwrap();
+            migrate_v6(&conn).unwrap();
+            migrate_v7(&conn).unwrap();
+            migrate_v8(&conn).unwrap();
+            migrate_v9(&conn).unwrap();
+            for (id, title, excerpt, body, lightweight, source_profile_json) in [
+                (
+                    "article",
+                    "A heading",
+                    Some("A heading."),
+                    "# A heading\n\nThe saved body starts here.",
+                    0,
+                    None,
+                ),
+                (
+                    "link",
+                    "Link",
+                    None,
+                    "[Open link](https://example.com)",
+                    1,
+                    None,
+                ),
+                (
+                    "social",
+                    "Social",
+                    None,
+                    "The post text",
+                    0,
+                    Some(r#"{"source_type":"social_post"}"#),
+                ),
+            ] {
+                conn.execute(
+                    "INSERT INTO readings
+                     (id, url, canonical_url, title, saved_at, source_hash,
+                      excerpt, body_text, lightweight, source_profile_json)
+                     VALUES (?1, 'https://example.com', 'https://example.com', ?2,
+                             '2026-09-22T18:42:00.000Z', 'sha256:existing', ?3, ?4, ?5, ?6)",
+                    rusqlite::params![id, title, excerpt, body, lightweight, source_profile_json],
+                )
+                .unwrap();
+            }
+        }
+
+        let conn = open(&db_path).unwrap();
+        let article: (Option<String>, Option<String>, Option<u32>) = conn
+            .query_row(
+                "SELECT excerpt, card_description, word_count FROM readings WHERE id='article'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(article.0.as_deref(), Some("A heading."));
+        assert_eq!(article.1.as_deref(), Some("The saved body starts here."));
+        assert_eq!(article.2, Some(7));
+        for id in ["link", "social"] {
+            let card: (Option<String>, Option<u32>) = conn
+                .query_row(
+                    "SELECT card_description, word_count FROM readings WHERE id=?1",
+                    [id],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(card, (None, None));
+        }
     }
 
     #[test]
@@ -725,7 +873,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -767,7 +915,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 9);
+        assert_eq!(version, 10);
 
         let values: (i64, i64, String) = conn
             .query_row(

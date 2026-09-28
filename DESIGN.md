@@ -138,8 +138,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   metadata; session-local streams fall back to the source page for playback.
 - **Quote:** selected text rendered as a left-aligned editorial typographic card. Its origin remains
   available in detail and the Inspector, but is omitted from the board card.
-- **Article:** first local image plus compact title/domain treatment, or a text-led card when no
-  preview exists.
+- **Article:** a local preview image when available, followed by a Palatino heading, saved or
+  file-derived description, source, and estimated reading time. Text-only article cards fit their
+  visible content; absent favicons leave no decorative placeholder. Lightweight links keep their
+  separate card treatment.
 - **Social post:** a source-aware article card with avatar, author/handle, full post text, provider,
   and the first local attachment or video poster. It remains in Articles and does not acquire an
   automatic tag.

@@ -49,7 +49,7 @@ struct OiaInspectorView: View {
                 .help(row.displayTitle)
                 .textSelection(.enabled)
             InspectorSource(row: row)
-            if isFullArticle, let readingTime = row.readingTimeLabel {
+            if row.isFullArticle, let readingTime = row.readingTimeLabel {
                 Label(readingTime, systemImage: "clock")
                     .labelStyle(.tightIcon)
                     .font(.system(size: 12))
@@ -66,7 +66,7 @@ struct OiaInspectorView: View {
         VStack(alignment: .leading, spacing: 22) {
             tags
             if let data = currentInspector {
-                if !isFullArticle, !data.colors.isEmpty { colors(data.colors) }
+                if !row.isFullArticle, !data.colors.isEmpty { colors(data.colors) }
                 if !data.labels.isEmpty { labels(data.labels) }
                 if !data.analysisAvailable, row.previewAsset != nil {
                     status("Image attributes aren’t available yet.")
@@ -161,10 +161,6 @@ struct OiaInspectorView: View {
 
     private var currentInspector: ReadingInspector? {
         loadedID == loadID ? inspector : nil
-    }
-
-    private var isFullArticle: Bool {
-        row.kind == .article && !row.lightweight && !row.isSocialPost
     }
 
     private var loadID: String {

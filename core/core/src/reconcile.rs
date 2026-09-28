@@ -65,14 +65,27 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
         Some(asset) => crate::visual_index::cached_projection(conn, &asset.content_hash)?,
         None => Default::default(),
     };
+    let card = crate::card_description::project_article_card(
+        r.metadata.kind,
+        r.metadata.lightweight,
+        r.metadata
+            .source_profile
+            .as_ref()
+            .map(|profile| profile.source_type.as_str()),
+        &r.metadata.title,
+        r.metadata.excerpt.as_deref(),
+        r.metadata.word_count,
+        &r.body,
+    );
     conn.execute(
         "INSERT OR REPLACE INTO readings
          (id, kind, lightweight, has_note, url, media_url, preview_asset, favicon_asset,
           theme_color, canonical_url, title, author, site, saved_at, read_at, archived,
           favorite, rating, source_hash, excerpt, word_count, lang, tags_json, tags_text,
           body_text, visual_asset_path, visual_asset_hash, visual_analyzer_version,
-          visual_terms, predominant_color, media_aspect_ratio, source_profile_json)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32)",
+          visual_terms, predominant_color, media_aspect_ratio, source_profile_json,
+          card_description)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)",
         params![
             r.metadata.id,
             r.metadata.kind.as_str(),
@@ -94,7 +107,7 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.metadata.rating,
             r.metadata.source_hash,
             r.metadata.excerpt,
-            r.metadata.word_count,
+            card.word_count,
             r.metadata.lang,
             tags,
             tags_text,
@@ -106,6 +119,7 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             projection.predominant_color,
             r.media_aspect_ratio,
             source_profile_json,
+            card.description,
         ],
     )?;
     Ok(())
@@ -124,6 +138,18 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
         Some(asset) => crate::visual_index::cached_projection(conn, &asset.content_hash)?,
         None => Default::default(),
     };
+    let card = crate::card_description::project_article_card(
+        r.metadata.kind,
+        r.metadata.lightweight,
+        r.metadata
+            .source_profile
+            .as_ref()
+            .map(|profile| profile.source_type.as_str()),
+        &r.metadata.title,
+        r.metadata.excerpt.as_deref(),
+        r.metadata.word_count,
+        &r.body,
+    );
     conn.execute(
         "UPDATE readings SET
          kind=?2, lightweight=?3, has_note=?4, url=?5, media_url=?6, preview_asset=?7,
@@ -132,7 +158,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
          source_hash=?19, excerpt=?20, word_count=?21, lang=?22, tags_json=?23,
          tags_text=?24, body_text=?25, visual_asset_path=?26, visual_asset_hash=?27,
          visual_analyzer_version=?28, visual_terms=?29, predominant_color=?30,
-         media_aspect_ratio=?31, source_profile_json=?32
+         media_aspect_ratio=?31, source_profile_json=?32, card_description=?33
          WHERE id=?1",
         params![
             r.metadata.id,
@@ -155,7 +181,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.metadata.rating,
             r.metadata.source_hash,
             r.metadata.excerpt,
-            r.metadata.word_count,
+            card.word_count,
             r.metadata.lang,
             tags,
             tags_text,
@@ -167,6 +193,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             projection.predominant_color,
             r.media_aspect_ratio,
             source_profile_json,
+            card.description,
         ],
     )?;
     Ok(())

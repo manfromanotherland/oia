@@ -9,6 +9,7 @@ enum BoardCardGeometryKey: Hashable {
     case media(Double)
     case quote(String)
     case social(String, Double?)
+    case fullArticle(String, String?, Double?)
     case previewArticle(String, Double)
     case textArticle(String, String?)
 }
@@ -23,6 +24,12 @@ extension ReadingRow {
         case .article:
             if let profile = socialPostProfile {
                 .social(socialPostText, profile.primaryAttachment.map { Double($0.cardAspectRatio) })
+            } else if isFullArticle {
+                .fullArticle(
+                    displayTitle,
+                    cardDescription,
+                    articlePreviewAspectRatio.map(Double.init)
+                )
             } else if previewAsset != nil {
                 .previewArticle(displayTitle, Double(articlePreviewAspectRatio ?? Self.socialPreviewAspectRatio))
             } else {

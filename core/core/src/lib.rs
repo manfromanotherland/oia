@@ -2,6 +2,7 @@
 
 uniffi::setup_scaffolding!();
 
+mod card_description;
 mod color_search;
 mod delete;
 pub mod ffi;

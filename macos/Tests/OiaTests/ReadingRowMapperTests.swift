@@ -36,6 +36,7 @@ final class ReadingRowMapperTests: XCTestCase {
             favorite: true,
             rating: 4,
             excerpt: "A short excerpt.",
+            cardDescription: "The card description.",
             wordCount: 1234,
             lang: "en",
             tags: ["rust", "local-first"]
@@ -57,6 +58,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.favorite, ffi.favorite)
         XCTAssertEqual(row.rating, ffi.rating)
         XCTAssertEqual(row.excerpt, ffi.excerpt)
+        XCTAssertEqual(row.cardDescription, ffi.cardDescription)
         XCTAssertEqual(row.wordCount, ffi.wordCount)
         XCTAssertEqual(row.lang, ffi.lang)
         XCTAssertEqual(row.tags, ffi.tags)
@@ -91,6 +93,7 @@ final class ReadingRowMapperTests: XCTestCase {
         ffi.author = nil
         ffi.site = nil
         ffi.excerpt = nil
+        ffi.cardDescription = nil
         ffi.wordCount = nil
         ffi.lang = nil
         ffi.tags = []
@@ -98,6 +101,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.author)
         XCTAssertNil(row.site)
         XCTAssertNil(row.excerpt)
+        XCTAssertNil(row.cardDescription)
         XCTAssertNil(row.wordCount)
         XCTAssertNil(row.lang)
         XCTAssertEqual(row.kind, .article)

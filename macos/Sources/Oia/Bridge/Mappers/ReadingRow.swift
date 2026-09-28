@@ -72,6 +72,8 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     /// Compatibility-only legacy metadata; no longer drives app behavior.
     var rating: UInt8
     var excerpt: String?
+    /// Board preview derived by the core from the saved article file.
+    var cardDescription: String?
     var wordCount: UInt32?
     var lang: String?
     var tags: [String]
@@ -103,6 +105,7 @@ extension ReadingRow {
         favorite = row.favorite
         rating = row.rating
         excerpt = row.excerpt
+        cardDescription = row.cardDescription
         wordCount = row.wordCount
         lang = row.lang
         tags = row.tags
@@ -146,6 +149,10 @@ extension ReadingRow {
 
     var isSocialPost: Bool {
         socialPostProfile != nil
+    }
+
+    var isFullArticle: Bool {
+        kind == .article && !lightweight && !isSocialPost
     }
 
     var socialPostText: String {

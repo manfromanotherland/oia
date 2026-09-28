@@ -52,6 +52,32 @@ final class OiaCardTextMetrics {
         return NSFont.systemFont(ofSize: preferred.pointSize, weight: .semibold)
     }()
 
+    // The board's full articles use the reader's default Palatino hierarchy.
+    // Link and social cards retain their own type and geometry.
+    private static let fullArticleBodySize = ReaderFontSize.medium.points
+    static let fullArticleTitleFont = NSFont(
+        name: ReaderFont.serifFaceName(weight: .bold),
+        size: fullArticleBodySize * 1.25
+    ) ?? NSFont.systemFont(ofSize: fullArticleBodySize * 1.25, weight: .bold)
+    static let fullArticleBodyFont = NSFont(
+        name: ReaderFont.serifFaceName(weight: .regular),
+        size: fullArticleBodySize
+    ) ?? NSFont.systemFont(ofSize: fullArticleBodySize)
+    static let fullArticleMetadataFont = NSFont(
+        name: ReaderFont.serifFaceName(weight: .regular),
+        size: fullArticleBodySize * 0.85
+    ) ?? NSFont.systemFont(ofSize: fullArticleBodySize * 0.85)
+    static let fullArticleLineSpacing = fullArticleBodySize * ReaderLineHeight.normal.extraLeadingMultiple
+    static let fullArticlePadding: CGFloat = 16
+    static let fullArticleSpacing: CGFloat = 10
+    static let fullArticleTitleLineLimit = 4
+    static let fullArticleDescriptionLineLimit = 5
+    static let fullArticleMetadataLineHeight = max(
+        14,
+        ceil(fullArticleMetadataFont.ascender - fullArticleMetadataFont.descender
+            + fullArticleMetadataFont.leading)
+    )
+
     private static let extraSmallQuoteFont = makeQuoteFont(ofSize: 16, opticalSize: 16)
     private static let smallQuoteFont = makeQuoteFont(ofSize: 18, opticalSize: 18)
     private static let mediumQuoteFont = makeQuoteFont(ofSize: 20, opticalSize: 20)
@@ -110,6 +136,7 @@ final class OiaCardTextMetrics {
     static let socialPostLineLimit = 10
 
     private var articleFooterHeights = WidthScopedHeightCache<String>()
+    private var fullArticleHeights = WidthScopedHeightCache<FullArticleHeightKey>()
     private var quoteHeights = WidthScopedHeightCache<QuoteHeightKey>()
     private var socialPostHeights = WidthScopedHeightCache<SocialPostHeightKey>()
 
@@ -125,6 +152,32 @@ final class OiaCardTextMetrics {
                 + measured
                 + Self.articleFooterSpacing
                 + Self.articleFooterSourceLineHeight
+        }
+    }
+
+    func fullArticleTextHeight(for title: String, description: String?, width: CGFloat) -> CGFloat {
+        let textWidth = max(1, width - Self.fullArticlePadding * 2)
+        let halfPointWidth = Int((textWidth * 2).rounded())
+        let visibleDescription = description.flatMap { $0.isEmpty ? nil : $0 }
+        let key = FullArticleHeightKey(title: title, description: visibleDescription)
+        return fullArticleHeights.value(for: key, width: halfPointWidth) {
+            let measuredWidth = CGFloat(halfPointWidth) / 2
+            let titleHeight = Self.measuredTextHeight(
+                title, width: measuredWidth, font: Self.fullArticleTitleFont,
+                lineLimit: Self.fullArticleTitleLineLimit
+            )
+            let descriptionHeight = visibleDescription.map {
+                Self.measuredTextHeight(
+                    $0, width: measuredWidth, font: Self.fullArticleBodyFont,
+                    lineSpacing: Self.fullArticleLineSpacing,
+                    lineLimit: Self.fullArticleDescriptionLineLimit
+                )
+            } ?? 0
+            return Self.fullArticlePadding * 2
+                + titleHeight
+                + descriptionHeight
+                + Self.fullArticleMetadataLineHeight
+                + Self.fullArticleSpacing * (visibleDescription == nil ? 1 : 2)
         }
     }
 
@@ -247,6 +300,36 @@ final class OiaCardTextMetrics {
         return min(maximumHeight, max(articleTitleLineHeight, ceil(bounds.height)))
     }
 
+    private static func measuredTextHeight(
+        _ text: String,
+        width: CGFloat,
+        font: NSFont,
+        lineSpacing: CGFloat = 0,
+        lineLimit: Int
+    ) -> CGFloat {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = lineSpacing
+        let bounds = (text as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesFontLeading, .usesLineFragmentOrigin],
+            attributes: [.font: font, .paragraphStyle: paragraphStyle]
+        )
+        // NSString's layout rectangle includes more vertical font padding than
+        // SwiftUI Text. Use it to count wraps, then size those lines using the
+        // Palatino line box SwiftUI actually renders.
+        let nativeLineHeight = ("Hg" as NSString).boundingRect(
+            with: CGSize(width: width, height: .greatestFiniteMagnitude),
+            options: [.usesFontLeading, .usesLineFragmentOrigin],
+            attributes: [.font: font, .paragraphStyle: paragraphStyle]
+        ).height
+        let nativeStep = nativeLineHeight + lineSpacing
+        let measuredLines = 1 + Int(max(0, (bounds.height - nativeLineHeight) / nativeStep).rounded())
+        let visibleLines = min(lineLimit, measuredLines)
+        let renderedLineHeight = (font.ascender - font.descender).rounded()
+        return ceil(CGFloat(visibleLines) * renderedLineHeight
+            + CGFloat(visibleLines - 1) * lineSpacing)
+    }
+
     private static func measuredSocialPostHeight(_ text: String, width: CGFloat) -> CGFloat {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.lineSpacing = socialPostLineSpacing
@@ -282,6 +365,11 @@ final class OiaCardTextMetrics {
     private struct QuoteHeightKey: Hashable {
         let text: String
         let cardSize: CardSize
+    }
+
+    private struct FullArticleHeightKey: Hashable {
+        let title: String
+        let description: String?
     }
 }
 

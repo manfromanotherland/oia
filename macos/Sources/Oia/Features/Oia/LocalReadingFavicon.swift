@@ -13,6 +13,7 @@ struct LocalReadingFavicon: View {
     var size: CGFloat = 14
     var maxPixel: CGFloat = 64
     var isVisible = true
+    var showsFallback = true
 
     @State private var image: NSImage?
 
@@ -23,10 +24,12 @@ struct LocalReadingFavicon: View {
                     .resizable()
                     .interpolation(.high)
                     .scaledToFit()
-            } else {
+            } else if showsFallback {
                 Image(systemName: "globe")
                     .font(.system(size: 10, weight: .regular))
                     .foregroundStyle(fallbackForeground)
+            } else {
+                Color.clear
             }
         }
         .frame(width: size, height: size)

@@ -154,6 +154,9 @@ pub struct ReadingRow {
     pub favorite: bool,
     pub rating: u8,
     pub excerpt: Option<String>,
+    /// Bounded board-only description derived from the saved excerpt or body.
+    /// The file's excerpt is preserved separately above.
+    pub card_description: Option<String>,
     pub word_count: Option<u32>,
     pub lang: Option<String>,
     pub tags: Vec<String>,
@@ -734,7 +737,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json
+                source_profile_json, card_description
          FROM readings
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tags_json) WHERE value = ?3))
@@ -908,14 +911,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json,
+                source_profile_json, card_description,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(26)?;
+        let body: String = row.get(27)?;
         Ok((row_data, body))
     })?;
 
@@ -981,7 +984,7 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json
+                r.source_profile_json, r.card_description
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tags_json) WHERE value = ?3))
@@ -1090,6 +1093,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         archived: row.get::<_, i32>(8)? != 0,
         favorite: row.get::<_, i32>(9)? != 0,
         excerpt: row.get(10)?,
+        card_description: row.get(26)?,
         word_count: row.get(11)?,
         lang: row.get(12)?,
         tags,
@@ -1236,6 +1240,53 @@ mod tests {
 
         let ffi_row: crate::ffi::FfiReadingRow = row.into();
         assert_eq!(ffi_row.source_profile_json.as_deref(), Some(json.as_str()));
+    }
+
+    #[test]
+    fn article_card_projection_flows_through_listing_search_and_get() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        let mut metadata = meta(&id, "https://example.com/essay", "The heading");
+        metadata.excerpt = Some("The heading.".into());
+        write_reading(
+            &lib,
+            metadata,
+            "# The heading\n\nOpening saved prose explains the article.".into(),
+        )
+        .unwrap();
+        rebuild(&conn, &lib).unwrap();
+
+        let listed = list_readings(&conn, &ListOptions::default()).unwrap();
+        assert_eq!(listed.len(), 1);
+        let row = &listed[0];
+        assert_eq!(row.excerpt.as_deref(), Some("The heading."));
+        assert_eq!(
+            row.card_description.as_deref(),
+            Some("Opening saved prose explains the article.")
+        );
+        assert_eq!(row.word_count, Some(8));
+
+        let searched = list_readings(
+            &conn,
+            &ListOptions {
+                query: Some("Opening".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(searched[0].card_description, row.card_description);
+
+        let (fetched, body) = get_reading(&conn, &id).unwrap().unwrap();
+        assert_eq!(fetched.card_description, row.card_description);
+        assert!(body.starts_with("# The heading"));
+        let ffi: crate::ffi::FfiReadingRow = fetched.into();
+        assert_eq!(ffi.card_description, row.card_description);
+
+        let saved =
+            crate::parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap()).unwrap();
+        assert_eq!(saved.metadata.excerpt.as_deref(), Some("The heading."));
+        assert_eq!(saved.metadata.word_count, None);
     }
 
     #[test]
@@ -1909,11 +1960,11 @@ mod tests {
         short.word_count = Some(200);
         write_reading(&lib, short, "body".into()).unwrap();
 
-        // No word_count set -> ranks last regardless of direction.
+        // No saved count or body text to derive one -> ranks last.
         write_reading(
             &lib,
             meta(&new_id(), "https://c.com", "Unknown"),
-            "body".into(),
+            String::new(),
         )
         .unwrap();
 

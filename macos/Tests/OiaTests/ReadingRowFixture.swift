@@ -31,6 +31,7 @@ func makeReadingRow(
         favorite: favorite,
         rating: 0,
         excerpt: nil,
+        cardDescription: nil,
         wordCount: wordCount,
         lang: nil,
         tags: [],

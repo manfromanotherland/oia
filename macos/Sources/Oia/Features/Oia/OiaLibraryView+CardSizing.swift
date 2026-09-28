@@ -22,6 +22,14 @@ extension OiaLibraryView {
                     attachmentAspectRatio: profile.primaryAttachment?.cardAspectRatio
                 )
             }
+            if row.isFullArticle {
+                let textHeight = cardTextMetrics.fullArticleTextHeight(
+                    for: row.displayTitle,
+                    description: row.cardDescription,
+                    width: width
+                )
+                return textHeight + (row.articlePreviewHeight(for: width) ?? 0)
+            }
             if row.previewAsset != nil {
                 let previewHeight = row.articlePreviewHeight(for: width)
                     ?? width / ReadingRow.socialPreviewAspectRatio
