@@ -386,9 +386,10 @@ At the top of the scrolling reader, each article shows:
   edits, so managing tags does not reflow the article header.
 - The header has enough space below it to start the body clearly, without a decorative divider.
 
-The leading inspector shows estimated reading time for full articles, in a quiet secondary style
-beside the source and save date. Its word count is available on hover. Article bodies show links in
-neutral underlined text in both the selectable text run and image-bearing blocks.
+The leading inspector is a full-height sidebar with a slightly darker surface and no border. It shows
+estimated reading time for full articles, in a quiet secondary style beside the source and save date.
+Its word count is available on hover. Article bodies show links in neutral underlined text in both
+the selectable text run and image-bearing blocks.
 
 ### Text selection
 

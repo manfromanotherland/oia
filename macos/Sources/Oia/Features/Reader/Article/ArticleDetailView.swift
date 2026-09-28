@@ -85,13 +85,13 @@ struct ArticleDetailView: View {
             await load(id: selectedID, contentGeneration: generation)
         }
         .toolbar { toolbarItems }
-        // The lightbox's backdrop is ordinary content, so the titlebar's own
-        // material sits above it and leaves a lit band across the top of the zoom.
-        // Dropping that material while a zoom is up lets the backdrop — which
-        // already ignores the safe area — run the window's full height. The bar
-        // itself stays put (search, card size, and board filters keep working); only
-        // its background steps aside, and it returns when the lightbox closes.
-        .toolbarBackground(imageZoom.target == nil ? .automatic : .hidden, for: .windowToolbar)
+        // The reader's toolbar material stays hidden when the overlay supplies
+        // its own chrome or a figure opens in the full-window lightbox. Otherwise
+        // that material would cover the sidebar or the zoom backdrop at the top.
+        .toolbarBackground(
+            showsToolbar && imageZoom.target == nil ? .automatic : .hidden,
+            for: .windowToolbar
+        )
         .inspector(isPresented: $appState.showHighlights) {
             HighlightsInspector(readingId: appState.selectedId)
                 .inspectorColumnWidth(min: 220, ideal: 280, max: 420)

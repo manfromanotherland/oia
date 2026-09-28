@@ -4,25 +4,34 @@ import AppKit
 import XCTest
 
 final class InspectorJourney: UITestCase {
+    func testSidebarLayoutAndCollapse() throws {
+        try launchApp(articles: Fixtures.standardCorpus)
+        list.open(Fixtures.Ids.minimal)
+
+        let inspector = app.byId(A11y.Inspector.panel)
+        let toggle = app.byId(A11y.Inspector.toggle)
+        let close = app.byId(A11y.Detail.close)
+        XCTAssertTrue(inspector.waitExists())
+
+        let windowMidX = app.windows.firstMatch.frame.midX
+        XCTAssertLessThan(inspector.frame.midX, windowMidX, "Inspector is on the left")
+        XCTAssertLessThan(toggle.frame.midX, windowMidX, "Inspector toggle is on the left")
+        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, windowMidX, "Navigation is on the left")
+        XCTAssertGreaterThan(close.frame.midX, windowMidX, "Close stays on the right")
+        capture("Full-height sidebar inspector")
+
+        toggle.click()
+        XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
+        toggle.click()
+        XCTAssertTrue(inspector.waitExists(), "Inspector expands")
+    }
+
     func testFileFactsTagsAndColourSearch() throws {
         let cream = try seedImages()
         relaunchApp { $0.pinnedDefaults = ["appearanceMode": "dark", "showsReadingInspector": "1"] }
         XCTAssertTrue(list.waitForRowCount(2))
         list.open(cream)
         XCTAssertTrue(app.byId(A11y.Inspector.tabs).waitExists())
-        let inspector = app.byId(A11y.Inspector.panel)
-        let toggle = app.byId(A11y.Inspector.toggle)
-        let close = app.byId(A11y.Detail.close)
-        let windowMidX = app.windows.firstMatch.frame.midX
-        XCTAssertLessThan(inspector.frame.midX, windowMidX, "Inspector is on the left")
-        XCTAssertLessThan(toggle.frame.midX, windowMidX, "Inspector toggle is on the left")
-        XCTAssertLessThan(app.byId(A11y.Detail.next).frame.midX, windowMidX, "Navigation is on the left")
-        XCTAssertLessThan(toggle.frame.midX, close.frame.midX, "Inspector toggle is left of Close")
-        XCTAssertGreaterThan(close.frame.midX, windowMidX, "Close stays on the right")
-        toggle.click()
-        XCTAssertTrue(inspector.waitDisappears(), "Inspector collapses")
-        toggle.click()
-        XCTAssertTrue(inspector.waitExists(), "Inspector expands")
         XCTAssertTrue(app.staticTexts["Your tags"].exists)
         XCTAssertFalse(app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'cuttings-asset:'")

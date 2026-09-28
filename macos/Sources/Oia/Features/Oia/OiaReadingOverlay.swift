@@ -20,6 +20,7 @@ struct OiaReadingOverlay: View {
             .navigationTitle(row.displayTitle)
             .navigationBarBackButtonHidden(true)
             .toolbar { detailToolbar }
+            .toolbarBackground(.hidden, for: .windowToolbar)
             .focusedSceneValue(\.detailNavigationActions, detailNavigationActions)
             .onExitCommand {
                 guard !appState.isEditingText else { return }
@@ -33,8 +34,10 @@ struct OiaReadingOverlay: View {
                 OiaInspectorView(row: row, onEditTags: onEditTags, onSearch: searchFromInspector)
                     .frame(width: 320)
                     .frame(maxHeight: .infinity)
-                    .background(Color(nsColor: .controlBackgroundColor))
-                Divider()
+                    .background {
+                        OiaTheme.inspectorSidebarSurface
+                            .ignoresSafeArea(.container, edges: .top)
+                    }
             }
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -59,6 +62,10 @@ struct OiaReadingOverlay: View {
 
         ToolbarItem(placement: .navigation) {
             previousNextControl
+        }
+
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
         }
 
         ToolbarItem(placement: .primaryAction) {

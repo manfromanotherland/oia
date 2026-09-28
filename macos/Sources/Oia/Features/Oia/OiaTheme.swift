@@ -84,6 +84,7 @@ enum OiaTheme {
     static let card = Color(nsColor: .controlBackgroundColor)
     static let shellSurface = semanticSurface(lightBlack: 0.08, darkBlack: 0.25)
     static let boardSurface = semanticSurface(lightBlack: 0.06, darkBlack: 0.12)
+    static let inspectorSidebarSurface = semanticSurface(lightBlack: 0.10, darkBlack: 0.16)
     static let textCardSurface = semanticSurface(darkWhite: 0.05)
     static let border = Color(nsColor: .separatorColor)
 
