@@ -76,17 +76,17 @@ struct OiaReadingOverlay: View {
             .accessibilityIdentifier(A11y.Inspector.toggle)
         }
 
-        ToolbarItem(placement: .navigation) {
-            previousNextControl
-        }
+        ToolbarItem(placement: .principal) {
+            HStack(spacing: 8) {
+                Button(action: onClose) {
+                    Label("Close Detail", systemImage: "xmark")
+                }
+                .help("Close detail (Escape)")
+                .accessibilityIdentifier(A11y.Detail.close)
+                .keyboardShortcut(.cancelAction)
 
-        ToolbarItem(placement: .navigation) {
-            Button(action: onClose) {
-                Label("Close Detail", systemImage: "xmark")
+                previousNextControl
             }
-            .help("Close detail (Escape)")
-            .accessibilityIdentifier(A11y.Detail.close)
-            .keyboardShortcut(.cancelAction)
         }
     }
 
