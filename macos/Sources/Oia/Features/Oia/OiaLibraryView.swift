@@ -335,7 +335,7 @@ extension OiaLibraryView {
                     action: moveSelection
                 )
                 .background {
-                    BoardEscapeMonitor {
+                    EscapeKeyMonitor {
                         guard presentedReading == nil,
                               !appState.isEditingText,
                               !appState.boardSelection.isEmpty else { return false }

@@ -23,6 +23,13 @@ struct OiaReadingOverlay: View {
             .navigationBarBackButtonHidden(true)
             .toolbarBackground(.hidden, for: .windowToolbar)
             .focusedSceneValue(\.detailNavigationActions, detailNavigationActions)
+            .background {
+                EscapeKeyMonitor {
+                    guard !appState.isEditingText else { return false }
+                    onClose()
+                    return true
+                }
+            }
             .onExitCommand {
                 guard !appState.isEditingText else { return }
                 onClose()

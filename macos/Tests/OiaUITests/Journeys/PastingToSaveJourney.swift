@@ -117,6 +117,9 @@ final class PastingToSaveJourney: UITestCase {
             "saved local video becomes playable after its source is deleted"
         )
         XCTAssertFalse(app.byId(A11y.Detail.videoUnavailable).exists)
+        app.byId(A11y.Detail.videoPlayer).click()
+        keyboard.escape()
+        XCTAssertTrue(app.byId(A11y.List.rows).waitExists(), "Escape closes the video detail")
     }
 
     private var articleFiles: [URL] {

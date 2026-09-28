@@ -93,10 +93,9 @@ extension OiaLibraryView {
     }
 }
 
-/// Escape belongs to the board even when a card or the scroll view is the
-/// first responder. A local monitor keeps text fields and other windows free
-/// to handle their own Escape presses.
-struct BoardEscapeMonitor: NSViewRepresentable {
+/// Escape reaches the active surface even when a child AppKit view, such as a
+/// video player, is the first responder. Other windows keep their own key events.
+struct EscapeKeyMonitor: NSViewRepresentable {
     let onEscape: () -> Bool
 
     func makeNSView(context: Context) -> EscapeView {
