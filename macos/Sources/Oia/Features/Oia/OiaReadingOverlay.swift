@@ -48,23 +48,7 @@ struct OiaReadingOverlay: View {
         }
 
         ToolbarItem(placement: .primaryAction) {
-            ControlGroup {
-                Button { onMove(-1) } label: {
-                    Label("Previous item", systemImage: "chevron.left")
-                }
-                .help("Previous item (Left Arrow or K)")
-                .accessibilityIdentifier(A11y.Detail.previous)
-                .keyboardShortcut(.leftArrow, modifiers: [])
-                .disabled(!canMovePrevious || appState.isEditingText)
-
-                Button { onMove(1) } label: {
-                    Label("Next item", systemImage: "chevron.right")
-                }
-                .help("Next item (Right Arrow or J)")
-                .accessibilityIdentifier(A11y.Detail.next)
-                .keyboardShortcut(.rightArrow, modifiers: [])
-                .disabled(!canMoveNext || appState.isEditingText)
-            }
+            previousNextControl
         }
 
         if #available(macOS 26.0, *) {
@@ -96,6 +80,44 @@ struct OiaReadingOverlay: View {
             .help(showsInspector ? "Hide inspector" : "Show inspector")
             .accessibilityIdentifier(A11y.Inspector.toggle)
         }
+    }
+
+    @ViewBuilder
+    private var previousNextControl: some View {
+        if #available(macOS 26.0, *) {
+            previousNextButtons.glassEffect(.regular, in: Capsule())
+        } else {
+            previousNextButtons.background(.regularMaterial, in: Capsule())
+        }
+    }
+
+    private var previousNextButtons: some View {
+        HStack(spacing: 0) {
+            Button { onMove(-1) } label: {
+                Image(systemName: "chevron.left")
+                    .frame(width: 36, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Previous item")
+            .help("Previous item (Left Arrow or K)")
+            .accessibilityIdentifier(A11y.Detail.previous)
+            .keyboardShortcut(.leftArrow, modifiers: [])
+            .disabled(!canMovePrevious || appState.isEditingText)
+
+            Divider().frame(height: 18)
+
+            Button { onMove(1) } label: {
+                Image(systemName: "chevron.right")
+                    .frame(width: 36, height: 30)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Next item")
+            .help("Next item (Right Arrow or J)")
+            .accessibilityIdentifier(A11y.Detail.next)
+            .keyboardShortcut(.rightArrow, modifiers: [])
+            .disabled(!canMoveNext || appState.isEditingText)
+        }
+        .buttonStyle(.plain)
     }
 
     private var detailNavigationActions: DetailNavigationActions {
