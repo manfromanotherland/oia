@@ -600,7 +600,13 @@ public struct LazyLayoutView<Element, ID: Hashable & Sendable, Layout: LazyLayou
             markInitialRequestConsumed(servicedToken)
             pendingIsInitial = false
         }
-        scroll(toContentPlaneY: y)
+        scroll(toContentPlaneY: y, animated: target.animated)
+        if target.animated {
+            // Keep the current cells alive while SwiftUI reports each animated
+            // viewport position. Adopting the destination here would discard
+            // them before the first animation frame.
+            return true
+        }
         // Adopt the destination locally before the window is resolved. `scrollTo`
         // is not synchronous, so without this the following `updateWindow()` would
         // build the *new* offset's neighbourhood at the *old* offset — for a small
@@ -629,8 +635,14 @@ public struct LazyLayoutView<Element, ID: Hashable & Sendable, Layout: LazyLayou
     /// Anchoring writes through here too, and always did the same thing: its
     /// adjustment is a delta, so any constant offset between the two spaces would
     /// have cancelled anyway.
-    private func scroll(toContentPlaneY y: Double) {
-        // The whole point is that this does not look like motion.
+    private func scroll(toContentPlaneY y: Double, animated: Bool = false) {
+        if animated {
+            withAnimation(.easeInOut(duration: 0.45)) {
+                scrollPosition.scrollTo(y: y)
+            }
+            return
+        }
+        // Anchor corrections and ordinary requests must not look like motion.
         var transaction = Transaction()
         transaction.disablesAnimations = true
         withTransaction(transaction) {

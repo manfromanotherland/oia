@@ -234,6 +234,33 @@
 
         // MARK: - 3. Repeated requests
 
+        @MainActor
+        func testAnimatedRequestMovesThroughIntermediateViewports() throws {
+            let model = Model(
+                makeItems(0 ..< 3000),
+                position: LazyLayoutPosition(initiallyScrolledTo: 1000)
+            )
+            let recorder = Recorder()
+            let window = host(model, recorder)
+            defer { window.close() }
+
+            let scroll = try XCTUnwrap(scrollView(in: window))
+            let startingOffset = scroll.contentView.bounds.origin.y
+            XCTAssertGreaterThan(startingOffset, 0)
+
+            model.position.scrollTo(id: 0, animated: true)
+            pump(0.12)
+
+            let intermediateOffset = scroll.contentView.bounds.origin.y
+            XCTAssertGreaterThan(intermediateOffset, 0, "the scroll jumped to the top")
+            XCTAssertLessThan(intermediateOffset, startingOffset, "the scroll did not move")
+            XCTAssertFalse(recorder.active.isEmpty, "intermediate viewport lost its cells")
+
+            pump(0.5)
+            XCTAssertLessThan(scroll.contentView.bounds.origin.y, 40)
+            XCTAssertTrue(recorder.active.keys.contains(0))
+        }
+
         /// **This test fails without the generation counter.** The second request
         /// is equal to the first by value, so a container comparing only the target
         /// would ignore it — which is exactly the case where the user has scrolled

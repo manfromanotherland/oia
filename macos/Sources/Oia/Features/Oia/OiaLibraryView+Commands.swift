@@ -49,7 +49,7 @@ extension OiaLibraryView {
 
     func scrollBoardToTop() {
         guard presentedReading == nil, let firstID = appState.readings.first?.id else { return }
-        boardPosition.scrollTo(id: firstID, anchor: .top)
+        boardPosition.scrollTo(id: firstID, anchor: .top, animated: !accessibilityReduceMotion)
     }
 
     static let boardSpacing: CGFloat = 18

@@ -120,6 +120,7 @@ public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     struct Target: Equatable, Sendable {
         let id: ID
         let anchor: ScrollAnchor
+        let animated: Bool
     }
 
     private(set) var target: Target?
@@ -173,7 +174,7 @@ public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     /// back to a deep link they have already read past. Call
     /// ``scrollTo(id:anchor:)`` if you want to go there again.
     public init(initiallyScrolledTo id: ID, anchor: ScrollAnchor = .top) {
-        target = Target(id: id, anchor: anchor)
+        target = Target(id: id, anchor: anchor, animated: false)
         token = nextScrollRequestToken()
         isInitialRequest = true
     }
@@ -186,8 +187,8 @@ public struct LazyLayoutPosition<ID: Hashable & Sendable>: Equatable, Sendable {
     /// some unrelated change happens to introduce that id. If your data loads in
     /// pages, re-issue the request when the page arrives; calling this again
     /// always re-fires.
-    public mutating func scrollTo(id: ID, anchor: ScrollAnchor = .top) {
-        target = Target(id: id, anchor: anchor)
+    public mutating func scrollTo(id: ID, anchor: ScrollAnchor = .top, animated: Bool = false) {
+        target = Target(id: id, anchor: anchor, animated: animated)
         token = nextScrollRequestToken()
         isInitialRequest = false
     }
