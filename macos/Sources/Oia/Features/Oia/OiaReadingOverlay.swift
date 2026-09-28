@@ -76,18 +76,26 @@ struct OiaReadingOverlay: View {
             .accessibilityIdentifier(A11y.Inspector.toggle)
         }
 
-        // Reserve the inspector's titlebar width without drawing glass over it.
-        if #available(macOS 26.0, *) {
+        // Reserve the inspector's titlebar width only while it is visible.
+        if showsInspector {
+            if #available(macOS 26.0, *) {
+                ToolbarItem(placement: .navigation) {
+                    Color.clear.frame(width: 180, height: 1)
+                        .accessibilityHidden(true)
+                }
+                .sharedBackgroundVisibility(.hidden)
+            } else {
+                ToolbarItem(placement: .navigation) {
+                    Color.clear.frame(width: 180, height: 1)
+                        .accessibilityHidden(true)
+                }
+            }
+        } else if #available(macOS 26.0, *) {
             ToolbarItem(placement: .navigation) {
-                Color.clear.frame(width: 180, height: 1)
+                Color.clear.frame(width: 8, height: 1)
                     .accessibilityHidden(true)
             }
             .sharedBackgroundVisibility(.hidden)
-        } else {
-            ToolbarItem(placement: .navigation) {
-                Color.clear.frame(width: 180, height: 1)
-                    .accessibilityHidden(true)
-            }
         }
 
         ToolbarItem(placement: .navigation) {
