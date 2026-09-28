@@ -38,12 +38,13 @@ struct OiaLibraryView: View {
                     overlay
                 }
         }
-        .toolbar {
-            if presentedReading != nil {
-                ToolbarItem(placement: .navigation) {
-                    inspectorToggle
-                }
-            }
+        .background {
+            ReadingSidebarTitlebarAccessory(
+                isPresented: presentedReading != nil,
+                showsInspector: showsInspector,
+                onToggle: toggleInspector
+            )
+            .frame(width: 0, height: 0)
         }
         .sheet(isPresented: tagSheetPresented) {
             tagPicker
@@ -70,21 +71,12 @@ private struct SearchQueryChangeModifier: ViewModifier {
 }
 
 extension OiaLibraryView {
-    private var inspectorToggle: some View {
-        Button {
-            // Keep the sidebar change out of the toolbar click transaction.
-            DispatchQueue.main.async {
-                withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.26)) {
-                    showsInspector.toggle()
-                }
+    private func toggleInspector() {
+        DispatchQueue.main.async {
+            withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.26)) {
+                showsInspector.toggle()
             }
-        } label: {
-            Label("Toggle Sidebar", systemImage: "sidebar.leading")
         }
-        .labelStyle(.iconOnly)
-        .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
-        .accessibilityIdentifier(A11y.Inspector.toggle)
-        .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
     }
 
     private var layeredSurface: some View {
@@ -578,5 +570,110 @@ private struct ScrollToTopGlass: ViewModifier {
             content.background(.regularMaterial, in: shape)
                 .overlay(shape.strokeBorder(.primary.opacity(0.08)))
         }
+    }
+}
+
+private struct ReadingSidebarTitlebarAccessory: NSViewRepresentable {
+    let isPresented: Bool
+    let showsInspector: Bool
+    let onToggle: () -> Void
+
+    func makeNSView(context: Context) -> ReadingSidebarTitlebarAnchor {
+        ReadingSidebarTitlebarAnchor()
+    }
+
+    func updateNSView(_ view: ReadingSidebarTitlebarAnchor, context: Context) {
+        view.isPresented = isPresented
+        view.showsInspector = showsInspector
+        view.onToggle = onToggle
+        view.sync()
+    }
+
+    static func dismantleNSView(_ view: ReadingSidebarTitlebarAnchor, coordinator: ()) {
+        view.detach()
+    }
+}
+
+private final class ReadingSidebarTitlebarAnchor: NSView {
+    var isPresented = false
+    var showsInspector = true
+    var onToggle: (() -> Void)?
+
+    private weak var attachedWindow: NSWindow?
+    private var controller: NSTitlebarAccessoryViewController?
+    private var hostingView: NSHostingView<ReadingSidebarTitlebarButton>?
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        sync()
+    }
+
+    func sync() {
+        if attachedWindow !== window {
+            detach()
+        }
+        guard isPresented, let window else {
+            detach()
+            return
+        }
+        if let hostingView {
+            hostingView.rootView = button
+            return
+        }
+
+        let hostingView = NSHostingView(rootView: button)
+        hostingView.frame = NSRect(x: 0, y: 0, width: 44, height: 44)
+        let controller = NSTitlebarAccessoryViewController()
+        controller.layoutAttribute = .left
+        controller.view = hostingView
+        window.addTitlebarAccessoryViewController(controller)
+        self.attachedWindow = window
+        self.controller = controller
+        self.hostingView = hostingView
+    }
+
+    func detach() {
+        if let attachedWindow, let controller,
+           let index = attachedWindow.titlebarAccessoryViewControllers.firstIndex(where: { $0 === controller }) {
+            attachedWindow.removeTitlebarAccessoryViewController(at: index)
+        }
+        attachedWindow = nil
+        controller = nil
+        hostingView = nil
+    }
+
+    private var button: ReadingSidebarTitlebarButton {
+        ReadingSidebarTitlebarButton(showsInspector: showsInspector) { [weak self] in
+            self?.onToggle?()
+        }
+    }
+}
+
+private struct ReadingSidebarTitlebarButton: View {
+    let showsInspector: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Group {
+            if #available(macOS 26.0, *) {
+                button.buttonStyle(.glass)
+            } else {
+                button.buttonStyle(.bordered)
+            }
+        }
+        .buttonBorderShape(.circle)
+        .controlSize(.small)
+        .frame(width: 44, height: 44)
+    }
+
+    private var button: some View {
+        Button(action: onToggle) {
+            Label("Toggle Sidebar", systemImage: "sidebar.leading")
+                .frame(width: 30, height: 30)
+        }
+        .labelStyle(.iconOnly)
+        .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
+        .accessibilityIdentifier(A11y.Inspector.toggle)
+        .accessibilityLabel(showsInspector ? "Hide Sidebar" : "Show Sidebar")
     }
 }
