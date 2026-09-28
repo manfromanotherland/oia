@@ -54,18 +54,22 @@ struct OiaReadingOverlay: View {
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
         ToolbarItem(placement: .navigation) {
-            Button {
-                // The toolbar's click transaction can suppress content animations.
-                // Toggle on the next main turn so the sidebar gets its own transaction.
-                DispatchQueue.main.async { toggleInspector() }
-            } label: {
-                Label(
-                    showsInspector ? "Hide Sidebar" : "Show Sidebar",
-                    systemImage: "sidebar.leading"
-                )
+            ControlGroup("Sidebar") {
+                Button {
+                    // The toolbar's click transaction can suppress content animations.
+                    // Toggle on the next main turn so the sidebar gets its own transaction.
+                    DispatchQueue.main.async { toggleInspector() }
+                } label: {
+                    Label(
+                        showsInspector ? "Hide Sidebar" : "Show Sidebar",
+                        systemImage: "sidebar.leading"
+                    )
+                }
+                .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
+                .accessibilityIdentifier(A11y.Inspector.toggle)
             }
-            .help("\(showsInspector ? "Hide" : "Show") sidebar (\(ShortcutCatalog.toggleSidebar.display))")
-            .accessibilityIdentifier(A11y.Inspector.toggle)
+            .controlGroupStyle(.navigation)
+            .labelStyle(.iconOnly)
         }
 
         ToolbarItem(placement: .navigation) {
