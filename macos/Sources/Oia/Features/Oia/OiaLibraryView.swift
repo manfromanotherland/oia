@@ -8,7 +8,7 @@ import UniformTypeIdentifiers
 
 struct OiaLibraryView: View {
     @Environment(AppState.self) var appState
-    @Environment(\.accessibilityReduceMotion) private var accessibilityReduceMotion
+    @Environment(\.accessibilityReduceMotion) var accessibilityReduceMotion
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.displayScale) private var displayScale
     @Environment(\.scenePhase) private var scenePhase
@@ -357,8 +357,13 @@ extension OiaLibraryView {
                         .accessibilityLabel("Scroll to Top")
                         .accessibilityIdentifier(A11y.List.scrollToTop)
                         .padding(24)
+                        .transition(.scale(scale: 0.7).combined(with: .opacity))
                     }
                 }
+                .animation(
+                    accessibilityReduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7),
+                    value: showsScrollToTop
+                )
             }
         }
     }
