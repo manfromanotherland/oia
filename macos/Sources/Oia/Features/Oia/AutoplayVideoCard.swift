@@ -56,11 +56,6 @@ struct AutoplayVideoCard: View {
     }
 
     private var shouldAutoplay: Bool {
-        shouldRetainPlayback
-            && !scrollState.isScrolling
-    }
-
-    private var shouldRetainPlayback: Bool {
         autoplayEnabled
             && isInViewport
             && !reduceMotion
@@ -68,7 +63,7 @@ struct AutoplayVideoCard: View {
     }
 
     private var playbackTaskID: String {
-        "\(mediaKey):retain=\(shouldRetainPlayback):autoplay=\(shouldAutoplay):generation=\(contentGeneration)"
+        "\(mediaKey):autoplay=\(shouldAutoplay):generation=\(contentGeneration)"
     }
 
     private var mediaKey: String {
@@ -84,13 +79,9 @@ struct AutoplayVideoCard: View {
             loadedMediaKey = requestedMediaKey
         }
 
-        guard shouldRetainPlayback else {
-            pausePlayback()
-            releasePlayback()
-            return
-        }
         guard shouldAutoplay else {
             pausePlayback()
+            releasePlayback()
             return
         }
         guard await revalidatePlayback(requestedMediaKey: requestedMediaKey) else { return }

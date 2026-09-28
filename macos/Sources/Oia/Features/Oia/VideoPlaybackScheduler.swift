@@ -3,7 +3,7 @@
 import Foundation
 
 /// One scheduler per board, with cancellable FIFO admission and spaced preparation.
-/// A lease belongs to a retained player, so scrolling can pause without rebuilding it.
+/// A lease belongs to a player while its card remains in the viewport.
 @MainActor
 final class VideoPlaybackScheduler {
     private let limit: Int
