@@ -4,6 +4,39 @@ import SwiftUI
 
 enum ReaderFont: String, CaseIterable, Identifiable {
     case system, serif, mono
+
+    static let defaultChoice: ReaderFont = .serif
+    static let serifFamilyName = "Palatino"
+
+    static func serifFaceName(weight: Font.Weight, bold: Bool = false, italic: Bool = false) -> String {
+        let heavy = bold || weight == .semibold || weight == .bold
+            || weight == .heavy || weight == .black
+        return switch (heavy, italic) {
+        case (true, true): "Palatino-BoldItalic"
+        case (true, false): "Palatino-Bold"
+        case (false, true): "Palatino-Italic"
+        case (false, false): serifFamilyName
+        }
+    }
+
+    /// Use the installed Palatino faces for Serif so SwiftUI and AppKit agree on
+    /// the actual typeface rather than resolving the generic serif differently.
+    func swiftUIFont(size: CGFloat, weight: Font.Weight = .regular,
+                     bold: Bool = false, italic: Bool = false) -> Font
+    {
+        if self == .serif {
+            return .custom(Self.serifFaceName(weight: weight, bold: bold, italic: italic), size: size)
+        }
+        var font = Font.system(size: size, design: design).weight(weight)
+        if bold {
+            font = font.bold()
+        }
+        if italic {
+            font = font.italic()
+        }
+        return font
+    }
+
     var id: String {
         rawValue
     }
@@ -79,8 +112,7 @@ enum ReaderWidth: Int, CaseIterable, Identifiable {
 }
 
 /// Leading between body lines, as a CSS-style line-height multiple of the body
-/// size, in five even quarter-step stops from 1.25 to 2.25. Normal (1.75) is the
-/// long-standing default and the middle stop.
+/// size, in five stops from 1.2 to 2.0. Normal (1.5) is the middle stop.
 ///
 /// The raw values are names, not numbers, so a stop can be retuned later without
 /// resetting the choice every user has already saved — unlike `ReaderWidth`,
@@ -104,11 +136,11 @@ enum ReaderLineHeight: String, CaseIterable, Identifiable {
     /// Total line height as a multiple of the body point size.
     var multiple: CGFloat {
         switch self {
-        case .tight: 1.25
-        case .snug: 1.50
-        case .normal: 1.75
-        case .relaxed: 2.00
-        case .loose: 2.25
+        case .tight: 1.20
+        case .snug: 1.35
+        case .normal: 1.50
+        case .relaxed: 1.75
+        case .loose: 2.00
         }
     }
 

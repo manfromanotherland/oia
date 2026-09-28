@@ -23,20 +23,23 @@ enum InlineRenderer {
     struct FontContext {
         var size: CGFloat
         var weight: Font.Weight = .regular
-        var design: Font.Design = .default
+        var font: ReaderFont = .defaultChoice
+        var italic = false
 
-        static func body(_ theme: MarkdownTheme) -> FontContext {
-            FontContext(size: theme.bodySize, weight: .regular, design: theme.design)
+        static func body(_ theme: MarkdownTheme, italic: Bool = false) -> FontContext {
+            FontContext(size: theme.bodySize, weight: .regular, font: theme.font,
+                        italic: italic)
         }
 
         static func heading(_ level: Int, _ theme: MarkdownTheme) -> FontContext {
             FontContext(size: theme.headingSize(level),
                         weight: theme.headingWeight(level),
-                        design: theme.design)
+                        font: theme.font,
+                        italic: theme.headingIsItalic(level))
         }
 
         static func emphasized(_ theme: MarkdownTheme, weight: Font.Weight) -> FontContext {
-            FontContext(size: theme.bodySize, weight: weight, design: theme.design)
+            FontContext(size: theme.bodySize, weight: weight, font: theme.font)
         }
     }
 
@@ -69,17 +72,20 @@ enum InlineRenderer {
     /// Build an attributed string from a block node's inline children.
     /// `context` defaults to the body font; headings/table headers pass their own.
     static func attributed(_ markup: Markup, theme: MarkdownTheme,
-                           context: FontContext? = nil) -> AttributedString
+                           context: FontContext? = nil,
+                           italic: Bool = false) -> AttributedString
     {
         concat(markup.children, style: Style(),
-               context: context ?? .body(theme), theme: theme)
+               context: context ?? .body(theme, italic: italic), theme: theme)
     }
 
     /// Render a single inline node (the node itself, not just its children).
     static func inline(_ markup: Markup, theme: MarkdownTheme,
-                       context: FontContext? = nil) -> AttributedString
+                       context: FontContext? = nil,
+                       italic: Bool = false, strike: Bool = false) -> AttributedString
     {
-        render(markup, style: Style(), context: context ?? .body(theme), theme: theme)
+        render(markup, style: Style(strike: strike),
+               context: context ?? .body(theme, italic: italic), theme: theme)
     }
 
     /// Recursively collect the visible text of a node (e.g. an image's alt text).
@@ -154,16 +160,12 @@ enum InlineRenderer {
         var attrs = AttributeContainer()
         // Start from the context's base font (body size, or a heading's size and
         // weight) then layer inline emphasis on top so nested styles compose.
-        var font = code
-            ? Font.system(size: ctx.size * 0.9, design: .monospaced).weight(ctx.weight)
-            : Font.system(size: ctx.size, design: ctx.design).weight(ctx.weight)
-        if style.bold {
-            font = font.bold()
-        }
-        if style.italic {
-            font = font.italic()
-        }
-        attrs.font = font
+        attrs.font = (code ? ReaderFont.mono : ctx.font).swiftUIFont(
+            size: code ? ctx.size * 0.9 : ctx.size,
+            weight: ctx.weight,
+            bold: style.bold,
+            italic: style.italic || ctx.italic
+        )
         // Use explicit Text.LineStyle values so the attribute resolves to the
         // SwiftUI scope (a bare `.single` is ambiguous with Foundation's
         // NSUnderlineStyle).
@@ -175,7 +177,7 @@ enum InlineRenderer {
         }
         if let link = style.link {
             attrs.link = link
-            attrs.foregroundColor = .accentColor
+            attrs.foregroundColor = .primary
             attrs.underlineStyle = Text.LineStyle(pattern: .solid, color: nil)
         }
         return attrs

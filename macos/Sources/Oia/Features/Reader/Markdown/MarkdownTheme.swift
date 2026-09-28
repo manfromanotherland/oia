@@ -2,14 +2,13 @@
 
 import SwiftUI
 
-/// Derives every font, size, weight, and spacing value for the native Markdown
-/// reader from the user's typography settings. The scale follows Apple's
-/// Human Interface Guidelines: a clear six-level heading hierarchy, a generous
-/// reading measure (~680 pt by default), and asymmetric section spacing (more room above a
-/// heading than below it, so a heading binds to the text it introduces).
+/// Derives the native reader's type and spacing from the user's preferences.
+/// The default rhythm follows iA Writer's Classic preview: a serif text column,
+/// generous space between paragraphs, and a quiet heading hierarchy. The
+/// reader's font, size, width, and leading remain adjustable per device.
 ///
 /// All values are expressed *relative to the body size* so the whole document
-/// rescales when the reader picks Small … Extra Large. See DESIGN.md →
+/// rescales when the reader picks Small … Giant. See DESIGN.md →
 /// "Apple platform style guide" for the rationale behind each token.
 struct MarkdownTheme {
     let font: ReaderFont
@@ -43,10 +42,10 @@ struct MarkdownTheme {
         bodySize * lineHeight.extraLeadingMultiple
     }
 
-    /// Vertical gap between top-level blocks (~1em). Headings add extra space
-    /// *above* themselves on top of this (see `headingSpaceAbove`).
+    /// The open paragraph rhythm in the Classic preview. Lists override this
+    /// with compact item spacing; headings add extra space above themselves.
     var blockSpacing: CGFloat {
-        bodySize
+        bodySize * 1.5
     }
 
     /// The reader's measure, from the reader's chosen width. The Medium default
@@ -56,7 +55,7 @@ struct MarkdownTheme {
     }
 
     var bodyFont: Font {
-        .system(size: bodySize, design: design)
+        font.swiftUIFont(size: bodySize)
     }
 
     var codeFont: Font {
@@ -64,57 +63,51 @@ struct MarkdownTheme {
     }
 
     // ── Headings ────────────────────────────────────────────────────────────
-    // A modular type scale. Every one of the six levels is visually distinct:
-    // levels 1–2 are bold display sizes, 3–5 are semibold sub-headings, and
-    // level 6 is a small uppercase "eyebrow" in a muted color.
+    // A restrained hierarchy: titles and section headings change size only
+    // slightly. Lower levels distinguish themselves by weight and italic style.
 
     func headingSize(_ level: Int) -> CGFloat {
         switch level {
-        case 1: bodySize * 1.80
-        case 2: bodySize * 1.45
-        case 3: bodySize * 1.20
-        case 4: bodySize * 1.05
-        case 5: bodySize * 0.95
-        default: bodySize * 0.85 // h6 — eyebrow/overline
+        case 1: bodySize * 1.25
+        case 2: bodySize * 1.12
+        default: bodySize
         }
     }
 
     func headingWeight(_ level: Int) -> Font.Weight {
         switch level {
-        case 1, 2: .bold
+        case 1, 2, 3, 6: .bold
         default: .semibold
         }
     }
 
     func headingFont(_ level: Int) -> Font {
-        .system(size: headingSize(level), design: design).weight(headingWeight(level))
+        font.swiftUIFont(size: headingSize(level), weight: headingWeight(level),
+                         italic: headingIsItalic(level))
     }
 
-    /// Tracking (letter-spacing). Apple tightens large display titles and opens
-    /// up small uppercase labels for legibility.
+    /// Classic keeps the natural spacing of the chosen text face.
     func headingTracking(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: -0.5
-        case 2: -0.3
-        case 6: 0.6
-        default: 0
-        }
+        0
     }
 
-    /// Level 6 is rendered as a small uppercase eyebrow in secondary color.
-    func headingIsEyebrow(_ level: Int) -> Bool {
-        level >= 6
+    func headingIsItalic(_ level: Int) -> Bool {
+        level == 4 || level == 5
+    }
+
+    /// H6 sits on the same line as the following paragraph when one exists.
+    func headingIsRunIn(_ level: Int) -> Bool {
+        level == 6
     }
 
     /// Space *above* a heading. Larger for higher levels so major sections get a
     /// clear visual break; this is added on top of the inter-block `blockSpacing`.
     func headingSpaceAbove(_ level: Int) -> CGFloat {
         switch level {
-        case 1: bodySize * 1.7
-        case 2: bodySize * 1.3
-        case 3: bodySize * 1.0
-        case 4: bodySize * 0.8
-        default: bodySize * 0.6
+        case 1: bodySize * 1.0
+        case 2: bodySize * 0.9
+        case 3: bodySize * 0.7
+        default: bodySize * 0.45
         }
     }
 
@@ -122,12 +115,12 @@ struct MarkdownTheme {
 
     /// Gap between sibling list items (tighter than `blockSpacing`).
     var listItemSpacing: CGFloat {
-        bodySize * 0.5
+        bodySize * 0.18
     }
 
     /// Gap between the marker (bullet/number) and the item text.
     var listMarkerGap: CGFloat {
-        bodySize * 0.5
+        bodySize * 0.4
     }
 
     /// Reserved width for the marker column, giving a clean hanging indent.
@@ -136,23 +129,16 @@ struct MarkdownTheme {
         bodySize * (ordered ? 1.5 : 1.1)
     }
 
-    /// Bullet glyph for unordered lists, cycling by nesting depth.
+    /// Classic uses the same quiet bullet at every nesting depth; indentation
+    /// carries the hierarchy.
     func bullet(depth: Int) -> String {
-        switch depth % 3 {
-        case 0: "•"
-        case 1: "◦"
-        default: "▪"
-        }
+        "•"
     }
 
     // ── Block quote ─────────────────────────────────────────────────────────
 
-    var quoteBarWidth: CGFloat {
-        3
-    }
-
-    var quoteBarGap: CGFloat {
-        bodySize * 0.85
+    var quoteIndent: CGFloat {
+        bodySize * 2.1
     }
 
     var quoteInnerSpacing: CGFloat {
@@ -165,14 +151,10 @@ struct MarkdownTheme {
         14
     }
 
-    var codeCornerRadius: CGFloat {
-        8
-    }
-
     // ── Rules, images, captions ───────────────────────────────────────────────
 
     var ruleSpacing: CGFloat {
-        blockSpacing * 0.5
+        bodySize * 0.35
     }
 
     var imageCornerRadius: CGFloat {
@@ -188,7 +170,7 @@ struct MarkdownTheme {
     }
 
     var captionFont: Font {
-        .system(size: captionSize, design: design)
+        font.swiftUIFont(size: captionSize)
     }
 
     // ── Article chrome (header title and metadata) ───────────────────────────
@@ -206,9 +188,8 @@ struct MarkdownTheme {
         headingTracking(1)
     }
 
-    /// The metadata line (site · author · reading time · tags): a muted,
-    /// secondary size that follows the reader font, sized from the body.
+    /// The reading-time and tags line follows the reader font at a quieter size.
     var metadataFont: Font {
-        .system(size: bodySize * 0.85, design: design)
+        font.swiftUIFont(size: bodySize * 0.85)
     }
 }

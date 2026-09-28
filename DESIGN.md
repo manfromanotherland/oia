@@ -216,30 +216,32 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 ## Apple platform style guide — the reader
 
 > This section is **exclusive to the Apple (macOS) client** and is the source of truth for how a
-> saved article is rendered in the reader. It follows the
-> [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/typography):
-> a clear typographic hierarchy, a comfortable reading measure, asymmetric "section" spacing, and
-> native controls (text selection, Dynamic-Type-like sizing, semantic Light/Dark colors).
+> saved article is rendered in the reader. The visual reference is iA Writer's Classic Serif
+> preview: a quiet serif page, compact headings and lists, generous paragraph rhythm, and almost
+> no decorative chrome. Native selection, adjustable typography, and semantic Light/Dark colors
+> preserve the macOS reading experience.
 >
 > It is implemented natively with SwiftUI + [`swift-markdown`](https://github.com/apple/swift-markdown)
-> (no WebView). Every value below is expressed **relative to the reader's body size** so the whole
-> document rescales when the user changes the text size.
+> and AppKit text views (**no WebView**). Type sizes and most spacing follow the chosen body size;
+> the reading measure is an independent width preference.
 
 ### Where it lives
 
 | Concern | File |
 |---------|------|
-| All fonts / sizes / weights / spacing tokens | `Sources/Oia/Views/Markdown/MarkdownTheme.swift` |
-| Inline runs → styled `AttributedString` (bold, italic, code, links…) | `…/Markdown/InlineRenderer.swift` |
-| Block rendering (headings, lists, quotes, tables, code…) | `…/Markdown/MarkdownBlockView.swift` |
-| Images / figures + captions | `…/Markdown/AssetImageView.swift` |
-| Scroll container, reading measure, link handling | `…/Markdown/MarkdownDocumentView.swift` |
-| Article header chrome (title, metadata, tags) | `Sources/Oia/Views/ArticleDetailView.swift` |
+| Font and spacing tokens | `macos/Sources/Oia/Features/Reader/Markdown/MarkdownTheme.swift` |
+| Continuous text, headings, lists, and quotes | `macos/Sources/Oia/Features/Reader/Markdown/MarkdownTextRun.swift` and `AppKitInline.swift` |
+| Native text selection and layout | `macos/Sources/Oia/Features/Reader/Markdown/SelectableTextView.swift` and `ReaderTextView.swift` |
+| Images, code, tables, and image-bearing blocks | `macos/Sources/Oia/Features/Reader/Markdown/MarkdownBlockView.swift`, `InlineRenderer.swift`, and `AssetImageView.swift` |
+| Parsing, scroll container, and reading measure | `macos/Sources/Oia/Features/Reader/Markdown/MarkdownDocumentView.swift` |
+| Article title and metadata | `macos/Sources/Oia/Features/Reader/Article/ArticleHeaderView.swift` and `ArticleDetailView.swift` |
 
 ### Reader typography
 
-The body font is user-selectable (**System** = San Francisco, **Serif** = New York, **Monospace** =
-SF Mono) at four sizes — these are the per-device preferences described under *Settings / appearance*.
+**Serif** is the default reading face, using macOS Palatino to approach iA Writer Classic Serif's
+lighter print texture. The reader still offers
+**System** and **Monospace** in Settings › Typography. These are per-device preferences, as are the
+size, width, and line-height choices; they do not alter the saved article file.
 
 | Size option | Body point size |
 |-------------|-----------------|
@@ -247,26 +249,11 @@ SF Mono) at four sizes — these are the per-device preferences described under 
 | **Medium (default)** | **17 pt** |
 | Large | 19 pt |
 | Extra Large | 21 pt |
+| Huge | 23 pt |
+| Giant | 25 pt |
 
-Everything else is a multiple of this body size, so the document keeps its proportions at any size:
-
-| Token | Value (× body) | At 17 pt | Role |
-|-------|----------------|----------|------|
-| Line spacing | `0.55em` | ~9.4 pt | added leading → effective line-height ≈ **1.75** (Normal) |
-| Block spacing | `1.0em` | 17 pt | vertical gap between top-level blocks |
-| Content measure | `680 pt` (Medium) | — | optimal line length (~60–75 chars); content is centered |
-
-**Line height** and **content measure** are user-adjustable in Settings › Typography
-(`ReaderLineHeight`, `ReaderWidth`). The values above are the defaults, and each is the
-**middle stop** of its five, so the middle choice lands on the default.
-
-| Line height | Effective | Added leading (× body) |
-|-------------|-----------|------------------------|
-| Tight | 1.25 | `0.05em` |
-| Snug | 1.50 | `0.30em` |
-| **Normal (default)** | **1.75** | **`0.55em`** |
-| Relaxed | 2.00 | `0.80em` |
-| Loose | 2.25 | `1.05em` |
+The centered article title and body use the same measure. Increasing text size does not silently
+widen the column.
 
 | Width | Measure |
 |-------|---------|
@@ -276,68 +263,79 @@ Everything else is a multiple of this body size, so the document keeps its propo
 | Large | 800 pt |
 | Extra Large | 960 pt |
 
-The measure is a fixed point value, not a multiple of the body size, so bumping the
-text size doesn't silently widen the column too. The article header shares it, so the
-title stays flush with the body at every width.
+Normal line height is **1.5×** the body size. Top-level blocks have **1.5em** of separation, giving
+paragraphs a generous vertical pause. List items remain closely grouped, and headings sit closer
+to the paragraph they introduce than to the preceding text. The selectable text run and the
+SwiftUI blocks use the same spacing tokens so an image or code block does not change the rhythm.
+
+**Line height** and **content width** remain user-adjustable (`ReaderLineHeight`, `ReaderWidth`).
+Normal is the middle of five line-height stops; the other stops tighten or loosen leading without
+changing the font size. Width also has five stops, with Medium as the default.
+
+| Line height | Effective |
+|-------------|-----------|
+| Tight | 1.20× |
+| Snug | 1.35× |
+| **Normal (default)** | **1.50×** |
+| Relaxed | 1.75× |
+| Loose | 2.00× |
 
 ### Heading hierarchy
 
-The old reader left headings looking like body text — every inline run carried the body font, which
-overrode the heading font. The renderer now injects a per-heading **font context** so all six levels
-are visually distinct. Headings get more space **above** than below, so a heading visually *binds to
-the section it introduces* (a core HIG/typography principle) and major sections get a clear break.
+The hierarchy is intentionally restrained. Headings use the chosen reader face and weight, not a
+display typeface or uppercase eyebrow. Their added space goes mainly above them, keeping each
+heading connected to the text that follows.
 
-| Level | Size (× body) | At 17 pt | Weight | Tracking | Space above (× body) | Treatment |
-|-------|---------------|----------|--------|----------|----------------------|-----------|
-| **H1** | 1.80 | ~30.6 pt | Bold | −0.5 | 1.7em | page/section title |
-| **H2** | 1.45 | ~24.7 pt | Bold | −0.3 | 1.3em | major section |
-| **H3** | 1.20 | ~20.4 pt | Semibold | 0 | 1.0em | sub-section |
-| **H4** | 1.05 | ~17.9 pt | Semibold | 0 | 0.8em | minor heading |
-| **H5** | 0.95 | ~16.2 pt | Semibold | 0 | 0.6em | small heading |
-| **H6** | 0.85 | ~14.5 pt | Semibold | +0.6 | 0.6em | **uppercase eyebrow**, secondary color |
+| Level | Approximate scale | Treatment |
+|-------|-------------------|-----------|
+| H1 / article title | `1.25em` | bold in the chosen reader face, modestly larger than the body |
+| H2 | `1.12em` | bold, major section |
+| H3 | `1em` | bold |
+| H4–H5 | `1em` | semibold italic |
+| H6 | `1em` | bold run-in heading when a paragraph follows; preserve its written case |
 
-- **Tracking:** large display headings are tightened (Apple tightens large titles); the small H6
-  eyebrow is opened up and uppercased for legibility.
-- `Space above` is **added on top of** the 1em block spacing, so the gap above a heading is always
-  larger than the gap below it.
-- **The article title is the sole H1.** The header draws the title from the frontmatter `title` at
-  the H1 size; the extension demotes any body `#` to `##` (see library-format), so body headings
-  start at H2 and never duplicate the title.
+The article title comes from frontmatter and is the reading's primary heading. Browser captures
+demote a body `#` to `##` so the same title does not appear twice. Older or manually written files
+may still contain body H1s; they retain heading styling when parsed. An H6 inside an image-bearing
+quote or list stays on its own line in the SwiftUI fallback renderer.
 
 ### Lists
 
 | Aspect | Spec |
 |--------|------|
-| Gap between items | `0.5em` (tighter than the 1em block gap) |
-| Marker → text gap | `0.5em` |
-| Marker column | fixed hanging indent — `1.5em` (ordered) / `1.1em` (unordered/task), right-aligned |
-| Unordered bullets | cycle by nesting depth: **`•` → `◦` → `▪`**, in secondary color |
-| Ordered markers | `1.`, `2.`, … with **monospaced digits**, secondary color |
-| Task lists (GFM) | `☑` (`checkmark.square.fill`, **accent**) / `☐` (`square`, secondary) |
-| Nesting | nested lists indent one marker column and step the bullet/number down a level |
+| Gap between items | `0.18em`, clearly less than the `1.5em` gap between paragraphs |
+| Marker → text gap | `0.4em`, with wrapped lines aligned to the item text |
+| Marker column | hanging indent; `1.5em` ordered / `1.1em` unordered, with ordered numbers aligned neatly |
+| Unordered bullets | the same quiet, neutral bullet at each depth; indentation shows nesting |
+| Ordered markers | `1.`, `2.`, … in a neutral color |
+| Task lists (GFM) | outlined, neutral checked and unchecked squares; the checked state is legible without an accent fill |
+| Nesting | each level steps in while preserving the compact item rhythm |
 | Rich item content | a list item may contain multiple paragraphs, code, quotes, or nested lists |
 
 ### Block quotes
 
-- A **3 pt rounded vertical bar** (secondary, 40% opacity) with a `0.85em` gap to the quoted content.
-- Quoted text is rendered in the **secondary** color; inner blocks use `0.6em` spacing.
+- Set quoted prose in *italics* at the body scale with a **2.1em** left indent. It remains readable
+  in the normal text color and has **no vertical bar** or colored panel.
+- Keep the quote's inner paragraphs relatively close together; leave a paragraph-sized pause around
+  the whole quote.
 - Quotes may nest and may contain any block (paragraphs, lists, code, even other quotes).
 
 ### Code
 
 | Kind | Spec |
 |------|------|
-| Inline code | monospaced at `0.9em`, subtle `secondary @ 15%` background |
-| Code block | monospaced at `0.9em` on a `secondary @ 10%` surface, **corner radius 8**, padding 14, **horizontal scroll** (no wrapping) |
-| Language label | when a fence declares a language it's shown lowercased above the block in the caption style |
+| Inline code | monospaced, close to the body size, with restrained neutral emphasis |
+| Code block | monospaced on a flat, lightly separated surface; no rounded card treatment; horizontal scroll for long lines |
+| Language label | retained in the Markdown source but not displayed in the reader |
 
 > **Not yet:** syntax highlighting — code is rendered as uniform monospaced text.
 
 ### Tables (GFM)
 
-- Rendered with a SwiftUI `Grid`; **header row is semibold** with a divider beneath it.
+- Rendered with a SwiftUI `Grid`. Thin horizontal rules sit above the header, below the header, and
+  below the table; there are no vertical dividers. Header labels are uppercase and bold.
 - **Column alignment is honored** — left / center / right per the table's `:---`, `:--:`, `---:`.
-- Horizontal spacing 16 pt, vertical 8 pt; cells support full inline styling and text selection.
+- Keep cell padding modest; body cells support inline styling and text selection.
 
 ### Images & figures
 
@@ -355,57 +353,45 @@ the section it introduces* (a core HIG/typography principle) and major sections 
 
 | Element | Rendering |
 |---------|-----------|
-| **Bold** (`**`/`__`) | semibold/bold run |
+| **Bold** (`**`/`__`) | bold run in the chosen reading face |
 | *Italic* (`*`/`_`) | italic run |
 | ~~Strikethrough~~ (GFM) | strikethrough line |
-| `Inline code` | monospaced + tinted background (see Code) |
-| [Links](#) | **accent** color + underline; open in the **system browser** |
+| `Inline code` | monospaced and neutral (see Code) |
+| [Links](#) | neutral text with an underline; open in the **system browser** |
 | Nested emphasis | composes correctly (e.g. bold-inside-italic-inside-a-link) |
 | Hard / soft line breaks | preserved / collapsed to a space |
 
 ### Other blocks
 
-- **Thematic break** (`---`): a full-width divider with `0.5em` vertical breathing room.
-- **Raw HTML** (block or inline): **tags are stripped**; only the visible text is shown (secondary
-  color). Raw markup is never rendered or executed.
+- **Thematic break** (`---`): a thin, neutral horizontal rule with breathing room above and below.
+- **Raw HTML**: block tags are stripped to visible text in a secondary color; inline HTML tags are
+  omitted. Raw markup is never rendered or executed.
 
 ### Article header chrome
 
-Above the scrolling reader (in `ArticleDetailView`), each article shows:
+At the top of the scrolling reader, each article shows:
 
-- **Title** at the **H1 type token** (bold) — the reading's sole h1. Like the metadata,
-  it is sized from the reader's body size, so the whole header rescales when the reader changes the
-  font size instead of staying fixed while the copy grows.
-- **Metadata row** — site (`globe`), author (`person`), and estimated article length (`clock`) as
-  secondary labels sized from the body, shown only when present. Length is derived from word
-  count at an average **200 wpm**, rounded up to a 1-minute minimum (e.g. "5 min"); the
-  raw word count is kept as the label's hover tooltip. Icon–label gaps use the 4 pt
-  icon–label spacing token.
-- **Tags** as rounded **capsule chips** in the header, each removable with an inline ×. New
-  tags are added from a **`#` button** in the article toolbar that opens a searchable modal
-  sheet — it lists the 10 most-used tags by default, toggles a tag's membership with a
-  checkmark, and offers to create-and-apply a new tag as you type. (Adding lives in the sheet,
-  not inline, so revealing matches never reflows the article below.)
-- A divider separates the header from the scrollable body.
+- **Title** at the restrained H1 scale, in the selected reader face. It shares the body's width and
+  grows with the chosen body size.
+- **Metadata** shows estimated reading time when available, in a quiet secondary style. Its word
+  count is available on hover.
+- **Tags** appear as a read-only text summary. The toolbar's `#` button opens the tag picker for
+  edits, so managing tags does not reflow the article header.
+- The header has enough space below it to start the body clearly, without a decorative divider.
 
 ### Text selection
 
-The reader supports **continuous, native selection** (drag, double/triple-click, ⌘C copy) across the
-article body. SwiftUI's `Text` + `.textSelection` can only select *within* a single `Text`, so
-contiguous **headings and paragraphs are coalesced into one `NSAttributedString` rendered by a
-read-only `NSTextView`** (`SelectableTextView`), with the theme's spacing re-expressed as
-`NSParagraphStyle` attributes. This stays within the no-WebView rule (it's AppKit/TextKit, not WebKit).
+The reader supports **continuous, native selection** (drag, double/triple-click, ⌘C copy) across
+contiguous text. SwiftUI's `Text` + `.textSelection` only selects inside one `Text`, so headings,
+paragraphs, and **image-free lists and quotes** are coalesced into a single `NSAttributedString`
+rendered by a read-only `NSTextView` (`SelectableTextView`). The theme's spacing, list hanging
+indents, and quote indents are expressed as `NSParagraphStyle` attributes. This is AppKit/TextKit,
+not WebKit.
 
-- A run breaks — forming a **selection seam** — at any block that isn't a heading or text-only
-  paragraph: **images/figures, code blocks, tables, lists, and block quotes** each keep their richer
-  SwiftUI renderer.
+- A run breaks at figures, code blocks, tables, thematic breaks, and image-bearing lists or quotes.
+  These render as native SwiftUI blocks and form selection seams.
 - Run height is driven by the text view's `intrinsicContentSize` (invalidated whenever the text or
-  width changes), **not** `sizeThatFits` — the latter can run before the text is installed on the
-  first layout pass, measuring an empty view and collapsing the run to zero height (a blank reader).
-- Lists and block quotes are deliberately *not* folded into the text run for now. Their attributed
-  layout (marker tab stops, hanging indents, quote bars via `ReaderLayoutManager`) is implemented in
-  `MarkdownTextRun` but unvalidated on-device, so they stay on the proven SwiftUI path and form a
-  seam. Re-enabling is a matter of flipping `isFoldable`.
+  width changes), keeping long articles visible while the type settings change.
 - ⌘F find-bar isn't offered per run (a standalone `NSTextView` needs an enclosing scroll view for
   it); selection and copy are unaffected.
 
@@ -423,10 +409,10 @@ produce. Anything unrecognized recurses into its children so **no content is sil
 | Ordered / unordered / nested lists | ✅ | depth-aware bullets & indent |
 | Task lists (checkboxes) | ✅ | GFM |
 | Block quotes (incl. nested) | ✅ | |
-| Code blocks (with language label) | ✅ | no syntax highlighting yet |
+| Code blocks (fenced or indented) | ✅ | language metadata is kept in Markdown; no syntax highlighting yet |
 | Tables with column alignment | ✅ | GFM |
 | Thematic break / horizontal rule | ✅ | |
-| Raw HTML (block & inline) | ⚠️ | text extracted, tags stripped |
+| Raw HTML (block & inline) | ⚠️ | block tags are stripped to visible text; inline tags are omitted |
 | Footnotes (`[^1]`) | ❌ | swift-markdown doesn't model them; render as literal text |
 | Math / LaTeX | ❌ | not rendered |
 | Definition lists, sub/superscript | ❌ | not in CommonMark; would arrive as HTML and be stripped |

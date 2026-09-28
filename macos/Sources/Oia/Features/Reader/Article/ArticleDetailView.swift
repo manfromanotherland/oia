@@ -10,7 +10,7 @@ struct ArticleDetailView: View {
     // nothing else in the module touches it.
     @Environment(AppState.self) var appState
     var showsToolbar = true
-    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .system
+    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .defaultChoice
     @AppStorage("readerFontSize", store: AppDefaults.store) private var readerFontSize: ReaderFontSize = .medium
     @AppStorage("readerWidth", store: AppDefaults.store) private var readerWidth: ReaderWidth = .medium
     @AppStorage("readerLineHeight", store: AppDefaults.store) private var readerLineHeight: ReaderLineHeight = .normal

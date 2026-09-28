@@ -170,7 +170,7 @@ struct MarkdownDocumentView<Header: View, Footer: View>: View {
     /// The reading's own folder URL, against which its relative asset links
     /// (`assets/<file>`) resolve. See `AssetImageLoader.readingFolderURL`.
     let assetBaseURL: URL?
-    var font: ReaderFont = .system
+    var font: ReaderFont = .defaultChoice
     var fontSize: ReaderFontSize = .medium
     var width: ReaderWidth = .medium
     var lineHeight: ReaderLineHeight = .normal
@@ -185,7 +185,7 @@ struct MarkdownDocumentView<Header: View, Footer: View>: View {
     @ViewBuilder var footer: () -> Footer
 
     init(document: ArticleDocument, assetBaseURL: URL?,
-         font: ReaderFont = .system, fontSize: ReaderFontSize = .medium,
+         font: ReaderFont = .defaultChoice, fontSize: ReaderFontSize = .medium,
          width: ReaderWidth = .medium, lineHeight: ReaderLineHeight = .normal,
          highlights: [String] = [], onHighlight: @escaping (String) -> Void = { _ in },
          @ViewBuilder header: @escaping () -> Header = { EmptyView() },

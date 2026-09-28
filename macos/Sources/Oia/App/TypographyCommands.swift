@@ -3,7 +3,7 @@
 import SwiftUI
 
 struct TypographyCommands: Commands {
-    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .system
+    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .defaultChoice
     @AppStorage("readerFontSize", store: AppDefaults.store) private var readerFontSize: ReaderFontSize = .medium
     @FocusedValue(\.detailNavigationActions) private var detailNavigationActions
 

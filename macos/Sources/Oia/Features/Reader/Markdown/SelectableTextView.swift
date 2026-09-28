@@ -11,9 +11,8 @@ import SwiftUI
 /// selection (and copy) across the whole run.
 ///
 /// The view draws no background and no insets so it lines up with the
-/// surrounding SwiftUI blocks; height is computed from the laid-out text via
-/// `sizeThatFits`. A custom `ReaderLayoutManager` draws block-quote bars, which
-/// plain attributed text cannot express.
+/// surrounding SwiftUI blocks; intrinsic height follows the laid-out text.
+/// A custom `ReaderLayoutManager` draws saved highlights.
 struct SelectableTextView: NSViewRepresentable {
     let attributed: NSAttributedString
     /// Verbatim text of every highlight for this reading. Each exact occurrence
@@ -39,8 +38,9 @@ struct SelectableTextView: NSViewRepresentable {
         textView.autoresizingMask = []
         // Links are opened by NSTextView's default handling (NSWorkspace), which
         // matches the rest of the reader: links open in the system browser.
+        // The view's link attributes override the source color during layout.
         textView.linkTextAttributes = [
-            .foregroundColor: NSColor.controlAccentColor,
+            .foregroundColor: NSColor.labelColor,
             .underlineStyle: NSUnderlineStyle.single.rawValue,
             .cursor: NSCursor.pointingHand
         ]

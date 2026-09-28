@@ -3,10 +3,6 @@
 import AppKit
 
 extension NSAttributedString.Key {
-    /// Value: `[CGFloat]` — the x-offsets (in text-container coordinates) of the
-    /// quote bars enclosing this paragraph. Read by `ReaderLayoutManager`.
-    static let quoteBar = NSAttributedString.Key("ReaderQuoteBar")
-
     /// Marks a range as a saved highlight. `ReaderLayoutManager` fills a tinted
     /// rounded rect behind it. A dedicated key (rather than `.backgroundColor`)
     /// keeps highlights from clobbering inline-code backgrounds.
@@ -205,14 +201,8 @@ final class ReaderTextView: NSTextView {
     }
 }
 
-/// Draws block-quote bars in the text margin. TextKit gives no way to express a
-/// per-paragraph leading rule, so we read the `.quoteBar` attribute (a list of
-/// x-offsets, one per nesting level) and stroke a rounded bar down each line
-/// fragment of a quoted paragraph.
+/// Draws saved highlights behind the selectable article text.
 final class ReaderLayoutManager: NSLayoutManager {
-    /// Matches `MarkdownTheme.quoteBarWidth`.
-    private let barWidth: CGFloat = 3
-
     /// Translucent fill behind highlighted passages. Yellow reads as a marker
     /// in both light and dark mode at this alpha.
     private let highlightColor = NSColor.systemYellow.withAlphaComponent(0.32)
@@ -222,23 +212,6 @@ final class ReaderLayoutManager: NSLayoutManager {
         guard let textStorage else { return }
 
         drawHighlights(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
-
-        let color = NSColor.secondaryLabelColor.withAlphaComponent(0.4)
-
-        enumerateLineFragments(forGlyphRange: glyphsToShow) { rect, _, _, glyphRange, _ in
-            let charIndex = self.characterIndexForGlyph(at: glyphRange.location)
-            guard charIndex < textStorage.length,
-                  let bars = textStorage.attribute(.quoteBar, at: charIndex,
-                                                   effectiveRange: nil) as? [CGFloat],
-                  !bars.isEmpty else { return }
-            color.setFill()
-            for barX in bars {
-                let barRect = NSRect(x: origin.x + barX, y: origin.y + rect.minY,
-                                     width: self.barWidth, height: rect.height)
-                NSBezierPath(roundedRect: barRect,
-                             xRadius: self.barWidth / 2, yRadius: self.barWidth / 2).fill()
-            }
-        }
     }
 
     /// Fill a rounded tint behind every range carrying `.readerHighlight`. Drawn

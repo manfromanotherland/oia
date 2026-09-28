@@ -3,27 +3,43 @@
 import XCTest
 
 /// The reader's measure and leading, which `MarkdownTheme` derives from the
-/// user's Width and Line Height preferences. These were fixed constants before
-/// they became settings, so the first test pins the defaults to exactly what the
-/// reader rendered then — a default that drifts would silently reflow every
-/// existing user's library.
+/// user's Width and Line Height preferences. The tests pin the intended reader
+/// defaults and the available preference stops.
 final class MarkdownThemeTests: XCTestCase {
     private func theme(
         width: ReaderWidth = .medium,
         lineHeight: ReaderLineHeight = .normal,
         fontSize: ReaderFontSize = .medium
     ) -> MarkdownTheme {
-        MarkdownTheme(font: .system, fontSize: fontSize, width: width, lineHeight: lineHeight)
+        MarkdownTheme(font: .defaultChoice, fontSize: fontSize, width: width, lineHeight: lineHeight)
     }
 
     // ── Defaults ────────────────────────────────────────────────────────────
 
-    /// Medium / Normal must reproduce the old hard-coded reader exactly:
-    /// a 680 pt measure and 0.55em of added leading (line-height ≈ 1.75).
-    func testDefaultsMatchThePreviousFixedReader() {
+    /// Medium / Normal use a 680 pt measure and 0.3em of added leading,
+    /// giving the body a line height of approximately 1.5.
+    func testDefaultMeasureAndLeading() {
         let theme = theme()
         XCTAssertEqual(theme.contentMaxWidth, 680)
-        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.55, accuracy: 0.001)
+        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.3, accuracy: 0.001)
+    }
+
+    func testDefaultFontIsSerif() {
+        XCTAssertEqual(ReaderFont.defaultChoice, .serif)
+    }
+
+    func testClassicArticleHierarchyKeepsHeadingsCloseToBodySize() {
+        let theme = theme()
+        XCTAssertEqual(theme.blockSpacing, theme.bodySize * 1.5, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSize(1), theme.bodySize * 1.25, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSize(2), theme.bodySize * 1.12, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSize(3), theme.bodySize, accuracy: 0.001)
+        XCTAssertTrue(theme.headingIsItalic(4))
+        XCTAssertTrue(theme.headingIsItalic(5))
+        XCTAssertTrue(theme.headingIsRunIn(6))
+        XCTAssertEqual(theme.quoteIndent, theme.bodySize * 2.1, accuracy: 0.001)
+        XCTAssertEqual(theme.bullet(depth: 0), theme.bullet(depth: 2))
+        XCTAssertLessThan(theme.listItemSpacing, theme.blockSpacing)
     }
 
     // ── Width ───────────────────────────────────────────────────────────────
@@ -72,8 +88,7 @@ final class MarkdownThemeTests: XCTestCase {
         XCTAssertEqual(Set(multiples).count, multiples.count, "no two options share a line height")
     }
 
-    /// Both scales have five stops, so the two popover sliders share a shape and
-    /// a normalized position means the same thing on each.
+    /// Both scales have five stops, so the two popover sliders share a shape.
     func testBothScalesHaveFiveStops() {
         XCTAssertEqual(ReaderWidth.allCases.count, 5)
         XCTAssertEqual(ReaderLineHeight.allCases.count, 5)
@@ -86,12 +101,13 @@ final class MarkdownThemeTests: XCTestCase {
         XCTAssertEqual(ReaderLineHeight.allCases[2], .normal)
     }
 
-    /// Even quarter-steps, so each slider notch is the same perceptual jump.
-    func testLineHeightStopsAreEvenlySpaced() {
+    /// The first two stops offer subtle adjustments around the normal reading
+    /// rhythm; the last two provide more room for readers who prefer it.
+    func testLineHeightStopMultiples() {
         let multiples = ReaderLineHeight.allCases.map(\.multiple)
-        let steps = zip(multiples.dropFirst(), multiples).map { $0 - $1 }
-        for step in steps {
-            XCTAssertEqual(step, 0.25, accuracy: 0.001)
+        let expected: [CGFloat] = [1.2, 1.35, 1.5, 1.75, 2.0]
+        zip(multiples, expected).forEach { actual, intended in
+            XCTAssertEqual(actual, intended, accuracy: 0.001)
         }
     }
 

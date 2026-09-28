@@ -15,6 +15,11 @@ struct ParagraphView: View {
     let paragraph: Paragraph
     let theme: MarkdownTheme
     let assetBaseURL: URL?
+    /// Block quotes set this so each inline run receives an italic font trait;
+    /// a view-level `.italic()` cannot override the renderer's explicit fonts.
+    var quoted = false
+    /// Completed task items strike their text without affecting nested blocks.
+    var struck = false
     var highlights: [String] = []
     var onHighlight: (String) -> Void = { _ in }
 
@@ -72,7 +77,8 @@ struct ParagraphView: View {
                 if run.characters.isEmpty {
                     runID = IdentifiedMarkup.stableID(for: child, fallbackIndex: offset)
                 }
-                run.append(InlineRenderer.inline(child, theme: theme))
+                run.append(InlineRenderer.inline(child, theme: theme,
+                                                 italic: quoted, strike: struck))
             }
         }
         flush()

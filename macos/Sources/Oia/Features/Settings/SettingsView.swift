@@ -48,7 +48,7 @@ private struct AppearanceSettingsTab: View {
 // ── Typography ────────────────────────────────────────────────────────────────
 
 private struct TypographySettingsTab: View {
-    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .system
+    @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .defaultChoice
     @AppStorage("readerFontSize", store: AppDefaults.store) private var readerFontSize: ReaderFontSize = .medium
     @AppStorage("readerWidth", store: AppDefaults.store) private var readerWidth: ReaderWidth = .medium
     @AppStorage("readerLineHeight", store: AppDefaults.store) private var readerLineHeight: ReaderLineHeight = .normal
@@ -118,7 +118,7 @@ private struct TypographySettingsTab: View {
     private var previewFontName: String {
         switch readerFont {
         case .system: "-apple-system"
-        case .serif: "Georgia"
+        case .serif: ReaderFont.serifFamilyName
         case .mono: "Menlo"
         }
     }

@@ -50,12 +50,13 @@ enum AppKitInline {
     /// Build an attributed string from a block node's inline children. `weight`
     /// and `size` set the base run; emphasis (bold/italic/code) layers on top.
     static func attributed(_ markup: Markup, size: CGFloat, weight: Font.Weight,
-                           design: Font.Design, color: NSColor = .labelColor) -> NSAttributedString
+                           design: Font.Design, color: NSColor = .labelColor,
+                           italic: Bool = false) -> NSAttributedString
     {
         let run = Run(size: size, weight: weight, design: design, color: color)
         let out = NSMutableAttributedString()
         for child in markup.children {
-            out.append(render(child, style: Style(), run: run))
+            out.append(render(child, style: Style(italic: italic), run: run))
         }
         return out
     }
@@ -118,17 +119,22 @@ enum AppKitInline {
         }
         if let link = style.link {
             attrs[.link] = link
-            attrs[.foregroundColor] = NSColor.controlAccentColor
             attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
         }
         return NSAttributedString(string: string, attributes: attrs)
     }
 
-    /// Build a system font at `size`/`weight`/`design`, then layer bold/italic
-    /// symbolic traits so nested emphasis composes (matching `InlineRenderer`).
+    /// Use an explicit Palatino face for Serif. Other choices retain their system
+    /// designs and symbolic traits so nested emphasis composes.
     static func makeFont(size: CGFloat, weight: Font.Weight, design: Font.Design,
                          bold: Bool, italic: Bool) -> NSFont
     {
+        if case .serif = design,
+           let serif = NSFont(name: ReaderFont.serifFaceName(weight: weight, bold: bold, italic: italic),
+                                size: size)
+        {
+            return serif
+        }
         let fallback = NSFont.systemFont(ofSize: size, weight: weight.nsWeight)
         var descriptor = fallback.fontDescriptor
         if let designed = descriptor.withDesign(design.systemDesign) {

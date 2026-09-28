@@ -10,8 +10,7 @@ import SwiftUI
 /// reading rhythm (line spacing, inter-block gaps, heading space-above) and its
 /// structural layout (list marker columns via tab stops, quote indentation) are
 /// re-expressed here as `NSParagraphStyle` attributes, since a single text view
-/// has no per-block SwiftUI modifiers. Quote bars are drawn by
-/// `ReaderLayoutManager` from the `.quoteBar` attribute this builder attaches.
+/// has no per-block SwiftUI modifiers.
 enum MarkdownTextRun {
     /// One laid-out paragraph: its text (without a trailing newline) and the
     /// paragraph style to apply over it. `spacingBefore` is the gap from the
@@ -23,28 +22,17 @@ enum MarkdownTextRun {
     }
 
     /// Context threaded down the block tree: the current left indent (points),
-    /// list nesting depth (drives bullet glyphs), text color, and the x-offsets
-    /// of any enclosing quote bars.
+    /// list nesting depth (drives bullet glyphs), and inherited quote italics.
     private struct Ctx {
         var indent: CGFloat = 0
         var listDepth: Int = 0
         var color: NSColor = .labelColor
-        var bars: [CGFloat] = []
+        var italic = false
     }
 
     static func attributed(_ blocks: [Markup], theme: MarkdownTheme) -> NSAttributedString {
-        var paras: [Para] = []
-        for (index, block) in blocks.enumerated() {
-            var blockParas = emit(block, theme: theme, ctx: Ctx())
-            guard !blockParas.isEmpty else { continue }
-            // Leading gap for this top-level block: the inter-block rhythm, plus
-            // a heading's asymmetric space-above. The run's first paragraph gets
-            // no leading gap (the enclosing LazyVStack provides it).
-            let lead = index == 0 ? 0 : theme.blockSpacing
-            let headingExtra = (block as? Heading).map { theme.headingSpaceAbove($0.level) } ?? 0
-            blockParas[0].spacingBefore = lead + headingExtra
-            paras.append(contentsOf: blockParas)
-        }
+        let paras = emitSequence(blocks, theme: theme, ctx: Ctx(),
+                                 innerGap: theme.blockSpacing, topLevel: true)
 
         let out = NSMutableAttributedString()
         for (index, para) in paras.enumerated() {
@@ -77,9 +65,8 @@ enum MarkdownTextRun {
                             theme: theme, ctx: ctx)
         case let quote as BlockQuote:
             var qctx = ctx
-            qctx.bars = ctx.bars + [ctx.indent]
-            qctx.indent = ctx.indent + theme.quoteBarWidth + theme.quoteBarGap
-            qctx.color = .secondaryLabelColor
+            qctx.indent += theme.quoteIndent
+            qctx.italic = true
             return emitSequence(quote.blockChildren.map { $0 as Markup }, theme: theme,
                                 ctx: qctx, innerGap: theme.quoteInnerSpacing)
         default:
@@ -90,17 +77,38 @@ enum MarkdownTextRun {
         }
     }
 
-    /// Emit a sequence of sibling blocks, setting the gap before each (the first
-    /// keeps 0 so the parent decides its leading gap).
+    /// Emit sibling blocks, pairing an H6 with a following paragraph at any
+    /// nesting depth. The first paragraph keeps its parent's leading gap; only
+    /// the top level adds heading space above its own blocks.
     private static func emitSequence(_ blocks: [Markup], theme: MarkdownTheme,
-                                     ctx: Ctx, innerGap: CGFloat) -> [Para]
+                                     ctx: Ctx, innerGap: CGFloat,
+                                     topLevel: Bool = false) -> [Para]
     {
         var result: [Para] = []
-        for (index, block) in blocks.enumerated() {
-            var paras = emit(block, theme: theme, ctx: ctx)
-            if index > 0, !paras.isEmpty {
-                paras[0].spacingBefore = innerGap
+        var index = 0
+        while index < blocks.count {
+            let block = blocks[index]
+            let emitted: [Para]
+            if let heading = block as? Heading,
+               theme.headingIsRunIn(heading.level),
+               index + 1 < blocks.count,
+               let paragraph = blocks[index + 1] as? Paragraph
+            {
+                emitted = [runInParagraph(heading, paragraph: paragraph,
+                                         theme: theme, ctx: ctx)]
+                index += 2
+            } else {
+                emitted = emit(block, theme: theme, ctx: ctx)
+                index += 1
             }
+            var paras = emitted
+            guard !paras.isEmpty else { continue }
+            // The enclosing LazyVStack provides the first top-level block gap.
+            // Subsequent siblings use their container's rhythm; top-level
+            // headings retain their extra space above.
+            let lead = result.isEmpty ? 0 : innerGap
+            let headingExtra = topLevel ? (block as? Heading).map { theme.headingSpaceAbove($0.level) } ?? 0 : 0
+            paras[0].spacingBefore = lead + headingExtra
             result.append(contentsOf: paras)
         }
         return result
@@ -124,6 +132,17 @@ enum MarkdownTextRun {
                 itemParas = [textPlaceholder(ctx: childCtx, theme: theme)]
             }
 
+            if item.checkbox == .checked, Array(item.blockChildren).first is Paragraph {
+                // A completed task strikes its label, not any nested list or
+                // quoted blocks that happen to follow the label.
+                let content = NSMutableAttributedString(attributedString: itemParas[0].content)
+                content.addAttributes([
+                    .strikethroughStyle: NSUnderlineStyle.single.rawValue,
+                    .foregroundColor: NSColor.secondaryLabelColor
+                ], range: NSRange(location: 0, length: content.length))
+                itemParas[0].content = content
+            }
+
             // Prepend the marker to the item's first paragraph, then give that
             // paragraph a hanging-indent style.
             let marker = markerString(ordered: ordered, number: start + index,
@@ -132,7 +151,6 @@ enum MarkdownTextRun {
             line.append(marker)
             line.append(NSAttributedString(string: "\t"))
             line.append(itemParas[0].content)
-            applyBars(line, ctx.bars)
             itemParas[0].content = line
 
             applyHangingIndent(itemParas[0].style, ctx: ctx, markerWidth: markerWidth, bodyIndent: bodyIndent)
@@ -163,8 +181,7 @@ enum MarkdownTextRun {
     private static func textParagraph(_ paragraph: Markup, theme: MarkdownTheme, ctx: Ctx) -> Para {
         let content = NSMutableAttributedString(attributedString:
             AppKitInline.attributed(paragraph, size: theme.bodySize, weight: .regular,
-                                    design: theme.design, color: ctx.color))
-        applyBars(content, ctx.bars)
+                                    design: theme.design, color: ctx.color, italic: ctx.italic))
         let style = baseStyle(indent: ctx.indent)
         style.lineSpacing = theme.lineSpacing
         return Para(content: content, style: style, spacingBefore: 0)
@@ -172,30 +189,38 @@ enum MarkdownTextRun {
 
     private static func headingParagraph(_ heading: Heading, theme: MarkdownTheme, ctx: Ctx) -> Para {
         let level = heading.level
-        let content: NSMutableAttributedString
-        if theme.headingIsEyebrow(level) {
-            let font = AppKitInline.makeFont(size: theme.headingSize(level),
-                                             weight: theme.headingWeight(level),
-                                             design: theme.design, bold: false, italic: false)
-            content = NSMutableAttributedString(
-                string: InlineRenderer.plainText(heading).uppercased(),
-                attributes: [.font: font,
-                             .foregroundColor: NSColor.secondaryLabelColor,
-                             .kern: theme.headingTracking(level)]
-            )
-        } else {
-            content = NSMutableAttributedString(attributedString:
-                AppKitInline.attributed(heading, size: theme.headingSize(level),
-                                        weight: theme.headingWeight(level),
-                                        design: theme.design, color: ctx.color))
-            let tracking = theme.headingTracking(level)
-            if tracking != 0 {
-                content.addAttribute(.kern, value: tracking,
-                                     range: NSRange(location: 0, length: content.length))
-            }
+        let content = NSMutableAttributedString(attributedString:
+            AppKitInline.attributed(heading, size: theme.headingSize(level),
+                                    weight: theme.headingWeight(level), design: theme.design,
+                                    color: ctx.color, italic: ctx.italic || theme.headingIsItalic(level)))
+        let tracking = theme.headingTracking(level)
+        if tracking != 0 {
+            content.addAttribute(.kern, value: tracking,
+                                 range: NSRange(location: 0, length: content.length))
         }
-        applyBars(content, ctx.bars)
         let style = baseStyle(indent: ctx.indent)
+        return Para(content: content, style: style, spacingBefore: 0)
+    }
+
+    /// Classic renders its smallest heading as a bold label on the next
+    /// paragraph's first line. Combining both nodes preserves continuous text
+    /// selection and keeps the paragraph's normal wrapping and leading.
+    private static func runInParagraph(_ heading: Heading, paragraph: Paragraph,
+                                       theme: MarkdownTheme, ctx: Ctx) -> Para
+    {
+        let content = NSMutableAttributedString(attributedString:
+            headingParagraph(heading, theme: theme, ctx: ctx).content)
+        content.append(NSAttributedString(string: " ", attributes: [
+            .font: AppKitInline.makeFont(size: theme.bodySize, weight: .regular,
+                                          design: theme.design, bold: false,
+                                          italic: ctx.italic),
+            .foregroundColor: ctx.color
+        ]))
+        content.append(AppKitInline.attributed(paragraph, size: theme.bodySize,
+                                               weight: .regular, design: theme.design,
+                                               color: ctx.color, italic: ctx.italic))
+        let style = baseStyle(indent: ctx.indent)
+        style.lineSpacing = theme.lineSpacing
         return Para(content: content, style: style, spacingBefore: 0)
     }
 
@@ -225,7 +250,7 @@ enum MarkdownTextRun {
                                              design: theme.design, bold: false, italic: false)
             return NSAttributedString(string: checked ? "☑" : "☐", attributes: [
                 .font: font,
-                .foregroundColor: checked ? NSColor.controlAccentColor : NSColor.secondaryLabelColor
+                .foregroundColor: NSColor.secondaryLabelColor
             ])
         }
         let glyph = ordered ? "\(number)." : theme.bullet(depth: depth)
@@ -237,13 +262,5 @@ enum MarkdownTextRun {
             .font: font,
             .foregroundColor: NSColor.secondaryLabelColor
         ])
-    }
-
-    /// Tag a paragraph with the x-offsets of its enclosing quote bars so
-    /// `ReaderLayoutManager` can draw them in the margin.
-    private static func applyBars(_ string: NSMutableAttributedString, _ bars: [CGFloat]) {
-        guard !bars.isEmpty, string.length > 0 else { return }
-        string.addAttribute(.quoteBar, value: bars,
-                            range: NSRange(location: 0, length: string.length))
     }
 }
