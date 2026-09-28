@@ -25,6 +25,7 @@ struct OiaLibraryView: View {
     @State var boardNavigation = MasonryNavigationCoordinator<ReadingRow, String>()
     @State var boardModifierKeys: EventModifiers = []
     @State private var boardScrollState = BoardScrollState()
+    @State private var toolbarBlurProgress: CGFloat = 0
     @State var showsScrollToTop = false
     @State var pinchStartCardSize: CardSize?
     @State var quickLookURL: URL?
@@ -286,6 +287,10 @@ extension OiaLibraryView {
                         if showsScrollToTop != shouldShow {
                             showsScrollToTop = shouldShow
                         }
+                        let blurProgress = min(max(viewport.y / max(boardToolbarHeight, 1), 0), 1)
+                        if toolbarBlurProgress != blurProgress {
+                            toolbarBlurProgress = blurProgress
+                        }
                     },
                     estimatedHeight: estimatedCardHeight,
                     content: { row in
@@ -314,6 +319,12 @@ extension OiaLibraryView {
                     }
                 )
                 .modifier(BoardScrollTrackingModifier(scrollState: boardScrollState))
+                .overlay(alignment: .top) {
+                    ProgressiveToolbarBlur(strength: toolbarBlurProgress)
+                        .frame(height: boardToolbarHeight + 24)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
                 .focusable()
                 .focused($boardFocused)
                 .focusEffectDisabled()
@@ -536,6 +547,63 @@ extension OiaLibraryView {
             moveOverlay(-1)
         } else {
             closeOverlay()
+        }
+    }
+}
+
+/// AppKit applies the gradient to the visual effect itself, so both the blur and
+/// its material fade toward the board instead of compositing a faded blur view.
+private struct ProgressiveToolbarBlur: NSViewRepresentable {
+    let strength: CGFloat
+
+    func makeNSView(context _: Context) -> GradientVisualEffectView {
+        let view = GradientVisualEffectView()
+        view.blendingMode = .withinWindow
+        view.material = .headerView
+        view.state = .active
+        view.isHidden = true
+        return view
+    }
+
+    func updateNSView(_ view: GradientVisualEffectView, context _: Context) {
+        view.strength = strength
+    }
+
+    final class GradientVisualEffectView: NSVisualEffectView {
+        var strength: CGFloat = 0 {
+            didSet {
+                guard strength != oldValue else { return }
+                isHidden = strength <= 0
+                updateMask()
+            }
+        }
+
+        private var maskedSize: NSSize = .zero
+
+        override func layout() {
+            super.layout()
+            guard bounds.size != maskedSize else { return }
+            maskedSize = bounds.size
+            updateMask()
+        }
+
+        override func hitTest(_: NSPoint) -> NSView? { nil }
+
+        private func updateMask() {
+            guard strength > 0, bounds.width > 0, bounds.height > 0 else {
+                maskImage = nil
+                return
+            }
+            let alpha = strength
+            let image = NSImage(size: bounds.size, flipped: false) { rect in
+                let gradient = NSGradient(
+                    starting: .clear,
+                    ending: .white.withAlphaComponent(alpha)
+                )
+                gradient?.draw(in: rect, angle: 90)
+                return true
+            }
+            maskImage = image
         }
     }
 }
