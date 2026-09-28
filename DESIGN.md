@@ -136,7 +136,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   mix. Redundant title chrome is hidden.
 - **Video:** captured poster image with a restrained play glyph. A durable media URL is secondary
   metadata; session-local streams fall back to the source page for playback.
-- **Quote:** selected text rendered in centered Georgia Italic, with 20 pt padding all around and
+- **Quote:** selected text rendered in centered Baskerville Italic, with 20 pt padding all around and
   muted quotation marks. Its origin remains available in detail and the Inspector, but is omitted
   from the board card.
 - **Article:** a local preview image when available, followed by a Palatino heading, saved or
@@ -146,6 +146,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - **Social post:** a source-aware article card with avatar, author/handle, full post text, provider,
   and the first local attachment or video poster. It remains in Articles and does not acquire an
   automatic tag.
+- Textual cards (articles, lightweight links, quotes, and social posts) use a neutral surface that
+  reads slightly lighter than the board in both appearances. Image and video cards retain their
+  material-backed media treatment.
 - Cards have 8–12 pt continuous corners and a semantic separator border. Hover reveals only a
   small standard action menu; cards do not add decorative lift or shadow effects. Tags and actions
   do not permanently clutter the board.

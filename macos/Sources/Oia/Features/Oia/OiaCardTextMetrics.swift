@@ -78,11 +78,11 @@ final class OiaCardTextMetrics {
             + fullArticleMetadataFont.leading)
     )
 
-    private static let extraSmallQuoteFont = makeGeorgiaQuoteFont(ofSize: 16)
-    private static let smallQuoteFont = makeGeorgiaQuoteFont(ofSize: 18)
-    private static let mediumQuoteFont = makeGeorgiaQuoteFont(ofSize: 20)
-    private static let largeQuoteFont = makeGeorgiaQuoteFont(ofSize: 22)
-    private static let extraLargeQuoteFont = makeGeorgiaQuoteFont(ofSize: 24)
+    private static let extraSmallQuoteFont = makeBaskervilleQuoteFont(ofSize: 16)
+    private static let smallQuoteFont = makeBaskervilleQuoteFont(ofSize: 18)
+    private static let mediumQuoteFont = makeBaskervilleQuoteFont(ofSize: 20)
+    private static let largeQuoteFont = makeBaskervilleQuoteFont(ofSize: 22)
+    private static let extraLargeQuoteFont = makeBaskervilleQuoteFont(ofSize: 24)
     private static let quoteMarkBasePointSize: CGFloat = 59
     private static let quoteMarkBaseHeight: CGFloat = 15
     private static let quoteMarkBaseVerticalOffset: CGFloat = 21
@@ -243,30 +243,21 @@ final class OiaCardTextMetrics {
         font: NSFont,
         cardSize: CardSize
     ) -> CGFloat {
-        measuredTextHeight(
+        let appKitLineHeight = (font.ascender - font.descender).rounded()
+        // SwiftUI draws the 22 pt Baskerville face one point shorter per line.
+        let lineHeight = cardSize == .large ? appKitLineHeight - 1 : appKitLineHeight
+        return measuredTextHeight(
             text,
             width: width,
             font: font,
             lineSpacing: quoteLineSpacing,
             lineLimit: quoteLineLimit,
-            renderedLineHeight: quoteRenderedLineHeight(for: cardSize)
+            renderedLineHeight: lineHeight
         )
     }
 
-    /// SwiftUI's Georgia line boxes at the five card sizes, measured against
-    /// the actual quote view. AppKit rounds several of these differently.
-    private static func quoteRenderedLineHeight(for cardSize: CardSize) -> CGFloat {
-        switch cardSize {
-        case .extraSmall: 19
-        case .small: 21
-        case .medium: 22
-        case .large: 25
-        case .extraLarge: 27
-        }
-    }
-
-    private static func makeGeorgiaQuoteFont(ofSize size: CGFloat) -> NSFont {
-        NSFont(name: "Georgia-Italic", size: size)
+    private static func makeBaskervilleQuoteFont(ofSize size: CGFloat) -> NSFont {
+        NSFont(name: "Baskerville-Italic", size: size)
             ?? NSFontManager.shared.convert(
                 NSFont.systemFont(ofSize: size), toHaveTrait: .italicFontMask
             )

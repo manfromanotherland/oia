@@ -4,6 +4,7 @@ import SwiftUI
 
 struct OiaCardView: View {
     @Environment(AppState.self) private var appState
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.boardCardVisibility) private var boardVisibility
 
     let row: ReadingRow
@@ -87,14 +88,15 @@ struct OiaCardView: View {
         cardContent(in: size)
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .background {
-                if PerformanceTrace.disableMaterials {
+                if row.kind == .article || row.kind == .quote {
+                    cardShape.fill(OiaTheme.textCardSurface)
+                    if colorScheme == .dark {
+                        cardShape.fill(Color.white.opacity(OiaTheme.textSurfaceContrastOpacity))
+                    }
+                } else if PerformanceTrace.disableMaterials {
                     cardShape.fill(Color(nsColor: .controlBackgroundColor))
                 } else {
                     cardShape.fill(.thinMaterial)
-                }
-
-                if let palette = OiaTheme.articlePalette(for: row) {
-                    cardShape.fill(palette.background.color.opacity(0.15))
                 }
             }
             .clipShape(cardShape)

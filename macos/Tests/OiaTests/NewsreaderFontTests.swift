@@ -10,8 +10,8 @@ final class NewsreaderFontTests: XCTestCase {
     private let opticalSizeAxis = NSNumber(value: UInt32(0x6F70_737A))
     private let resourceName = "Newsreader-VariableFont_opsz-wght.ttf"
 
-    func testQuoteTextUsesItalicGeorgiaAndMarksUseBundledNewsreader() throws {
-        assertItalicGeorgia(OiaCardTextMetrics.quoteFont(for: .extraLarge), pointSize: 24)
+    func testQuoteTextUsesItalicBaskervilleAndMarksUseBundledNewsreader() throws {
+        assertItalicBaskerville(OiaCardTextMetrics.quoteFont(for: .extraLarge), pointSize: 24)
         try assertBundledNewsreader(
             OiaCardTextMetrics.quoteMarkFont(for: .extraLarge),
             pointSize: 59,
@@ -25,7 +25,7 @@ final class NewsreaderFontTests: XCTestCase {
         XCTAssertEqual(pointSizes, [16, 18, 20, 22, 24])
         for (cardSize, pointSize) in zip(CardSize.allCases, pointSizes) {
             let scale = pointSize / 24
-            assertItalicGeorgia(OiaCardTextMetrics.quoteFont(for: cardSize), pointSize: pointSize)
+            assertItalicBaskerville(OiaCardTextMetrics.quoteFont(for: cardSize), pointSize: pointSize)
             try assertBundledNewsreader(
                 OiaCardTextMetrics.quoteMarkFont(for: cardSize),
                 pointSize: 59 * scale,
@@ -48,8 +48,8 @@ final class NewsreaderFontTests: XCTestCase {
         XCTAssertNotEqual(glyphs[0], glyphs[1])
     }
 
-    private func assertItalicGeorgia(_ font: NSFont, pointSize: CGFloat) {
-        XCTAssertEqual(font.fontName, "Georgia-Italic")
+    private func assertItalicBaskerville(_ font: NSFont, pointSize: CGFloat) {
+        XCTAssertEqual(font.fontName, "Baskerville-Italic")
         XCTAssertEqual(font.pointSize, pointSize)
     }
 

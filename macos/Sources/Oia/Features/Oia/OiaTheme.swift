@@ -3,7 +3,7 @@
 import AppKit
 import SwiftUI
 
-/// A website-authored card surface and the pure black/white text colour with
+/// A website-authored preview color and the pure black/white text colour with
 /// the stronger WCAG contrast against it. Core canonicalises `theme_color` as
 /// `#rrggbb`; this parser remains defensive because library files are externally
 /// writable and may come from an older or hand-edited source.
@@ -82,6 +82,10 @@ struct CardSRGBColor: Equatable, Sendable {
 
 enum OiaTheme {
     static let card = Color(nsColor: .controlBackgroundColor)
+    static let boardSurface = Color(nsColor: .windowBackgroundColor)
+    static let textCardSurface = Color(nsColor: .windowBackgroundColor)
+    /// Lower the Light board and lift Dark text cards by the same neutral amount.
+    static let textSurfaceContrastOpacity = 0.04
     static let border = Color(nsColor: .separatorColor)
 
     static func articlePalette(for row: ReadingRow) -> CardThemePalette? {
