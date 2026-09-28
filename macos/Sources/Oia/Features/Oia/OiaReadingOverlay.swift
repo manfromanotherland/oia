@@ -43,30 +43,40 @@ struct OiaReadingOverlay: View {
 
     @ToolbarContentBuilder
     private var detailToolbar: some ToolbarContent {
-        ToolbarItemGroup(placement: .primaryAction) {
-            Button { onMove(-1) } label: {
-                Label("Previous item", systemImage: "chevron.left")
-            }
-            .help("Previous item (Left Arrow or K)")
-            .accessibilityIdentifier(A11y.Detail.previous)
-            .keyboardShortcut(.leftArrow, modifiers: [])
-            .disabled(!canMovePrevious || appState.isEditingText)
+        if #available(macOS 26.0, *) {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+        }
 
-            Button { onMove(1) } label: {
-                Label("Next item", systemImage: "chevron.right")
-            }
-            .help("Next item (Right Arrow or J)")
-            .accessibilityIdentifier(A11y.Detail.next)
-            .keyboardShortcut(.rightArrow, modifiers: [])
-            .disabled(!canMoveNext || appState.isEditingText)
+        ToolbarItem(placement: .primaryAction) {
+            ControlGroup {
+                Button { onMove(-1) } label: {
+                    Label("Previous item", systemImage: "chevron.left")
+                }
+                .help("Previous item (Left Arrow or K)")
+                .accessibilityIdentifier(A11y.Detail.previous)
+                .keyboardShortcut(.leftArrow, modifiers: [])
+                .disabled(!canMovePrevious || appState.isEditingText)
 
+                Button { onMove(1) } label: {
+                    Label("Next item", systemImage: "chevron.right")
+                }
+                .help("Next item (Right Arrow or J)")
+                .accessibilityIdentifier(A11y.Detail.next)
+                .keyboardShortcut(.rightArrow, modifiers: [])
+                .disabled(!canMoveNext || appState.isEditingText)
+            }
+        }
+
+        ToolbarItem(placement: .primaryAction) {
             Button(action: onClose) {
                 Label("Close Detail", systemImage: "xmark")
             }
             .help("Close detail (Escape)")
             .accessibilityIdentifier(A11y.Detail.close)
             .keyboardShortcut(.cancelAction)
+        }
 
+        ToolbarItem(placement: .primaryAction) {
             Button {
                 showsInspector.toggle()
             } label: {
