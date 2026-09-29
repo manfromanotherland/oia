@@ -42,19 +42,52 @@ struct InspectorPill: View {
 enum InspectorTab: String, CaseIterable { case discover = "Discover", details = "Details" }
 
 struct InspectorTabs: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     @Binding var selection: InspectorTab
+    @Namespace private var selectionAnimation
 
     var body: some View {
-        Picker("Inspector", selection: $selection) {
+        let tabs = HStack(spacing: 0) {
             ForEach(InspectorTab.allCases, id: \.self) { tab in
-                Text(tab.rawValue)
-                    .help(tab.rawValue)
-                    .accessibilityLabel(tab.rawValue)
-                    .tag(tab)
+                Button { selection = tab } label: {
+                    Text(tab.rawValue)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.primary)
+                        .frame(minHeight: 28)
+                        .padding(.horizontal, 20)
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .background {
+                    if selection == tab {
+                        Capsule()
+                            .fill(.primary.opacity(0.12))
+                            .matchedGeometryEffect(id: "selection", in: selectionAnimation)
+                    }
+                }
+                .help(tab.rawValue)
+                .accessibilityLabel(tab.rawValue)
+                .accessibilityAddTraits(selection == tab ? [.isSelected] : [])
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
+        .padding(4)
+
+        Group {
+            if reduceTransparency {
+                tabs.background(Color(nsColor: .controlBackgroundColor), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.primary.opacity(0.12)))
+            } else if #available(macOS 26.0, *) {
+                tabs.glassEffect(.regular.interactive(), in: Capsule())
+            } else {
+                tabs.background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(.primary.opacity(0.12)))
+            }
+        }
+        .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: selection)
+        .onKeyPress(.leftArrow) { selection = .discover; return .handled }
+        .onKeyPress(.rightArrow) { selection = .details; return .handled }
+        .accessibilityElement(children: .contain)
         .accessibilityLabel("Inspector")
         .accessibilityValue(selection.rawValue)
         .accessibilityIdentifier(A11y.Inspector.tabs)
