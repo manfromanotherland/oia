@@ -84,6 +84,7 @@ describe("showToast", () => {
     expect(root.querySelector(".spinner")).toBeNull();
     expect(root.querySelector(".title")!.textContent).toBe("Saved to Óia");
     expect(root.querySelector(".detail")!.textContent).toBe("My Article");
+    expect(root.querySelector(".toast")!.getAttribute("role")).toBe("status");
     expect(host.dataset.status).toBe("ok");
   });
 
@@ -98,6 +99,7 @@ describe("showToast", () => {
     expect(root.querySelector(".badge")).not.toBeNull();
     expect(root.querySelector(".spinner")).toBeNull();
     expect(root.querySelector(".title")!.textContent).toBe("Couldn't save page");
+    expect(root.querySelector(".toast")!.getAttribute("role")).toBe("alert");
     expect(host.dataset.status).toBe("error");
   });
 

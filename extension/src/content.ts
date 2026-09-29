@@ -250,9 +250,6 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
   existingHost?.remove();
 
   const isLoading = status === "loading";
-  // Paper/ink palette inherited from the upstream extension; heart red for errors.
-  const accent = status === "ok" ? "#22C55E" : isLoading ? "#17181A" : "#FF5F57";
-  const icon = status === "ok" ? "✓" : "✕";
 
   const host = document.createElement("div");
   host.id = TOAST_HOST_ID;
@@ -261,65 +258,134 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
     "all: initial; position: fixed; top: 16px; right: 16px; z-index: 2147483647;";
 
   const root = host.attachShadow({ mode: "open" });
+  // Inline the app's eye mark so it works on every page without a web-accessible asset.
   root.innerHTML = `
     <style>
-      @keyframes rl-in { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
-      @keyframes rl-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-8px); } }
-      @keyframes rl-spin { to { transform: rotate(360deg); } }
+      :host {
+        --paper: #fdfcfb;
+        --ink: #17181a;
+        --muted: #55565a;
+        --subtle: #85868b;
+        --line: rgb(23 24 26 / 0.12);
+        --hover: #eeedec;
+        --action: #17181a;
+        --action-text: #f7f6f4;
+        color-scheme: light dark;
+      }
+      @media (prefers-color-scheme: dark) {
+        :host {
+          --paper: #161618;
+          --ink: #f1f0ee;
+          --muted: #9a9a9e;
+          --subtle: #9a9a9e;
+          --line: rgb(255 255 255 / 0.15);
+          --hover: #242426;
+          --action: #e8e9eb;
+          --action-text: #17181a;
+        }
+      }
+      @keyframes oia-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+      @keyframes oia-out { to { opacity: 0; transform: translateY(-6px); } }
+      @keyframes oia-spin { to { transform: rotate(360deg); } }
       .toast {
-        display: flex; align-items: center; gap: 10px;
-        box-sizing: border-box; max-width: 340px;
-        padding: 12px 14px;
-        font: 500 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-        color: #17181A; background: #FDFCFB;
-        border: 1px solid rgba(23, 24, 26, 0.12); border-left: 4px solid ${accent};
-        border-radius: 8px; box-shadow: 0 8px 24px rgba(23, 24, 26, 0.18);
-        animation: rl-in 180ms ease-out;
-        transition: border-left-color 250ms ease;
+        display: flex; align-items: center; gap: 11px;
+        box-sizing: border-box; width: min(340px, calc(100vw - 32px));
+        min-height: 70px; padding: 12px 11px 12px 13px;
+        font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        color: var(--ink); background: var(--paper);
+        border: 1px solid var(--line); border-radius: 13px;
+        box-shadow: 0 12px 32px rgb(0 0 0 / 0.13), 0 2px 8px rgb(0 0 0 / 0.06);
+        animation: oia-in 180ms ease-out;
       }
-      .toast.hide { animation: rl-out 200ms ease-in forwards; }
-      .badge {
-        flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%;
+      .toast.hide { animation: oia-out 200ms ease-in forwards; }
+      .mark {
+        position: relative; flex: 0 0 36px; width: 36px; height: 36px;
         display: grid; place-items: center;
-        color: #FFFFFF; font-size: 12px; font-weight: 700;
+        color: #f1f0ee; background: #17181a;
+        border: 1px solid rgb(255 255 255 / 0.12);
+        border-radius: 9px; box-sizing: border-box;
       }
+      .mark svg { display: block; width: 32px; height: 32px; }
+      .badge {
+        position: absolute; right: -4px; bottom: -4px;
+        box-sizing: border-box; width: 17px; height: 17px;
+        display: grid; place-items: center; border-radius: 50%;
+        border: 2px solid var(--paper); color: #17181a;
+        font-size: 10px; font-weight: 800; line-height: 1;
+      }
+      .badge--ok { background: #ffe066; }
+      .badge--error { background: #ff5f57; }
       .spinner {
-        flex: 0 0 auto; box-sizing: border-box; width: 20px; height: 20px;
-        border-radius: 50%; border: 2.5px solid ${accent}; border-top-color: transparent;
-        animation: rl-spin 700ms linear infinite;
+        position: absolute; right: -4px; bottom: -4px;
+        box-sizing: border-box; width: 17px; height: 17px;
+        border: 2px solid var(--paper); border-radius: 50%;
+        background: var(--paper); display: grid; place-items: center;
+      }
+      .spinner::after {
+        content: ""; box-sizing: border-box; width: 12px; height: 12px;
+        border: 2px solid var(--ink); border-top-color: transparent;
+        border-radius: 50%; animation: oia-spin 700ms linear infinite;
       }
       .text { min-width: 0; flex: 1; }
-      .title { font-weight: 600; }
+      .title {
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-size: 13px; font-weight: 650; letter-spacing: -0.01em;
+      }
       .detail {
-        margin-top: 2px; color: #55565A; font-weight: 400;
+        margin-top: 2px; color: var(--muted);
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
       }
       .close {
-        cursor: pointer; background: none; border: none; padding: 0; font-family: inherit;
-        flex: 0 0 auto; width: 20px; height: 20px; border-radius: 4px;
+        cursor: pointer; background: transparent; border: 0; padding: 0;
+        flex: 0 0 auto; width: 28px; height: 28px; border-radius: 7px;
         display: grid; place-items: center;
-        color: #85868B; font-size: 16px; line-height: 1;
+        color: var(--subtle);
       }
-      .close:hover { color: #17181A; background: #EEEDEC; }
+      .close svg { display: block; width: 16px; height: 16px; }
+      .close:hover { color: var(--ink); background: var(--hover); }
+      .close:focus-visible, .cta:focus-visible {
+        outline: 2px solid var(--ink); outline-offset: 2px;
+      }
       .cta {
         margin-top: 8px; cursor: pointer;
-        background: #17181A; color: #F7F6F4; border: none;
-        border-radius: 6px; padding: 6px 12px;
+        background: var(--action); color: var(--action-text); border: none;
+        border-radius: 7px; padding: 7px 12px;
         font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       }
-      .cta:hover { background: #35363A; }
+      .cta:hover { opacity: 0.84; }
+      @media (prefers-reduced-motion: reduce) {
+        .toast, .toast.hide, .spinner::after { animation: none; }
+      }
+      @media (forced-colors: active) {
+        .toast { color: CanvasText; background: Canvas; border-color: CanvasText; box-shadow: none; }
+        .mark { color: Canvas; background: CanvasText; border-color: CanvasText; }
+        .badge { color: HighlightText; background: Highlight; border-color: Canvas; }
+        .close, .detail { color: CanvasText; }
+        .close:focus-visible, .cta:focus-visible { outline-color: Highlight; }
+        .cta { color: HighlightText; background: Highlight; }
+      }
     </style>
-    <div class="toast">
+    <div class="toast" role="${status === "error" ? "alert" : "status"}" aria-live="${status === "error" ? "assertive" : "polite"}">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 1024 1024" fill="none" aria-hidden="true">
+          <path d="M672 513C672 424.634 600.366 353 512 353C423.634 353 352 424.634 352 513C352 601.366 423.634 673 512 673V713C401.543 713 312 623.457 312 513C312 402.543 401.543 313 512 313C622.457 313 712 402.543 712 513C712 623.457 622.457 713 512 713V673C600.366 673 672 601.366 672 513Z" fill="currentColor"/>
+          <path d="M512 293C683.874 293 835.229 380.815 923.659 513.934C929.771 523.134 927.267 535.547 918.066 541.659C908.866 547.771 896.453 545.267 890.341 536.066C809.008 413.633 669.916 333 512 333C354.084 333 214.992 413.633 133.659 536.066C127.547 545.267 115.134 547.771 105.934 541.659C96.7331 535.547 94.229 523.134 100.341 513.934C188.771 380.815 340.126 293 512 293Z" fill="currentColor"/>
+        </svg>
       ${
         isLoading
-          ? '<div class="spinner"></div>'
-          : `<div class="badge" style="background:${accent}">${icon}</div>`
+          ? '<span class="spinner"></span>'
+          : `<span class="badge badge--${status}">${status === "ok" ? "✓" : "!"}</span>`
       }
+      </div>
       <div class="text">
         <div class="title"></div>
         ${detail ? '<div class="detail"></div>' : ""}
       </div>
-      <button class="close" aria-label="Close">×</button>
+      <button class="close" type="button" aria-label="Dismiss Óia notification">
+        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M5 5L15 15M15 5L5 15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </button>
     </div>
   `;
 
@@ -363,18 +429,15 @@ function updateToast(
   cta?: ToastCta,
 ): void {
   const root = host.shadowRoot!;
-  const accent = status === "ok" ? "#22C55E" : "#FF5F57";
-  const icon = status === "ok" ? "✓" : "✕";
-
   const toastEl = root.querySelector<HTMLElement>(".toast")!;
-  toastEl.style.borderLeftColor = accent;
+  toastEl.setAttribute("role", status === "error" ? "alert" : "status");
+  toastEl.setAttribute("aria-live", status === "error" ? "assertive" : "polite");
 
   const spinner = root.querySelector(".spinner");
   if (spinner) {
-    const badge = document.createElement("div");
-    badge.className = "badge";
-    badge.style.background = accent;
-    badge.textContent = icon;
+    const badge = document.createElement("span");
+    badge.className = `badge badge--${status}`;
+    badge.textContent = status === "ok" ? "✓" : "!";
     spinner.replaceWith(badge);
   }
 
