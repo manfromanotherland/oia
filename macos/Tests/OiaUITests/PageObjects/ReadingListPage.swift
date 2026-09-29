@@ -120,11 +120,11 @@ struct ReadingListPage {
 
     // ── Context menu ────────────────────────────────────────────────────────
 
-    /// Right-click a row and click a menu item by title (context-menu items are
-    /// addressed by their menu-item title, not an identifier).
+    /// Right-click a row and find the item in that row's menu, avoiding
+    /// identically named commands in the app menu bar.
     func invokeContextMenu(on id: String, item title: String) {
         row(id).rightClick()
-        app.menuItems[title].clickWhenReady()
+        app.menus[A11y.List.row(id)].menuItems[title].clickWhenReady()
     }
 
     // ── Scrolling ───────────────────────────────────────────────────────────
