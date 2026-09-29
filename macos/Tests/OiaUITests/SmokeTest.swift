@@ -5,6 +5,27 @@ import XCTest
 /// Bring-up smoke test for the sidebar-free board: load every seeded card,
 /// open one, search to a single result, and delete it.
 final class SmokeTest: UITestCase {
+    func testDeleteConfirmationAppearsInsideDetail() throws {
+        try launchApp(articles: Fixtures.standardCorpus)
+
+        list.open(Fixtures.Ids.rust)
+        XCTAssertTrue(reader.title.waitExists(), "Detail is open before deleting")
+        reader.delete()
+
+        XCTAssertTrue(
+            app.sheets.buttons["Delete item"].waitForExistence(timeout: 2),
+            "Delete confirmation appears while detail remains open"
+        )
+        XCTAssertTrue(reader.title.exists, "Detail stays open until deletion is confirmed")
+
+        list.cancelDelete()
+        XCTAssertTrue(reader.title.exists, "Cancel keeps detail open")
+
+        reader.delete()
+        list.confirmDelete()
+        XCTAssertTrue(list.row(Fixtures.Ids.rust).waitDisappears(), "Confirmed deletion removes the card")
+    }
+
     func testBoardEscapeAndUnselectedCardContextDelete() throws {
         try launchApp(articles: Fixtures.standardCorpus)
 

@@ -31,10 +31,22 @@ struct OiaLibraryView: View {
     @FocusState var searchFocused: Bool
     var body: some View {
         NavigationStack {
-            deletionSurface
+            reactiveSurface
                 .navigationDestination(isPresented: detailPresented) {
                     overlay
                 }
+        }
+        .confirmationDialog(
+            deleteDialogTitle,
+            isPresented: deleteDialogPresented,
+            presenting: appState.pendingDelete
+        ) { rows in
+            Button(deleteButtonTitle(for: rows), role: .destructive) {
+                delete(rows)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: { rows in
+            deleteDialogMessage(for: rows)
         }
         .background {
             ReadingSidebarTitlebarAccessory(
@@ -127,22 +139,6 @@ extension OiaLibraryView {
                 } else {
                     advanceOverlayPastCurrent()
                 }
-            }
-    }
-
-    private var deletionSurface: some View {
-        reactiveSurface
-            .confirmationDialog(
-                deleteDialogTitle,
-                isPresented: deleteDialogPresented,
-                presenting: appState.pendingDelete
-            ) { rows in
-                Button(deleteButtonTitle(for: rows), role: .destructive) {
-                    delete(rows)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { rows in
-                deleteDialogMessage(for: rows)
             }
     }
 }
