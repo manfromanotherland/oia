@@ -11,7 +11,6 @@ struct OiaInspectorView: View {
     var onEditTags: () -> Void
     var onSearch: (String) -> Void
 
-    @State private var tab: InspectorTab = .discover
     @State private var inspector: ReadingInspector?
     @State private var loadedID: String?
     @State private var failed = false
@@ -22,12 +21,9 @@ struct OiaInspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 heading
-                InspectorTabs(selection: $tab)
-                if tab == .discover {
-                    discover
-                } else {
-                    InspectorDetails(row: row, inspector: currentInspector, failed: failed)
-                }
+                InspectorInformation(row: row, inspector: currentInspector, failed: failed)
+                    .id(row.id)
+                discover
                 Divider()
                 Group {
                     if #available(macOS 26.0, *) {
@@ -66,24 +62,11 @@ struct OiaInspectorView: View {
     }
 
     private var heading: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(row.displayTitle)
-                .font(.system(size: 16, weight: .semibold))
-                .lineLimit(3)
-                .help(row.displayTitle)
-                .textSelection(.enabled)
-            InspectorSource(row: row)
-            if row.isFullArticle, let readingTime = row.readingTimeLabel {
-                Label(readingTime, systemImage: "clock")
-                    .labelStyle(.tightIcon)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .help(row.wordCount.map { "\($0) words" } ?? "")
-            }
-            Text("Saved \(InspectorDetails.savedDate(row.savedAt))")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-        }
+        Text(row.displayTitle)
+            .font(.system(size: 16, weight: .semibold))
+            .lineLimit(3)
+            .help(row.displayTitle)
+            .textSelection(.enabled)
     }
 
     private var discover: some View {

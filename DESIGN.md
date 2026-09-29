@@ -190,22 +190,24 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   post detail with selectable text and every ordered local attachment. Images show the local asset aspect-fit.
   Videos show the local poster and source/media actions without silently downloading a stream.
   Quotes show the full selected text natively.
-- Metadata lives in a floating trailing Inspector, shown by default and toggled from the standard
-  toolbar. Its visibility is a per-device preference. A 320 pt panel uses a 20 pt continuous corner
-  radius, 24 pt exterior space, and a content-height native Liquid Glass surface. It scrolls within
-  short windows. Delete sits at the bottom of the Inspector and requires confirmation. macOS 15
-  uses system material, and Reduce Transparency uses an opaque system surface.
-- **Discover** separates **Your tags** from **In this image**, with a small adjacent information
-  button explaining locally recognised suggestions. Tags and attributes are native capsule glass
-  buttons. Attributes search the library; editing tags uses the existing optimistic tag picker.
-  Up to five distinct colours appear for media and links as closely spaced flat circles with a
-  subtle outline; full articles omit the colour section. Swatch fills stay colour-accurate;
-  hovering strengthens only the outline. Selecting one starts
-  `colour:#RRGGBB` search, ranked by perceptual shade similarity.
-- **Details** shows friendly local format, display-oriented dimensions, size and save date. Internal
-  asset schemes and hashed filenames never appear. The source appears once as a hostname followed
-  by ↗; its complete URL is available on hover or through Copy source URL. Analysis and missing-file
-  states never prevent access to source or tags. Tags, origin and delete remain available in the toolbar.
+- Metadata lives in the full-height leading Inspector, shown by default and toggled from the
+  titlebar. Its visibility is a per-device preference. The sidebar scrolls within short windows.
+  Delete sits below the content and requires confirmation. macOS 15 uses system material, and
+  Reduce Transparency uses an opaque system surface.
+- One **Information** section replaces separate Discover and Details tabs. Finder-style labeled
+  rows show the save date and, when available, reading time, local media duration, dimensions,
+  codecs, color profile, format, size, author, and origin. Show More / Show Less expands and
+  collapses the optional facts. Media facts come from the local file and unavailable facts are
+  omitted. Article preview file facts are labeled as previews. Internal asset schemes and hashed
+  filenames never appear. The source appears once as a hostname followed by ↗; its complete URL
+  is available on hover or through Copy source URL.
+- **Your tags** keeps its existing Add/Edit picker and search chips. Below it, **In this image**
+  retains its small information button explaining locally recognised suggestions. Tags and
+  attributes are native capsule glass buttons. Attributes search the library. Up to five distinct
+  colours appear for media and links as closely spaced flat circles with a subtle outline; full
+  articles omit the colour section. Swatch fills stay colour-accurate; hovering strengthens only
+  the outline. Selecting one starts `colour:#RRGGBB` search, ranked by perceptual shade similarity.
+  Analysis and missing-file states never prevent access to source or tags.
 
 ### Content states
 
