@@ -145,7 +145,7 @@ struct OiaReadingOverlay: View {
             OiaTheme.previewPlaceholderBackground(for: row)
         } else {
             GalleryMaterial(material: .underWindowBackground)
-                .overlay(OiaTheme.previewPlaceholderBackground(for: row).opacity(0.4))
+                .overlay(OiaTheme.previewPlaceholderBackground(for: row).opacity(0.2))
         }
     }
 
