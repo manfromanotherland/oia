@@ -148,8 +148,7 @@ struct SocialPostDetailView: View {
                 row: row,
                 libraryURL: appState.libraryURL,
                 assetReference: attachment.asset,
-                accessibilityName: attachment.alt,
-                autoplay: false
+                accessibilityName: attachment.alt
             )
             .aspectRatio(attachment.intrinsicAspectRatio, contentMode: .fit)
             .frame(maxWidth: .infinity)
