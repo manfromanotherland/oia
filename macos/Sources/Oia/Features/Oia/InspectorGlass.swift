@@ -42,45 +42,22 @@ struct InspectorPill: View {
 enum InspectorTab: String, CaseIterable { case discover = "Discover", details = "Details" }
 
 struct InspectorTabs: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Binding var selection: InspectorTab
-    @Namespace private var glassSelection
 
     var body: some View {
-        HStack(spacing: 0) {
+        Picker("Inspector", selection: $selection) {
             ForEach(InspectorTab.allCases, id: \.self) { tab in
-                Button { selection = tab } label: {
-                    Text(tab.rawValue)
-                        .font(.system(size: 12, weight: selection == tab ? .semibold : .medium))
-                        .foregroundStyle(selection == tab ? .primary : .secondary)
-                        .frame(maxWidth: .infinity, minHeight: 30)
-                        .contentShape(Capsule())
-                }
-                .buttonStyle(.plain)
-                .background {
-                    if selection == tab {
-                        selectionSurface.matchedGeometryEffect(id: "selection", in: glassSelection)
-                    }
-                }
-                .accessibilityAddTraits(selection == tab ? [.isSelected] : [])
+                Text(tab.rawValue)
+                    .help(tab.rawValue)
+                    .accessibilityLabel(tab.rawValue)
+                    .tag(tab)
             }
         }
-        .padding(3)
-        .background(.primary.opacity(0.06), in: Capsule())
-        .overlay(Capsule().strokeBorder(.primary.opacity(0.06)))
-        .animation(reduceMotion ? nil : .smooth(duration: 0.22), value: selection)
-        .onKeyPress(.leftArrow) { selection = .discover; return .handled }
-        .onKeyPress(.rightArrow) { selection = .details; return .handled }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Inspector")
+        .accessibilityValue(selection.rawValue)
         .accessibilityIdentifier(A11y.Inspector.tabs)
-    }
-
-    @ViewBuilder
-    private var selectionSurface: some View {
-        if #available(macOS 26.0, *) {
-            Capsule().fill(.clear).glassEffect(.regular.interactive(), in: Capsule())
-        } else {
-            Capsule().fill(.regularMaterial).overlay(Capsule().strokeBorder(.primary.opacity(0.1)))
-        }
     }
 }
 

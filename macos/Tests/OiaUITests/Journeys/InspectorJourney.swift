@@ -53,12 +53,12 @@ final class InspectorJourney: UITestCase {
             NSPredicate(format: "label CONTAINS 'cuttings-asset:'")
         ).firstMatch.exists)
 
-        app.buttons["Details"].clickWhenReady()
+        selectInspectorTab("Details")
         XCTAssertTrue(app.staticTexts["PNG"].waitExists())
         XCTAssertTrue(app.staticTexts["64 × 64 px"].exists)
         capture("Sidebar inspector · Details")
 
-        app.buttons["Discover"].clickWhenReady()
+        selectInspectorTab("Discover")
         app.byId(A11y.Inspector.editTags).clickWhenReady()
         XCTAssertTrue(app.byId(A11y.TagPicker.done).waitExists())
         app.byId(A11y.TagPicker.done).clickWhenReady()
@@ -83,6 +83,12 @@ final class InspectorJourney: UITestCase {
             color: NSColor(srgbRed: 0.1, green: 0.2, blue: 0.9, alpha: 1)
         )
         return cream
+    }
+
+    private func selectInspectorTab(_ label: String) {
+        let tabs = app.byId(A11y.Inspector.tabs)
+        let radio = tabs.radioButtons[label]
+        (radio.exists ? radio : tabs.buttons[label]).clickWhenReady()
     }
 
     private func capture(_ name: String) {
