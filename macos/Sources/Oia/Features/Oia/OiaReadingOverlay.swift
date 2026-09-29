@@ -147,7 +147,12 @@ struct OiaReadingOverlay: View {
             mediaDetail(showsPlay: false)
         case .video:
             if row.hasLocalVideoAsset {
-                LocalReadingVideo(row: row, libraryURL: appState.libraryURL)
+                ZStack {
+                    OiaTheme.previewPlaceholderBackground(for: row)
+                    LocalReadingVideo(row: row, libraryURL: appState.libraryURL)
+                        .aspectRatio(row.standaloneMediaAspectRatio ?? 16 / 9, contentMode: .fit)
+                        .padding(38)
+                }
             } else {
                 mediaDetail(showsPlay: true)
             }
@@ -158,7 +163,7 @@ struct OiaReadingOverlay: View {
 
     private func mediaDetail(showsPlay: Bool) -> some View {
         ZStack {
-            Color(nsColor: .windowBackgroundColor)
+            OiaTheme.previewPlaceholderBackground(for: row)
             LocalReadingImage(
                 row: row, libraryURL: appState.libraryURL,
                 fallbackAspectRatio: row.standaloneMediaAspectRatio ?? (showsPlay ? 16 / 9 : 4 / 3),
