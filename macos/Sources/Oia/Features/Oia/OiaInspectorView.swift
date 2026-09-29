@@ -29,15 +29,16 @@ struct OiaInspectorView: View {
                     InspectorDetails(row: row, inspector: currentInspector, failed: failed)
                 }
                 Divider()
-                Button(role: .destructive) {
-                    appState.requestDelete(row)
-                } label: {
-                    Label("Delete", systemImage: "trash")
+                Group {
+                    if #available(macOS 26.0, *) {
+                        deleteButton.buttonStyle(.glass)
+                    } else {
+                        deleteButton.buttonStyle(.bordered)
+                    }
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-                .disabled(appState.isDeleting)
-                .accessibilityIdentifier(A11y.Toolbar.delete)
+                .buttonBorderShape(.capsule)
+                .controlSize(.small)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .font(.system(size: 13))
             .padding(24)
@@ -50,6 +51,18 @@ struct OiaInspectorView: View {
             guard isVisible else { return }
             await load()
         }
+    }
+
+    private var deleteButton: some View {
+        Button(role: .destructive) {
+            appState.requestDelete(row)
+        } label: {
+            Label("Delete", systemImage: "trash")
+                .labelStyle(.titleAndIcon)
+                .foregroundStyle(.red)
+        }
+        .disabled(appState.isDeleting)
+        .accessibilityIdentifier(A11y.Toolbar.delete)
     }
 
     private var heading: some View {
