@@ -221,13 +221,22 @@ private struct SocialPostHeader: View {
 
             Spacer(minLength: 6)
 
-            Text(profile.displayProvider)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 4)
-                .background(.secondary.opacity(0.09), in: Capsule())
+            if profile.displayProvider == "𝕏" {
+                Text("𝕏")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, height: 32)
+                    .background(.secondary.opacity(0.09), in: Circle())
+                    .accessibilityLabel("X")
+            } else {
+                Text(profile.displayProvider)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(.secondary.opacity(0.09), in: Capsule())
+            }
         }
     }
 }
