@@ -37,6 +37,17 @@ final class NewsreaderFontTests: XCTestCase {
         }
     }
 
+    func testQuoteDetailUsesCardFontFamiliesAtLargerSizes() throws {
+        let pointSize = OiaCardTextMetrics.quoteDetailPointSize
+        XCTAssertGreaterThan(pointSize, OiaCardTextMetrics.quotePointSize(for: .extraLarge))
+        assertItalicGeorgia(OiaCardTextMetrics.quoteDetailFont, pointSize: pointSize)
+        try assertBundledNewsreader(
+            OiaCardTextMetrics.quoteDetailMarkFont,
+            pointSize: 59 * pointSize / 24,
+            opticalSize: 6
+        )
+    }
+
     func testNewsreaderContainsDistinctCurlyQuoteGlyphs() {
         let font = OiaCardTextMetrics.quoteMarkFont(for: .extraLarge) as CTFont
         var characters: [UniChar] = [0x201C, 0x201D]

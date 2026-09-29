@@ -244,17 +244,18 @@ private struct OiaQuoteDetailView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                Text("“")
-                    .font(.largeTitle)
-                    .foregroundStyle(.secondary)
-                    .frame(height: 46)
+            VStack(alignment: .center, spacing: 32) {
+                quoteMark("“")
 
                 Text(attributedQuote)
-                    .font(.title)
-                    .italic()
-                    .lineSpacing(8)
+                    .font(Font(OiaCardTextMetrics.quoteDetailFont))
+                    .foregroundStyle(.secondary)
+                    .lineSpacing(OiaCardTextMetrics.quoteDetailLineSpacing)
+                    .multilineTextAlignment(.center)
                     .textSelection(.enabled)
+                    .frame(maxWidth: .infinity)
+
+                quoteMark("”")
 
                 if let site = row.displaySite {
                     Text(site)
@@ -262,7 +263,7 @@ private struct OiaQuoteDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: 720, alignment: .leading)
+            .frame(maxWidth: 720)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 70)
             .padding(.vertical, 90)
@@ -275,6 +276,13 @@ private struct OiaQuoteDetailView: View {
                   generation == appState.libraryContentGeneration else { return }
             bodyText = body
         }
+    }
+
+    private func quoteMark(_ mark: String) -> some View {
+        Text(mark)
+            .font(Font(OiaCardTextMetrics.quoteDetailMarkFont))
+            .foregroundStyle(.tertiary)
+            .accessibilityHidden(true)
     }
 
     private var contentLoadID: String {

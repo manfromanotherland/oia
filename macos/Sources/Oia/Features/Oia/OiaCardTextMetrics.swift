@@ -117,6 +117,8 @@ final class OiaCardTextMetrics {
     static let quoteVerticalPadding: CGFloat = 20
     static let quoteLineSpacing: CGFloat = 7
     static let quoteLineLimit = 12
+    static let quoteDetailPointSize: CGFloat = 34
+    static let quoteDetailLineSpacing: CGFloat = 10
     static let socialPostPadding: CGFloat = 16
     static let socialPostSpacing: CGFloat = 12
     static let socialPostHeaderHeight = max(
@@ -389,6 +391,14 @@ final class OiaCardTextMetrics {
 }
 
 extension OiaCardTextMetrics {
+    static let quoteDetailFont = makeGeorgiaQuoteFont(ofSize: quoteDetailPointSize)
+
+    static let quoteDetailMarkFont =
+        makeQuoteFont(
+            ofSize: quoteMarkBasePointSize * quoteDetailPointSize / quotePointSize(for: .extraLarge),
+            opticalSize: 6
+        )
+
     static func quotePointSize(for cardSize: CardSize) -> CGFloat {
         switch cardSize {
         case .extraSmall: 16
