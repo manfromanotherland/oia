@@ -57,6 +57,12 @@ struct OiaReadingOverlay: View {
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    if row.kind == .image || row.kind == .video {
+                        OiaTheme.previewPlaceholderBackground(for: row)
+                            .ignoresSafeArea(.container, edges: .top)
+                    }
+                }
                 .toolbar {
                     if #available(macOS 26.0, *) {
                         ToolbarSpacer(.fixed, placement: .navigation)
