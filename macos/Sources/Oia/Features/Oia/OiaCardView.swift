@@ -413,6 +413,6 @@ private extension OiaCardView {
     }
 
     private var cardShape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 8, style: .continuous)
+        OiaTheme.cardShape
     }
 }

@@ -82,6 +82,9 @@ struct CardSRGBColor: Equatable, Sendable {
 
 enum OiaTheme {
     static let card = Color(nsColor: .controlBackgroundColor)
+    static var cardShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+    }
     static let shellSurface = semanticSurface(lightBlack: 0.08, darkBlack: 0.25)
     static let boardSurface = semanticSurface(lightBlack: 0.06, darkBlack: 0.12)
     static let inspectorSidebarSurface = semanticSurface(lightBlack: 0.10, darkBlack: 0.16)

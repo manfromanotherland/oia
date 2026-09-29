@@ -157,6 +157,12 @@ struct OiaReadingOverlay: View {
                     OiaTheme.previewPlaceholderBackground(for: row)
                     LocalReadingVideo(row: row, libraryURL: appState.libraryURL)
                         .aspectRatio(row.standaloneMediaAspectRatio ?? 16 / 9, contentMode: .fit)
+                        .clipShape(OiaTheme.cardShape)
+                        .overlay {
+                            OiaTheme.cardShape
+                                .stroke(OiaTheme.border, lineWidth: 1)
+                                .allowsHitTesting(false)
+                        }
                         .padding(38)
                 }
             } else {
@@ -175,6 +181,12 @@ struct OiaReadingOverlay: View {
                 fallbackAspectRatio: row.standaloneMediaAspectRatio ?? (showsPlay ? 16 / 9 : 4 / 3),
                 maxPixel: 3200, contentMode: .fit
             )
+            .clipShape(OiaTheme.cardShape)
+            .overlay {
+                OiaTheme.cardShape
+                    .stroke(OiaTheme.border, lineWidth: 1)
+                    .allowsHitTesting(false)
+            }
             .padding(38)
 
             if showsPlay {
