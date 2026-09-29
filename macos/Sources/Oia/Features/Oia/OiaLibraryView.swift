@@ -480,7 +480,7 @@ extension OiaLibraryView {
     func open(_ row: ReadingRow) {
         appState.selectReading(id: row.id, extending: false)
 
-        if LibraryScope.links.contains(row) {
+        if row.isLink && row.lightweight {
             if let url = row.sourceURL {
                 ReadingLink.open(url)
             }
@@ -488,7 +488,7 @@ extension OiaLibraryView {
         }
 
         if presentedReading == nil {
-            gallerySnapshot = GallerySnapshot(appState.readings.filter { !LibraryScope.links.contains($0) })
+            gallerySnapshot = GallerySnapshot(appState.readings.filter { !($0.isLink && $0.lightweight) })
         }
         boardFocused = false
         updatePresentedRow(row)

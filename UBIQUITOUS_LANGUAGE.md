@@ -52,10 +52,10 @@ host, and macOS app.
 | Media URL | Optional media identity for an image/video card. Images may retain a durable direct URL; every newly browser-saved video uses a content-derived `cuttings-asset:` reference to its local movie. Legacy direct video URLs remain readable. The media identity supplements the origin and never replaces the page URL. |
 | Preview asset | Optional safe local `assets/<file>` reference used by the masonry card. The host derives it only after captured image/poster bytes have been written. |
 | Quote | A text card whose full text is stored as Markdown. Browser selections retain their page origin; source-less paste/drop text uses a private local identity. |
-| Lightweight link | An article card with no cleaned article body. It may be created by paste/drop or the browser toolbar and may retain page metadata, a social preview, and a favicon. It is explicitly marked `lightweight: true`; a later full browser capture upgrades the same reading in place. |
+| Lightweight link | An article card with no cleaned article body. It may be created by paste/drop or the browser toolbar and may retain page metadata, a social preview, and a favicon. It is explicitly marked `lightweight: true`; a later full browser capture upgrades the same reading in place. It shares the Links board scope with captured social posts but has no local post body. |
 | Recognized source | A public URL whose host and route match a Rust source adapter. A URL-only save can retrieve its durable text, metadata, and supported media without needing a live browser DOM. Unknown URLs retain the ordinary lightweight-link behavior. |
 | Source profile | Optional, versioned, provider-neutral frontmatter describing a recognized source and its ordered local attachments. It changes presentation without introducing a new card kind or user tag. |
-| Social post | A full `article` reading with a `source_profile` whose type is `social_post`. Its text and attachments are durable local content; the board and detail surfaces may give it a provider-aware presentation. |
+| Social post | A full `article` reading with a `source_profile` whose type is `social_post`. Its text and attachments are durable local content, and its board card and detail may use a provider-aware presentation. It appears in the Links board scope and Link item-type search despite its full article storage format. |
 | Local identity | A deterministic, non-web `cuttings://local/...` URL used for source-less text, image, or video saves. It prevents machine-local paths leaking into synced files and is never shown as an openable source. |
 | Reading folder | The per-reading folder `articles/<prefix>/<id>/` (named by the reading id, under a two-character fan-out bucket) that holds the reading's `article.md`, its assets and highlights, and any preserved legacy sidecars. Moving or deleting a reading operates on this one folder. |
 | Article file | The `article.md` file inside a reading folder (`articles/<prefix>/<id>/article.md`) that stores one reading's frontmatter and body. |
@@ -79,7 +79,7 @@ host, and macOS app.
 | Term | Definition |
 |------|------------|
 | Tag | User-defined label stored in a reading's frontmatter. Tags organize readings and are indexed by search. |
-| Board scope | Exactly one toolbar selection: All, Images, Videos, Articles, Links, or Quotes. Images and Videos each select their matching reading kind; Articles excludes lightweight links; Links selects lightweight article placeholders. |
+| Board scope | Exactly one toolbar selection: All, Images, Videos, Articles, Links, or Quotes. Images and Videos each select their matching reading kind; Articles selects full articles other than social posts, including longform X Articles; Links selects lightweight article placeholders and captured social posts. |
 | Board filter | The selected board scope, free-text query, and any scoped search terms, applied as one intersection to the board. |
 | Search token | A native search-field pill created from a suggestion. A tag token means an exact saved tag; a visual token means a derived label or colour found in the same reading's current visual analysis. Tokens narrow one another by intersection. |
 | All | The unfiltered board scope. It includes every saved item, including files carrying a legacy `archived: true` value. |

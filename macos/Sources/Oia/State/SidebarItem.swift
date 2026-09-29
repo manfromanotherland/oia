@@ -50,8 +50,8 @@ enum LibraryScope: String, CaseIterable, Hashable, Identifiable {
         case .all: true
         case .images: row.kind == .image
         case .videos: row.kind == .video
-        case .articles: row.kind == .article && !row.lightweight
-        case .links: row.kind == .article && row.lightweight
+        case .articles: row.kind == .article && !row.isLink
+        case .links: row.kind == .article && row.isLink
         case .quotes: row.kind == .quote
         }
     }

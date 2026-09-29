@@ -114,12 +114,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
   filters by that type or palette color; pressing Return turns complete type and hex terms into
   tokens, while remaining words stay broad free text. Only the last type term applies. Never infer
-  an exact tag merely because a tag has the same spelling. Article excludes lightweight links;
-  Link selects only lightweight article cards.
+  an exact tag merely because a tag has the same spelling. Article excludes lightweight links and
+  captured social posts; Link selects both.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Images,
   Videos, Articles, Links, Quotes**. Images and Videos each show only their matching card kind;
-  Articles excludes lightweight link placeholders; Links means lightweight URL saves. Exact tag
-  filtering comes from native suggestions in the toolbar search field.
+  Articles includes longform X Articles but excludes lightweight link placeholders and captured
+  social posts. Links includes lightweight URL saves and captured social posts. Exact tag filtering
+  comes from native suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
   complete board snapshot remains correct. Multiple visual terms must occur in the same reading's
@@ -144,8 +145,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   visible content with 20 pt padding; source and reading time are muted, and absent favicons leave
   no decorative placeholder. Lightweight links keep their separate card treatment.
 - **Social post:** a source-aware article card with avatar, author/handle, full post text, provider,
-  and the first local attachment or video poster. It remains in Articles and does not acquire an
-  automatic tag.
+  and the first local attachment or video poster. It appears in Links while retaining its full local
+  article file and native post detail. It does not acquire an automatic tag.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
   use a black surface with white text and symbol. The board and window shell use
@@ -178,10 +179,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 ### Card detail
 
 - Double-click, `⌘O`, or Return opens a full-window Gallery detail for articles, images, videos,
-  and quotes while preserving the board behind the navigation destination. A lightweight link
-  opens its origin in the system browser instead and never enters Gallery. Opening collapses a
-  multi-selection to that card. Escape or Close returns focus to the board; left/right and J/K move
-  through the frozen detail-capable board order, skipping links.
+  quotes, and captured social posts while preserving the board behind the navigation destination.
+  A lightweight link opens its origin in the system browser instead and never enters Gallery.
+  Opening collapses a multi-selection to that card. Escape or Close returns focus to the board;
+  left/right and J/K move through the frozen detail-capable board order, skipping lightweight links.
 - The selected preview fills the available space. Collapse, Previous, Next, and Close sit on the
   left in that order. Previous and Next move through the frozen detail-capable board order. `⌘B`
   toggles the leading inspector sidebar with a brief slide, or immediately when Reduce Motion is enabled.

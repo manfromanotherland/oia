@@ -146,7 +146,9 @@ is true for a link saved without a cleaned article body, from either the app or 
   entry has an open string `kind`, a required safe local `asset`, and optional `poster_asset`,
   `content_type`, positive `width`/`height`, and `alt`. Provider and attachment discriminators are
   deliberately open strings so older readers can preserve future values. A social post remains an
-  `article`; this profile changes its presentation, not its primary kind, identity, or tags.
+  `article`; this profile changes its presentation, not its primary kind, identity, or tags. The
+  macOS board places `social_post` readings under Links even though their text and assets are
+  captured locally. Longform X Articles without that profile remain under Articles.
 - `read_at`, `archived`, `favorite`, and `rating` remain part of the format-v1 compatibility
   contract. Older clients may still interpret and mutate them, so current readers preserve them
   when rewriting a file. The current macOS product does not expose them as curation controls.
@@ -350,10 +352,15 @@ workflows:
 | Scope | Filter |
 |-------|--------|
 | **All** | every saved item, regardless of legacy state fields |
-| **Media** | image and video readings |
-| **Articles** | captured articles, excluding lightweight links |
-| **Links** | lightweight URL-only article placeholders |
+| **Images** | image readings |
+| **Videos** | video readings |
+| **Articles** | captured articles other than social posts, including longform X Articles |
+| **Links** | lightweight URL-only article placeholders and captured social posts |
 | **Quotes** | quote readings |
+
+Article and Link item-type search terms use the same distinction as these board scopes. A captured
+social post keeps `kind: article` and `lightweight: false` in the library file; its Links placement
+is a presentation rule, not a file-format conversion.
 
 The core continues to parse, index, and round-trip `read_at`, `archived`, `favorite`, and `rating`
 so opening an existing library does not strip data used by an older client. Those fields no longer

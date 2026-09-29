@@ -79,6 +79,9 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var tags: [String]
     var kind: ReadingKind = .article
     var lightweight: Bool
+    /// Core-derived board classification. Full social posts can be links while
+    /// retaining their locally saved text and media.
+    var isLink: Bool
     var mediaUrl: String?
     var previewAsset: String?
     var faviconAsset: String?
@@ -111,6 +114,7 @@ extension ReadingRow {
         tags = row.tags
         kind = ReadingKind(row.kind)
         lightweight = row.lightweight
+        isLink = row.isLink
         mediaUrl = row.mediaUrl
         previewAsset = row.previewAsset
         faviconAsset = row.faviconAsset

@@ -44,7 +44,8 @@ facade. A recognized public source is resolved into a complete local article by 
 adapter; an unknown URL remains lightweight so a later full browser capture can upgrade it. The app
 watches the folder and indexes every new file for the masonry board, full-text search, type filters,
 and tags — so browser saves, in-app saves, and files delivered by sync reconcile through the same
-index path.
+index path. Captured social posts keep their complete local article files and assets but appear under
+Links on the macOS board and in Link item-type search. Longform X Articles remain under Articles.
 
 The iOS **Óia!** Shortcut publishes sealed captures into `inbox/`
 inside the user's synced library. The Mac requests any missing iCloud bytes and
@@ -139,7 +140,8 @@ every affected component.
   articles and quote bodies; image/video cards use local preview assets and source/media actions.
   A persistent filmstrip navigates the current board order, while an optional trailing Inspector
   exposes the origin page when one exists and identifies source-less cards as saved locally.
-  Lightweight links bypass Gallery and open their origin directly in the system browser.
+  Lightweight links bypass Gallery and open their origin directly in the system browser. Captured
+  social posts appear under Links but retain their native detail view and local content.
 - Owns the local index and watches the library folder for changes (including files arriving via
   sync), reindexing incrementally.
 
@@ -195,7 +197,8 @@ The card metadata is additive and backwards compatible:
 - `source_profile`: optional versioned, provider-neutral metadata for a recognized source. A social
   post remains `kind: article`; the profile records its provider/source identity, author handle,
   publication time, avatar asset, and ordered local attachments so clients can render a source-aware
-  card without inventing a new kind or tag.
+  card without inventing a new kind or tag. The macOS board places such social posts under Links;
+  their full article storage format and offline assets remain intact.
 - `lightweight`: optional `true` marker for a link saved without cleaned article content, from the
   app or browser toolbar. A later full browser capture
   replaces that placeholder at the same article id and clears the marker while preserving user

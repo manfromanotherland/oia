@@ -14,6 +14,7 @@ final class ReadingRowMapperTests: XCTestCase {
             title: "The Title",
             kind: .video,
             lightweight: true,
+            isLink: true,
             hasNote: true,
             url: "https://example.com/article",
             mediaUrl: "https://cdn.example.com/video.mp4",
@@ -64,6 +65,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.tags, ffi.tags)
         XCTAssertEqual(row.kind, .video)
         XCTAssertEqual(row.lightweight, ffi.lightweight)
+        XCTAssertEqual(row.isLink, ffi.isLink)
         XCTAssertEqual(row.mediaUrl, ffi.mediaUrl)
         XCTAssertEqual(row.previewAsset, ffi.previewAsset)
         XCTAssertEqual(row.faviconAsset, ffi.faviconAsset)
@@ -83,6 +85,7 @@ final class ReadingRowMapperTests: XCTestCase {
         var ffi = sampleFfiRow()
         ffi.kind = .article
         ffi.lightweight = false
+        ffi.isLink = false
         ffi.mediaUrl = nil
         ffi.previewAsset = nil
         ffi.faviconAsset = nil
@@ -106,6 +109,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.lang)
         XCTAssertEqual(row.kind, .article)
         XCTAssertFalse(row.lightweight)
+        XCTAssertFalse(row.isLink)
         XCTAssertNil(row.mediaUrl)
         XCTAssertNil(row.previewAsset)
         XCTAssertNil(row.faviconAsset)
@@ -128,6 +132,9 @@ final class ReadingRowMapperTests: XCTestCase {
         var favoriteFlipped = base
         favoriteFlipped.favorite.toggle()
         XCTAssertNotEqual(base, favoriteFlipped)
+        var linkChanged = base
+        linkChanged.isLink.toggle()
+        XCTAssertNotEqual(base, linkChanged)
         var mediaRatioChanged = base
         mediaRatioChanged.mediaAspectRatio = 4.0 / 3.0
         XCTAssertNotEqual(base, mediaRatioChanged)

@@ -33,6 +33,8 @@ struct ArticleFixture {
     var excerpt: String?
     var wordCount: Int?
     var lang: String?
+    /// Indented YAML fields below `source_profile:` for an existing captured source.
+    var sourceProfileYAML: String?
 
     /// The Markdown body (the `# Title` heading + content).
     var body: String
@@ -55,6 +57,7 @@ struct ArticleFixture {
         excerpt: String? = nil,
         wordCount: Int? = nil,
         lang: String? = nil,
+        sourceProfileYAML: String? = nil,
         body: String? = nil
     ) {
         self.id = id
@@ -74,6 +77,7 @@ struct ArticleFixture {
         self.excerpt = excerpt
         self.wordCount = wordCount
         self.lang = lang
+        self.sourceProfileYAML = sourceProfileYAML
         self.body = body ?? "# \(title)\n\nBody of \(title).\n"
     }
 
@@ -107,6 +111,7 @@ struct ArticleFixture {
             ("excerpt", excerpt.map(quoted)),
             ("word_count", wordCount.map { "\($0)" }),
             ("lang", lang.map(quoted)),
+            ("source_profile", sourceProfileYAML.map { "\n\($0)" }),
             ("source_hash", quoted(sourceHash))
         ]
         let frontmatter = fields

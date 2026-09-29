@@ -26,21 +26,23 @@ final class LibraryScopeContainsTests: XCTestCase {
         XCTAssertFalse(LibraryScope.videos.contains(makeReadingRow(kind: .quote)))
     }
 
-    func testArticlesContainsOnlyFullArticleReadings() {
+    func testArticlesExcludeLinksIncludingFullSocialPosts() {
         XCTAssertTrue(LibraryScope.articles.contains(makeReadingRow(kind: .article)))
         XCTAssertFalse(
-            LibraryScope.articles.contains(makeReadingRow(lightweight: true, kind: .article))
+            LibraryScope.articles.contains(makeReadingRow(lightweight: true, isLink: true))
         )
+        XCTAssertFalse(LibraryScope.articles.contains(makeReadingRow(isLink: true)))
         XCTAssertFalse(LibraryScope.articles.contains(makeReadingRow(kind: .image)))
     }
 
-    func testLinksContainsOnlyLightweightArticleReadings() {
+    func testLinksContainLightweightLinksAndFullSocialPosts() {
         XCTAssertTrue(
-            LibraryScope.links.contains(makeReadingRow(lightweight: true, kind: .article))
+            LibraryScope.links.contains(makeReadingRow(lightweight: true, isLink: true))
         )
+        XCTAssertTrue(LibraryScope.links.contains(makeReadingRow(isLink: true)))
         XCTAssertFalse(LibraryScope.links.contains(makeReadingRow(kind: .article)))
         XCTAssertFalse(
-            LibraryScope.links.contains(makeReadingRow(lightweight: true, kind: .video))
+            LibraryScope.links.contains(makeReadingRow(lightweight: true, isLink: true, kind: .video))
         )
     }
 

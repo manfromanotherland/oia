@@ -20,11 +20,11 @@ pub enum View {
     Favorites,
     /// Image and video readings.
     Media,
-    /// Fully captured articles, excluding lightweight link placeholders.
+    /// Fully captured articles, excluding lightweight links and social posts.
     Articles,
     /// Readings with a personal `note.md` sidecar, regardless of card kind.
     Notes,
-    /// Lightweight article placeholders created from URL-only saves.
+    /// Lightweight URL saves and captured social posts.
     Links,
     /// Selected-text and source-less text cards.
     Quotes,
@@ -128,6 +128,9 @@ pub struct ReadingRow {
     pub title: String,
     pub kind: ReadingKind,
     pub lightweight: bool,
+    /// Board classification. Captured social posts remain full local readings
+    /// even though the board groups them with links.
+    pub is_link: bool,
     pub has_note: bool,
     pub url: String,
     pub media_url: Option<String>,
@@ -173,9 +176,9 @@ pub(crate) fn view_clause(view: View) -> &'static str {
         View::Archive => "archived = 1",
         View::Favorites => "favorite = 1",
         View::Media => "kind IN ('image', 'video')",
-        View::Articles => "kind = 'article' AND lightweight = 0",
+        View::Articles => "kind = 'article' AND lightweight = 0 AND json_extract(source_profile_json, '$.source_type') IS NOT 'social_post'",
         View::Notes => "has_note = 1",
-        View::Links => "kind = 'article' AND lightweight = 1",
+        View::Links => "kind = 'article' AND (lightweight = 1 OR json_extract(source_profile_json, '$.source_type') IS 'social_post')",
         View::Quotes => "kind = 'quote'",
     }
 }
@@ -773,8 +776,12 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                SELECT 1 FROM json_each(?13) requested_type
                WHERE NOT (
                    (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (readings.kind = 'article' AND requested_type.value = 'article' AND readings.lightweight = 0)
-                   OR (readings.kind = 'article' AND requested_type.value = 'link' AND readings.lightweight = 1)
+                   OR (readings.kind = 'article' AND requested_type.value = 'article'
+                       AND readings.lightweight = 0
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (readings.kind = 'article' AND requested_type.value = 'link'
+                       AND (readings.lightweight = 1
+                            OR json_extract(readings.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
          ORDER BY {order}
@@ -868,8 +875,12 @@ fn phrase_exists_in_list_scope(
                SELECT 1 FROM json_each(?12) requested_type
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (r.kind = 'article' AND requested_type.value = 'article' AND r.lightweight = 0)
-                   OR (r.kind = 'article' AND requested_type.value = 'link' AND r.lightweight = 1)
+                   OR (r.kind = 'article' AND requested_type.value = 'article'
+                       AND r.lightweight = 0
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (r.kind = 'article' AND requested_type.value = 'link'
+                       AND (r.lightweight = 1
+                            OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
          )"
@@ -1020,8 +1031,12 @@ fn list_readings_search(
                SELECT 1 FROM json_each(?15) requested_type
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (r.kind = 'article' AND requested_type.value = 'article' AND r.lightweight = 0)
-                   OR (r.kind = 'article' AND requested_type.value = 'link' AND r.lightweight = 1)
+                   OR (r.kind = 'article' AND requested_type.value = 'article'
+                       AND r.lightweight = 0
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (r.kind = 'article' AND requested_type.value = 'link'
+                       AND (r.lightweight = 1
+                            OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
          ORDER BY {order}
@@ -1067,6 +1082,11 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
     let tags_json: String = row.get(13)?;
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
     let palette_json: Option<String> = row.get(24)?;
+    let kind = parse_kind(row.get::<_, String>(16)?.as_str())?;
+    let lightweight = row.get::<_, i32>(21)? != 0;
+    let source_profile_json: Option<String> = row.get(25)?;
+    let is_link = kind == ReadingKind::Article
+        && (lightweight || is_social_post(source_profile_json.as_deref()));
     let dominant_color = palette_json
         .as_deref()
         .and_then(|json| serde_json::from_str::<Vec<WeightedColor>>(json).ok())
@@ -1074,15 +1094,16 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
     Ok(ReadingRow {
         id: row.get(0)?,
         title: row.get(1)?,
-        kind: parse_kind(row.get::<_, String>(16)?.as_str())?,
-        lightweight: row.get::<_, i32>(21)? != 0,
+        kind,
+        lightweight,
+        is_link,
         has_note: row.get::<_, i32>(22)? != 0,
         url: row.get(2)?,
         media_url: row.get(17)?,
         preview_asset: row.get(18)?,
         favicon_asset: row.get(19)?,
         theme_color: row.get(20)?,
-        source_profile_json: row.get(25)?,
+        source_profile_json,
         dominant_color,
         media_aspect_ratio: row.get(23)?,
         canonical_url: row.get(3)?,
@@ -1100,6 +1121,18 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         rating: row.get::<_, i32>(14)? as u8,
         read_at: row.get(15)?,
     })
+}
+
+fn is_social_post(profile_json: Option<&str>) -> bool {
+    profile_json
+        .and_then(|json| serde_json::from_str::<serde_json::Value>(json).ok())
+        .and_then(|profile| {
+            profile
+                .get("source_type")
+                .and_then(serde_json::Value::as_str)
+                .map(|value| value == "social_post")
+        })
+        .unwrap_or(false)
 }
 
 fn parse_kind(value: &str) -> rusqlite::Result<ReadingKind> {
@@ -2289,7 +2322,7 @@ mod tests {
         let article_id = new_id();
         write_reading(
             &lib,
-            meta(&article_id, "https://example.com/article", "Article"),
+            meta(&article_id, "https://x.com/example/status/43", "Article"),
             "article body".into(),
         )
         .unwrap();
@@ -2298,6 +2331,20 @@ mod tests {
         let mut link = meta(&link_id, "https://example.com/link", "Link");
         link.lightweight = true;
         write_reading(&lib, link, "[Open link](https://example.com/link)".into()).unwrap();
+
+        let post_id = new_id();
+        let mut post = meta(&post_id, "https://x.com/example/status/42", "Tweet");
+        post.source_profile = Some(SourceProfile {
+            version: 1,
+            source_type: "social_post".into(),
+            provider: "x".into(),
+            source_id: "42".into(),
+            author_handle: "example".into(),
+            published_at: None,
+            avatar_asset: None,
+            attachments: vec![],
+        });
+        write_reading(&lib, post, "Locally captured post text".into()).unwrap();
 
         let image_id = new_id();
         let mut image = meta(&image_id, "https://example.com/image", "Image");
@@ -2333,12 +2380,12 @@ mod tests {
             .collect::<std::collections::BTreeSet<_>>()
         };
 
-        assert_eq!(titles(View::All).len(), 5);
+        assert_eq!(titles(View::All).len(), 6);
         assert_eq!(titles(View::Favorites), ["Quote".into()].into());
         assert_eq!(titles(View::Media), ["Image".into(), "Video".into()].into());
         assert_eq!(titles(View::Articles), ["Article".into()].into());
         assert_eq!(titles(View::Notes), ["Image".into()].into());
-        assert_eq!(titles(View::Links), ["Link".into()].into());
+        assert_eq!(titles(View::Links), ["Link".into(), "Tweet".into()].into());
         assert_eq!(titles(View::Quotes), ["Quote".into()].into());
 
         let media_page = |offset| {
@@ -2360,6 +2407,18 @@ mod tests {
         let rows = list_readings(&conn, &ListOptions::default()).unwrap();
         let link_row = rows.iter().find(|row| row.id == link_id).unwrap();
         assert!(link_row.lightweight);
+        assert!(link_row.is_link);
+        let post_row = rows.iter().find(|row| row.id == post_id).unwrap();
+        assert!(!post_row.lightweight);
+        assert!(post_row.is_link);
+        assert!(crate::ffi::FfiReadingRow::from(post_row.clone()).is_link);
+        assert!(
+            !rows
+                .iter()
+                .find(|row| row.id == article_id)
+                .unwrap()
+                .is_link
+        );
         assert!(!link_row.has_note);
         let image_row = rows.iter().find(|row| row.id == image_id).unwrap();
         assert!(!image_row.lightweight);
@@ -2726,15 +2785,23 @@ mod tests {
         )
         .unwrap();
         let link_id = new_id();
-        write_reading(
-            &lib,
-            meta(&link_id, "https://example.com/link", "Red sample"),
-            "red".into(),
-        )
-        .unwrap();
+        let mut link = meta(&link_id, "https://example.com/link", "Red sample");
+        link.lightweight = true;
+        write_reading(&lib, link, "red".into()).unwrap();
+        let post_id = new_id();
+        let mut post = meta(&post_id, "https://x.com/example/status/42", "Red tweet");
+        post.source_profile = Some(SourceProfile {
+            version: 1,
+            source_type: "social_post".into(),
+            provider: "x".into(),
+            source_id: "42".into(),
+            author_handle: "example".into(),
+            published_at: None,
+            avatar_asset: None,
+            attachments: vec![],
+        });
+        write_reading(&lib, post, "red post text".into()).unwrap();
         rebuild(&conn, &lib).unwrap();
-        conn.execute("UPDATE readings SET lightweight=1 WHERE id=?1", [&link_id])
-            .unwrap();
 
         let images = list_readings(
             &conn,
@@ -2749,11 +2816,7 @@ mod tests {
             vec![&image_id]
         );
 
-        for (term, expected) in [
-            ("image", &image_id),
-            ("article", &article_id),
-            ("link", &link_id),
-        ] {
+        for (term, expected) in [("image", &image_id), ("article", &article_id)] {
             let rows = list_readings(
                 &conn,
                 &ListOptions {
@@ -2766,6 +2829,24 @@ mod tests {
             assert_eq!(
                 rows.iter().map(|row| &row.id).collect::<Vec<_>>(),
                 vec![expected]
+            );
+        }
+
+        for query in [None, Some("red")] {
+            let rows = list_readings(
+                &conn,
+                &ListOptions {
+                    query: query.map(str::to_owned),
+                    item_type_terms: vec!["link".into()],
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                rows.into_iter()
+                    .map(|row| row.id)
+                    .collect::<std::collections::BTreeSet<_>>(),
+                [link_id.clone(), post_id.clone()].into()
             );
         }
     }

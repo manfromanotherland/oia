@@ -407,7 +407,7 @@ private extension OiaCardView {
             .compactMap(\.self)
             .joined(separator: ", ")
         }
-        return [row.kind.singularLabel, row.displayTitle, row.displaySite]
+        return [row.isLink ? "Link" : row.kind.singularLabel, row.displayTitle, row.displaySite]
             .compactMap(\.self)
             .joined(separator: ", ")
     }
