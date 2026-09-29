@@ -58,7 +58,7 @@ struct ReadingSourceProfile: Equatable, Sendable {
 
     var displayProvider: String {
         switch provider.lowercased() {
-        case "x", "twitter": "X"
+        case "x", "twitter": "𝕏"
         case "bluesky", "bsky": "Bluesky"
         case "mastodon": "Mastodon"
         default: provider
