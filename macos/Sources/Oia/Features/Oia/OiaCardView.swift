@@ -165,7 +165,11 @@ struct OiaCardView: View {
                 cardSize: size,
                 displayScale: displayScale,
                 isVisible: isInViewport,
-                scrollState: scrollState
+                scrollState: scrollState,
+                playbackPositions: playbackPositions,
+                autoplayEnabled: autoplayEnabled,
+                reduceMotion: reduceMotion,
+                scenePhase: scenePhase
             )
         } else if row.isFullArticle {
             fullArticleCard(in: size)

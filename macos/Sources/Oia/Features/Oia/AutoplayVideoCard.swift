@@ -13,6 +13,11 @@ struct AutoplayVideoCard: View {
     let libraryURL: URL?
     let cardSize: CGSize
     let playbackPositions: VideoPlaybackPositionStore
+    var videoAssetReference: String?
+    var previewAssetReference: String?
+    var previewAssetIsVideo = false
+    var aspectRatio: CGFloat = 16 / 9
+    var contentMode: ContentMode = .fit
     var maxPixel: CGFloat = 800
     var isInViewport = false
     let scrollState: BoardScrollState
@@ -29,9 +34,11 @@ struct AutoplayVideoCard: View {
         LocalReadingImage(
             row: row,
             libraryURL: libraryURL,
-            fallbackAspectRatio: row.standaloneMediaAspectRatio ?? 16 / 9,
+            explicitAssetReference: previewAssetReference,
+            explicitAssetIsVideo: previewAssetIsVideo,
+            fallbackAspectRatio: row.standaloneMediaAspectRatio ?? aspectRatio,
             maxPixel: maxPixel,
-            contentMode: .fit,
+            contentMode: contentMode,
             loadsProgressively: true,
             isVisible: isInViewport,
             scrollState: scrollState
@@ -40,7 +47,7 @@ struct AutoplayVideoCard: View {
         .clipped()
         .overlay {
             if let playback {
-                CardVideoPlayerLayer(player: playback.player)
+                CardVideoPlayerLayer(player: playback.player, contentMode: contentMode)
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
             }
@@ -67,7 +74,7 @@ struct AutoplayVideoCard: View {
     }
 
     private var mediaKey: String {
-        "\(libraryURL?.path ?? ""):\(row.id):\(row.mediaUrl ?? "")"
+        "\(libraryURL?.path ?? ""):\(row.id):\(videoAssetReference ?? row.mediaUrl ?? "")"
     }
 
     @MainActor
@@ -208,7 +215,7 @@ struct AutoplayVideoCard: View {
     }
 
     private var playbackURL: URL? {
-        guard let reference = row.localVideoAssetReference else { return nil }
+        guard let reference = videoAssetReference ?? row.localVideoAssetReference else { return nil }
         let baseURL = AssetImageLoader.readingFolderURL(
             libraryURL: libraryURL,
             readingID: row.id
@@ -262,10 +269,12 @@ private final class CardVideoPlayback {
 
 private struct CardVideoPlayerLayer: NSViewRepresentable {
     let player: AVPlayer
+    let contentMode: ContentMode
 
     func makeNSView(context _: Context) -> PlayerView {
         let view = PlayerView()
         view.playerLayer.player = player
+        view.playerLayer.videoGravity = contentMode == .fill ? .resizeAspectFill : .resizeAspect
         return view
     }
 
@@ -273,6 +282,7 @@ private struct CardVideoPlayerLayer: NSViewRepresentable {
         if view.playerLayer.player !== player {
             view.playerLayer.player = player
         }
+        view.playerLayer.videoGravity = contentMode == .fill ? .resizeAspectFill : .resizeAspect
     }
 
     static func dismantleNSView(_ view: PlayerView, coordinator _: Void) {

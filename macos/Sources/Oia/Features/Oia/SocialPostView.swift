@@ -13,6 +13,10 @@ struct SocialPostCard: View {
     let displayScale: CGFloat
     let isVisible: Bool
     let scrollState: BoardScrollState
+    let playbackPositions: VideoPlaybackPositionStore
+    let autoplayEnabled: Bool
+    let reduceMotion: Bool
+    let scenePhase: ScenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: OiaCardTextMetrics.socialPostSpacing) {
@@ -41,7 +45,11 @@ struct SocialPostCard: View {
                         displayScale: displayScale
                     ),
                     isVisible: isVisible,
-                    scrollState: scrollState
+                    scrollState: scrollState,
+                    playbackPositions: playbackPositions,
+                    autoplayEnabled: autoplayEnabled,
+                    reduceMotion: reduceMotion,
+                    scenePhase: scenePhase
                 )
             }
         }
@@ -232,29 +240,45 @@ private struct SocialPostAttachmentPreview: View {
     let maxPixel: CGFloat
     let isVisible: Bool
     let scrollState: BoardScrollState
+    let playbackPositions: VideoPlaybackPositionStore
+    let autoplayEnabled: Bool
+    let reduceMotion: Bool
+    let scenePhase: ScenePhase
 
+    @ViewBuilder
     var body: some View {
-        LocalReadingImage(
-            row: row,
-            libraryURL: libraryURL,
-            explicitAssetReference: attachment.previewAsset,
-            explicitAssetIsVideo: attachment.previewIsVideo,
-            fallbackAspectRatio: attachment.cardAspectRatio,
-            maxPixel: maxPixel,
-            contentMode: .fill,
-            loadsProgressively: true,
-            isVisible: isVisible,
-            scrollState: scrollState
-        )
-        .frame(width: size.width, height: size.height)
-        .overlay {
+        Group {
             if attachment.mediaKind == .video {
-                Image(systemName: "play.fill")
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(.white)
-                    .padding(11)
-                    .background(.black.opacity(0.58), in: Circle())
-                    .accessibilityHidden(true)
+                AutoplayVideoCard(
+                    row: row,
+                    libraryURL: libraryURL,
+                    cardSize: size,
+                    playbackPositions: playbackPositions,
+                    videoAssetReference: attachment.asset,
+                    previewAssetReference: attachment.previewAsset,
+                    previewAssetIsVideo: attachment.previewIsVideo,
+                    aspectRatio: attachment.cardAspectRatio,
+                    contentMode: .fill,
+                    maxPixel: maxPixel,
+                    isInViewport: isVisible,
+                    scrollState: scrollState,
+                    autoplayEnabled: autoplayEnabled,
+                    reduceMotion: reduceMotion,
+                    scenePhase: scenePhase
+                )
+            } else {
+                LocalReadingImage(
+                    row: row,
+                    libraryURL: libraryURL,
+                    explicitAssetReference: attachment.previewAsset,
+                    fallbackAspectRatio: attachment.cardAspectRatio,
+                    maxPixel: maxPixel,
+                    contentMode: .fill,
+                    loadsProgressively: true,
+                    isVisible: isVisible,
+                    scrollState: scrollState
+                )
+                .frame(width: size.width, height: size.height)
             }
         }
         .accessibilityElement(children: .ignore)
