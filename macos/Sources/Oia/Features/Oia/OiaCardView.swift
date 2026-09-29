@@ -87,7 +87,9 @@ struct OiaCardView: View {
         cardContent(in: size)
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .background {
-                if row.kind == .article || row.kind == .quote {
+                if row.socialPostProfile?.isXProvider == true {
+                    cardShape.fill(.black)
+                } else if row.kind == .article || row.kind == .quote {
                     cardShape.fill(OiaTheme.textCardSurface)
                 } else if PerformanceTrace.disableMaterials {
                     cardShape.fill(Color(nsColor: .controlBackgroundColor))

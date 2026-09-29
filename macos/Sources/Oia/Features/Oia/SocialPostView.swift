@@ -24,7 +24,8 @@ struct SocialPostCard: View {
                 row: row,
                 profile: profile,
                 libraryURL: libraryURL,
-                isVisible: isVisible
+                isVisible: isVisible,
+                isDarkCard: profile.isXProvider
             )
             .fixedSize(horizontal: false, vertical: true)
 
@@ -53,6 +54,7 @@ struct SocialPostCard: View {
                 )
             }
         }
+        .foregroundStyle(profile.isXProvider ? Color.white : Color.primary)
         .padding(OiaCardTextMetrics.socialPostPadding)
         .frame(
             width: cardSize.width,
@@ -189,6 +191,7 @@ private struct SocialPostHeader: View {
     let libraryURL: URL?
     let isVisible: Bool
     var avatarSize: CGFloat = 34
+    var isDarkCard = false
 
     var body: some View {
         HStack(spacing: 10) {
@@ -215,18 +218,21 @@ private struct SocialPostHeader: View {
 
                 Text(profile.displayHandle ?? row.displaySite ?? "Social post")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isDarkCard ? Color.white.opacity(0.7) : Color.secondary)
                     .lineLimit(1)
             }
 
             Spacer(minLength: 6)
 
-            if profile.displayProvider == "𝕏" {
+            if profile.isXProvider {
                 Text("𝕏")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(isDarkCard ? Color.white : Color.primary)
                     .frame(width: 32, height: 32)
-                    .background(.secondary.opacity(0.09), in: Circle())
+                    .background(
+                        isDarkCard ? Color.white.opacity(0.14) : Color.secondary.opacity(0.09),
+                        in: Circle()
+                    )
                     .accessibilityLabel("X")
             } else {
                 Text(profile.displayProvider)

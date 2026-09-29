@@ -65,6 +65,13 @@ struct ReadingSourceProfile: Equatable, Sendable {
         }
     }
 
+    var isXProvider: Bool {
+        switch provider.lowercased() {
+        case "x", "twitter": true
+        default: false
+        }
+    }
+
     var displayHandle: String? {
         guard let authorHandle else { return nil }
         return authorHandle.hasPrefix("@") ? authorHandle : "@\(authorHandle)"

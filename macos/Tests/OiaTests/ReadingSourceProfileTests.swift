@@ -36,6 +36,7 @@ final class ReadingSourceProfileTests: XCTestCase {
 
         XCTAssertEqual(profile.sourceType, .socialPost)
         XCTAssertEqual(profile.displayProvider, "𝕏")
+        XCTAssertTrue(profile.isXProvider)
         XCTAssertEqual(profile.sourceID, "2102505743278829840")
         XCTAssertEqual(profile.displayHandle, "@benspringwater")
         XCTAssertEqual(profile.avatarAsset, "assets/avatar.jpg")
