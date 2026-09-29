@@ -48,7 +48,7 @@ struct OiaReadingOverlay: View {
                         if reduceTransparency {
                             OiaTheme.inspectorSidebarSurface
                         } else {
-                            InspectorSidebarMaterial()
+                            GalleryMaterial(material: .sidebar)
                         }
                     }
                     .ignoresSafeArea(.container, edges: .top)
@@ -59,7 +59,7 @@ struct OiaReadingOverlay: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background {
                     if row.kind == .image || row.kind == .video {
-                        OiaTheme.previewPlaceholderBackground(for: row)
+                        mediaPanelSurface
                             .ignoresSafeArea(.container, edges: .top)
                     }
                 }
@@ -140,6 +140,16 @@ struct OiaReadingOverlay: View {
     }
 
     @ViewBuilder
+    private var mediaPanelSurface: some View {
+        if reduceTransparency {
+            OiaTheme.previewPlaceholderBackground(for: row)
+        } else {
+            GalleryMaterial(material: .underWindowBackground)
+                .overlay(OiaTheme.previewPlaceholderBackground(for: row).opacity(0.65))
+        }
+    }
+
+    @ViewBuilder
     private var detail: some View {
         switch row.kind {
         case .article:
@@ -154,7 +164,7 @@ struct OiaReadingOverlay: View {
         case .video:
             if row.hasLocalVideoAsset {
                 ZStack {
-                    OiaTheme.previewPlaceholderBackground(for: row)
+                    Color.clear
                     LocalReadingVideo(row: row, libraryURL: appState.libraryURL)
                         .aspectRatio(row.standaloneMediaAspectRatio ?? 16 / 9, contentMode: .fit)
                         .clipShape(OiaTheme.cardShape)
@@ -175,7 +185,7 @@ struct OiaReadingOverlay: View {
 
     private func mediaDetail(showsPlay: Bool) -> some View {
         ZStack {
-            OiaTheme.previewPlaceholderBackground(for: row)
+            Color.clear
             LocalReadingImage(
                 row: row, libraryURL: appState.libraryURL,
                 fallbackAspectRatio: row.standaloneMediaAspectRatio ?? (showsPlay ? 16 / 9 : 4 / 3),
@@ -247,16 +257,20 @@ struct OiaReadingOverlay: View {
     }
 }
 
-private struct InspectorSidebarMaterial: NSViewRepresentable {
+private struct GalleryMaterial: NSViewRepresentable {
+    let material: NSVisualEffectView.Material
+
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
-        view.material = .sidebar
+        view.material = material
         view.blendingMode = .behindWindow
         view.state = .followsWindowActiveState
         return view
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {}
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        view.material = material
+    }
 }
 
 private struct OiaQuoteDetailView: View {
