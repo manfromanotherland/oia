@@ -1,7 +1,8 @@
 # Image Content and Colour Search Research
 
 Checked **2026-08-25** against Apple's public documentation, WWDC sessions, SDK behaviour, and
-first-party model licences. The current Óia macOS deployment target is 14.0 in
+first-party model licences; platform status and product decision updated **2026-09-30**. The
+current Óia macOS deployment target is 15.0 in
 [`macos/project.yml`](../macos/project.yml).
 
 ## Decision
@@ -14,23 +15,24 @@ The recommended stack is:
 1. On **macOS 15 and later**, donate each image to **Core Spotlight's semantic media index** and
    query it with `CSUserQuery`. This is the closest public Apple API to typing `chair` and getting
    an image whose pixels depict a chair, without bundling a model.
-2. On the current **macOS 14 baseline**, and as an inspectable fallback on newer systems, run
+2. On the current **macOS 15 baseline**, run
    **Vision image classification** and index its labels and confidence values. Apple's own sample
    is specifically about using those labels for categorisation and search.
 3. Compute weighted dominant colours with **Core Image `kMeans()`**. This is deterministic,
    local, and more appropriate than a generative model for a query such as `blue`.
 4. Use **Vision FeaturePrint** for a separate “find similar images” feature. It cannot turn a text
    query into an image match.
-5. Consider **Foundation Models image prompting on macOS 27** later for richer captions or
-   structured visual attributes. It is currently beta, requires Apple Intelligence, and is not a
-   safe sole indexing path.
+5. Consider **Foundation Models image prompting on macOS 27** for richer captions or structured
+   visual attributes. It requires Apple Intelligence and is not a safe sole indexing path.
 6. Bundle a licensed **Core ML text/image dual encoder** only if quality testing shows that Core
    Spotlight and Vision are insufficient and Óia needs consistent open-vocabulary retrieval
    across OS versions.
 
-All generated labels, palettes, captions, feature prints, embeddings, and Spotlight donations
-should remain disposable per-device indexes. They should not become user `Tags` or be written into
-the Markdown library by default.
+Generated machine subject tags belong in the reading's Markdown frontmatter, alongside user tags
+with separate provenance. User tags win case-insensitive duplicates, and removing a machine tag
+must be durable in the Markdown file. Raw Vision labels and confidences, palettes, captions,
+feature prints, embeddings, and Spotlight donations remain disposable per-device analysis data.
+See [Automatic Subject Tagging Research](./automatic-subject-tagging-research.md).
 
 ## Capability Matrix
 
@@ -42,7 +44,7 @@ the Markdown library by default.
 | Similar-image search | Vision FeaturePrint | 10.15 legacy API; 15 modern API | No | Image-to-image comparison on device |
 | Predominant-colour search | Core Image `kMeans()` | 11 | No | Deterministic local image processing |
 | Custom classifier, detector, or text/image embeddings | Core ML, optionally through Vision | 10.13 for Core ML; ML Programs from 12 | No | Local when the model is bundled or already downloaded |
-| Rich image captions and custom structured attributes | Foundation Models image `Attachment` | 27, currently beta | Yes | On-device and offline once the system model is available |
+| Rich image captions and custom structured attributes | Foundation Models image `Attachment` | 27 | Yes | On-device and offline once the system model is available |
 | Read the Photos app's own inferred object labels | No public PhotoKit API | — | — | PhotoKit exposes assets and documented metadata, not Photos' private semantic index |
 
 ## Core Spotlight Is the Closest Stable Answer to `chair`
@@ -103,7 +105,7 @@ and confidence values for an image. The sample filters them for a chosen precisi
 stores them, and searches images by label.
 
 The legacy [`VNClassifyImageRequest`](https://developer.apple.com/documentation/vision/vnclassifyimagerequest)
-is available on Óia' macOS 14 baseline. The newer `ClassifyImageRequest` Swift API is macOS
+is available on Óia's macOS 15 baseline. The newer `ClassifyImageRequest` Swift API is macOS
 15+. Apple recommends trying this built-in classifier before bundling a third-party classifier
 because it avoids app-size cost and may perform better; see [Classifying Images with Vision and
 Core ML](https://developer.apple.com/documentation/coreml/classifying-images-with-vision-and-core-ml).
@@ -216,15 +218,16 @@ requires a runtime availability check. Documented failure reasons include
 requirements](https://support.apple.com/en-us/121115) include a Mac with M1 or later, Apple
 Intelligence enabled, supported language/region settings, and downloaded on-device models.
 
-As of the checked date, macOS 27 and the image-attachment API are beta. They can be prototyped, but
-Apple's App Review rule [2.5.1](https://developer.apple.com/app-store/review/guidelines/) requires
-public APIs and a currently shipping OS. Óia must preserve a non-Foundation-Models path even
-after macOS 27 ships because users can disable Apple Intelligence or its model can be unavailable.
+macOS 27 [shipped on 14 September 2026](https://www.apple.com/uk/newsroom/2026/09/major-updates-for-apples-software-platforms-are-now-available/);
+Apple released [27.0.1 on 28 September 2026](https://developer.apple.com/news/releases/?id=09282026c).
+The image-attachment API can therefore be considered for a shipping macOS 27 feature. Óia must
+preserve a non-Foundation-Models path because users can disable Apple Intelligence or its model
+can be unavailable.
 
 The ordinary on-device system model has no special entitlement documented. Custom Foundation
 Models adapters require Apple's
 [`com.apple.developer.foundation-model-adapter`](https://developer.apple.com/documentation/BundleResources/Entitlements/com.apple.developer.foundation-model-adapter)
-permission before App Store submission. Private Cloud Compute is a separate, networked beta path
+permission before App Store submission. Private Cloud Compute is a separate, networked path
 with a [managed entitlement](https://developer.apple.com/documentation/bundleresources/entitlements/com.apple.developer.private-cloud-compute);
 it conflicts with an offline core feature and is unnecessary here. Any use must also follow
 Apple's [Foundation Models acceptable-use
@@ -244,7 +247,7 @@ Core ML runs models locally on the CPU, GPU, and Neural Engine. Apple's [Core ML
 overview](https://apple.github.io/coremltools/docs-guides/source/overview-coremltools.html) says
 strictly on-device execution needs no network and keeps data private. Apple's ML Program format is
 available from [macOS 12](https://apple.github.io/coremltools/docs-guides/source/convert-to-ml-program.html),
-so a compatible converted model can support Óia' macOS 14 baseline.
+so a compatible converted model can support Óia's macOS 15 baseline.
 
 Apple's [MobileCLIP research](https://machinelearning.apple.com/research/mobileclip) demonstrates
 efficient text/image retrieval, and its official iOS sample demonstrates [zero-shot scene
@@ -281,7 +284,8 @@ public APIs.
 
 ### Derived data
 
-Keep machine output in the per-device disposable index, separate from user-authored `Tags`:
+Keep raw machine analysis in the per-device disposable index. Subject labels converted into
+machine Tags are written to reading frontmatter (see the [tagging note](./automatic-subject-tagging-research.md)):
 
 ```text
 image_analysis
@@ -298,7 +302,7 @@ image_embeddings                  # optional later
 ```
 
 Core Spotlight donations form another rebuildable per-device index keyed by the stable reading ID.
-If a derived thumbnail is required for sandbox access, keep it outside the synced library beside
+If a derived thumbnail is required for sandbox access, keep it outside the library beside
 the ordinary local cache.
 
 ### Ownership boundary
@@ -309,7 +313,7 @@ core should own:
 
 - deciding which assets are stale from relative path, content hash, and analyser revision;
 - persistence in the disposable index;
-- merging FTS, user Tag, Vision label, Spotlight semantic, colour, and optional vector scores;
+- merging FTS, user and machine Tags, Vision label, Spotlight semantic, colour, and optional vector scores;
 - kind/Tag filters, pagination, and ordering;
 - reconciliation after files are added, removed, or changed externally.
 
@@ -318,17 +322,16 @@ implementation.
 
 ### Staged delivery
 
-1. **macOS 14-compatible base:** Vision labels plus Core Image dominant colours, analysed in the
-   background and cached by asset hash.
-2. **macOS 15 enhancement:** runtime-gated Core Spotlight media donation and `CSUserQuery` for
-   natural-language pixel search; keep Vision as fallback and visible category data.
-3. **Independent feature:** FeaturePrint-powered “similar images.”
-4. **After macOS 27 is final:** optional structured Foundation Models captions/categories when
+1. **macOS 15 baseline:** Vision labels plus Core Image dominant colours, analysed in the
+   background and cached by asset hash. Add Core Spotlight media donation and `CSUserQuery` for
+   natural-language pixel search; keep Vision as fallback and inspectable category data.
+2. **Independent feature:** FeaturePrint-powered “similar images.”
+3. **macOS 27 enhancement:** optional structured Foundation Models captions/categories when
    `SystemLanguageModel` is available.
-5. **Only after evaluation:** a production-licensed Core ML dual encoder if Spotlight/Vision recall,
+4. **Only after evaluation:** a production-licensed Core ML dual encoder if Spotlight/Vision recall,
    reproducibility, or cross-version behaviour is not good enough.
 
-Before choosing thresholds or raising the deployment target, test a small representative corpus:
+Before choosing thresholds, test a small representative corpus:
 prominent and incidental chairs, dining rooms with partially hidden chairs, screenshots,
 illustrations, low-light images, monochrome images, and images where blue is a small accent versus
 the dominant field. Record precision and missed results for both Core Spotlight and Vision rather
