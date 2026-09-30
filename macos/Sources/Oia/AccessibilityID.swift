@@ -91,7 +91,7 @@ enum A11y {
         static let panel = "detail.inspector"
         static let toggle = "detail.inspector.toggle"
         static let editTags = "detail.inspector.editTags"
-        static let information = "detail.inspector.information"
+        static let details = "detail.inspector.details"
         static let colorPrefix = "detail.inspector.colour."
         static func attribute(_ label: String) -> String { "detail.inspector.attribute.\(label)" }
     }

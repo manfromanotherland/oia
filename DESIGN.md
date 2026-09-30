@@ -194,20 +194,22 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   titlebar. Its visibility is a per-device preference. The sidebar scrolls within short windows.
   Delete sits below the content and requires confirmation. macOS 15 uses system material, and
   Reduce Transparency uses an opaque system surface.
-- One **Information** section replaces separate Discover and Details tabs. Finder-style labeled
-  rows show the save date and, when available, reading time, local media duration, dimensions,
-  codecs, color profile, format, size, author, and origin. Show More / Show Less expands and
-  collapses the optional facts. Media facts come from the local file and unavailable facts are
-  omitted. Article preview file facts are labeled as previews. Internal asset schemes and hashed
-  filenames never appear. The source appears once as a hostname followed by ↗; its complete URL
-  is available on hover or through Copy source URL.
-- **Your tags** keeps its existing Add/Edit picker and search chips. Below it, **In this image**
-  retains its small information button explaining locally recognised suggestions. Tags and
-  attributes are native capsule glass buttons. Attributes search the library. Up to five distinct
-  colours appear for media and links as closely spaced flat circles with a subtle outline; full
-  articles omit the colour section. Swatch fills stay colour-accurate; hovering strengthens only
-  the outline. Selecting one starts `colour:#RRGGBB` search, ranked by perceptual shade similarity.
-  Analysis and missing-file states never prevent access to source or tags.
+- Below the title, the Inspector orders its sections as **Your tags**, **In this image**,
+  **Colours**, **Details**, then Delete. Sections without relevant image attributes or colours
+  are omitted. **Your tags** keeps its existing Add/Edit picker and search chips.
+- **In this image** retains its small information button explaining locally recognised
+  suggestions. Tags and attributes are native capsule glass buttons; attributes search the
+  library. **Colours** shows up to five distinct swatches for media and links as closely spaced
+  flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
+  hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by
+  perceptual shade similarity.
+- **Details** always shows Finder-style labeled rows for the save date and, when available,
+  reading time, local media duration, dimensions, codecs, color profile, format, size, author,
+  and origin. Media facts come from the local file and unavailable facts are omitted. Article
+  preview file facts are labeled as previews. Internal asset schemes and hashed filenames never
+  appear. The source appears once as a hostname followed by ↗; its complete URL is available on
+  hover or through Copy source URL. Analysis and missing-file states never prevent access to
+  source or tags.
 
 ### Content states
 

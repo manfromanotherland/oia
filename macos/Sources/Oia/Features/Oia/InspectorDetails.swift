@@ -30,62 +30,50 @@ struct InspectorSource: View {
     }
 }
 
-struct InspectorInformation: View {
+struct InspectorDetails: View {
     let row: ReadingRow
     let inspector: ReadingInspector?
     let failed: Bool
-    @State private var showsMore = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Information")
-                    .font(.system(size: 14, weight: .semibold))
-                Spacer()
-                Button(showsMore ? "Show Less" : "Show More") {
-                    showsMore.toggle()
-                }
-                .buttonStyle(.plain)
-                .foregroundStyle(.tint)
-                .font(.system(size: 12, weight: .medium))
-            }
-            .padding(.bottom, 7)
+            Text("Details")
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.bottom, 7)
 
             fact("Saved", Self.savedDate(row.savedAt))
 
-            if showsMore {
-                if row.isFullArticle, let readingTime = row.readingTimeLabel {
-                    fact("Reading time", readingTime)
-                }
-                if let file = inspector?.file {
-                    if let duration = file.durationMs {
-                        fact("Duration", Self.duration(duration))
-                    }
-                    if let width = file.width, let height = file.height {
-                        fact(row.kind == .article ? "Preview dimensions" : "Dimensions", "\(width) × \(height) px")
-                    }
-                    if !file.codecs.isEmpty {
-                        fact("Codecs", file.codecs.joined(separator: ", "))
-                    }
-                    if let colorProfile = file.colorProfile {
-                        fact("Color profile", colorProfile)
-                    }
-                    fact(row.kind == .article ? "Preview format" : "Format", file.format)
-                    fact(row.kind == .article ? "Preview size" : "Size", ByteCountFormatter.string(
-                        fromByteCount: Int64(clamping: file.byteCount), countStyle: .file
-                    ))
-                } else if inspector?.hasLocalFile == true {
-                    fact("File", "Unavailable")
-                } else if failed {
-                    fact("File details", "Unavailable")
-                }
-                if let author = row.author, !author.isEmpty {
-                    fact("Author", author)
-                }
-                source
+            if row.isFullArticle, let readingTime = row.readingTimeLabel {
+                fact("Reading time", readingTime)
             }
+            if let file = inspector?.file {
+                if let duration = file.durationMs {
+                    fact("Duration", Self.duration(duration))
+                }
+                if let width = file.width, let height = file.height {
+                    fact(row.kind == .article ? "Preview dimensions" : "Dimensions", "\(width) × \(height) px")
+                }
+                if !file.codecs.isEmpty {
+                    fact("Codecs", file.codecs.joined(separator: ", "))
+                }
+                if let colorProfile = file.colorProfile {
+                    fact("Color profile", colorProfile)
+                }
+                fact(row.kind == .article ? "Preview format" : "Format", file.format)
+                fact(row.kind == .article ? "Preview size" : "Size", ByteCountFormatter.string(
+                    fromByteCount: Int64(clamping: file.byteCount), countStyle: .file
+                ))
+            } else if inspector?.hasLocalFile == true {
+                fact("File", "Unavailable")
+            } else if failed {
+                fact("File details", "Unavailable")
+            }
+            if let author = row.author, !author.isEmpty {
+                fact("Author", author)
+            }
+            source
         }
-        .accessibilityIdentifier(A11y.Inspector.information)
+        .accessibilityIdentifier(A11y.Inspector.details)
     }
 
     private func fact(_ label: String, _ value: String) -> some View {

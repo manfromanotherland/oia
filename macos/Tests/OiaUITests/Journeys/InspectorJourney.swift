@@ -47,8 +47,8 @@ final class InspectorJourney: UITestCase {
         relaunchApp { $0.pinnedDefaults = ["appearanceMode": "dark", "showsReadingInspector": "1"] }
         XCTAssertTrue(list.waitForRowCount(2))
         list.open(cream)
-        XCTAssertTrue(app.byId(A11y.Inspector.information).waitExists())
-        XCTAssertTrue(app.staticTexts["Information"].exists)
+        XCTAssertTrue(app.byId(A11y.Inspector.details).waitExists())
+        XCTAssertTrue(app.staticTexts["Details"].exists)
         XCTAssertTrue(app.staticTexts["Your tags"].exists)
         XCTAssertFalse(app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'cuttings-asset:'")
@@ -58,22 +58,25 @@ final class InspectorJourney: UITestCase {
         XCTAssertTrue(app.staticTexts["64 × 64 px"].exists)
         XCTAssertTrue(app.staticTexts["sRGB"].exists)
         XCTAssertTrue(app.staticTexts["Source"].exists)
-        capture("Sidebar inspector · Information")
-
-        app.buttons["Show Less"].clickWhenReady()
-        XCTAssertFalse(app.staticTexts["PNG"].exists)
-        XCTAssertTrue(app.staticTexts["Your tags"].exists)
-        app.buttons["Show More"].clickWhenReady()
-        XCTAssertTrue(app.staticTexts["PNG"].waitExists())
-        XCTAssertTrue(app.staticTexts["sRGB"].exists)
-
-        app.byId(A11y.Inspector.editTags).clickWhenReady()
-        XCTAssertTrue(app.byId(A11y.TagPicker.done).waitExists())
-        app.byId(A11y.TagPicker.done).clickWhenReady()
         let swatch = app.buttons.matching(
             NSPredicate(format: "identifier BEGINSWITH %@", A11y.Inspector.colorPrefix)
         ).firstMatch
         XCTAssertTrue(swatch.waitForExistence(timeout: 45), "Cached analysis publishes clickable colours")
+        let tags = app.staticTexts["Your tags"]
+        let labels = app.staticTexts["In this image"]
+        let colours = app.staticTexts["Colours"]
+        let details = app.staticTexts["Details"]
+        let delete = app.byId(A11y.Toolbar.delete)
+        XCTAssertTrue(labels.waitExists())
+        XCTAssertLessThan(tags.frame.minY, labels.frame.minY)
+        XCTAssertLessThan(labels.frame.minY, colours.frame.minY)
+        XCTAssertLessThan(colours.frame.minY, details.frame.minY)
+        XCTAssertLessThan(details.frame.minY, delete.frame.minY)
+        capture("Sidebar inspector · Details")
+
+        app.byId(A11y.Inspector.editTags).clickWhenReady()
+        XCTAssertTrue(app.byId(A11y.TagPicker.done).waitExists())
+        app.byId(A11y.TagPicker.done).clickWhenReady()
         swatch.click()
         XCTAssertTrue(list.waitForRowCount(1), "Colour search excludes the blue image")
         XCTAssertEqual(list.orderedRowIds, [cream])

@@ -21,9 +21,9 @@ struct OiaInspectorView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 heading
-                InspectorInformation(row: row, inspector: currentInspector, failed: failed)
-                    .id(row.id)
-                discover
+                tags
+                visualAnalysis
+                InspectorDetails(row: row, inspector: currentInspector, failed: failed)
                 Divider()
                 Group {
                     if #available(macOS 26.0, *) {
@@ -69,12 +69,11 @@ struct OiaInspectorView: View {
             .textSelection(.enabled)
     }
 
-    private var discover: some View {
+    private var visualAnalysis: some View {
         VStack(alignment: .leading, spacing: 22) {
-            tags
             if let data = currentInspector {
-                if !row.isFullArticle, !data.colors.isEmpty { colors(data.colors) }
                 if !data.labels.isEmpty { labels(data.labels) }
+                if !row.isFullArticle, !data.colors.isEmpty { colors(data.colors) }
                 if !data.analysisAvailable, row.previewAsset != nil {
                     status("Image attributes aren’t available yet.")
                 } else if data.analysisAvailable, data.labels.isEmpty, data.colors.isEmpty {
