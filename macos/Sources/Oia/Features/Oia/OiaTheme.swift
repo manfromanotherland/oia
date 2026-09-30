@@ -92,8 +92,8 @@ enum OiaTheme {
     static let xPostCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
         let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         return isDark
-            ? NSColor(srgbRed: 0x24 / 255, green: 0x44 / 255, blue: 0x5C / 255, alpha: 1)
-            : NSColor(srgbRed: 0xE7 / 255, green: 0xF2 / 255, blue: 0xFA / 255, alpha: 1)
+            ? NSColor(srgbRed: 0x2B / 255, green: 0x30 / 255, blue: 0x35 / 255, alpha: 1)
+            : NSColor(srgbRed: 0xE4 / 255, green: 0xE8 / 255, blue: 0xEA / 255, alpha: 1)
     })
     static let border = Color(nsColor: .separatorColor)
 
