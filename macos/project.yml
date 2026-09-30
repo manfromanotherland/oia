@@ -117,6 +117,7 @@ targets:
       - path: Sources/Oia/App/PerformanceTrace.swift
       - path: Sources/Oia/Bridge/ReadingQuery.swift
       - path: Sources/Oia/Shared/Formatting/ReadingTime.swift
+      - path: Sources/Oia/Shared/Formatting/ReadingDateTime.swift
       - path: Sources/Oia/Features/Tags/TagRules.swift
       # Reader typography: the preference vocabulary and the theme that derives
       # every measure/leading value from it. Pure value types, no FFI.

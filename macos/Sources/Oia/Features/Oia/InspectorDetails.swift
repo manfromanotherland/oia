@@ -41,7 +41,7 @@ struct InspectorDetails: View {
                 .font(.system(size: 14, weight: .semibold))
                 .padding(.bottom, 7)
 
-            fact("Saved", Self.savedDate(row.savedAt))
+            fact("Saved", ReadingDateTime.localized(row.savedAt))
 
             if row.isFullArticle, let readingTime = row.readingTimeLabel {
                 fact("Reading time", readingTime)
@@ -104,13 +104,6 @@ struct InspectorDetails: View {
         Text(text)
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(.secondary)
-    }
-
-    static func savedDate(_ value: String) -> String {
-        let fractional = ISO8601DateFormatter()
-        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = fractional.date(from: value) ?? ISO8601DateFormatter().date(from: value)
-        return date?.formatted(date: .abbreviated, time: .shortened) ?? value
     }
 
     private static func duration(_ milliseconds: UInt64) -> String {

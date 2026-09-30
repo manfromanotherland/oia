@@ -99,7 +99,7 @@ struct SocialPostDetailView: View {
                 }
 
                 if let publishedAt = profile.publishedAt {
-                    Text(publishedAt)
+                    Text(ReadingDateTime.localized(publishedAt))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
