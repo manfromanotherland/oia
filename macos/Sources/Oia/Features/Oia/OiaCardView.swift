@@ -82,7 +82,7 @@ struct OiaCardView: View {
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .background {
                 if row.socialPostProfile?.isXProvider == true {
-                    cardShape.fill(.black)
+                    cardShape.fill(OiaTheme.xPostCardSurface)
                 } else if row.kind == .article || row.kind == .quote {
                     cardShape.fill(OiaTheme.textCardSurface)
                 } else if PerformanceTrace.disableMaterials {

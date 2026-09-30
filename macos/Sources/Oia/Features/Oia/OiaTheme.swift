@@ -89,6 +89,12 @@ enum OiaTheme {
     static let boardSurface = semanticSurface(lightBlack: 0.06, darkBlack: 0.12)
     static let inspectorSidebarSurface = semanticSurface(lightBlack: 0.10, darkBlack: 0.16)
     static let textCardSurface = semanticSurface(darkWhite: 0.05)
+    static let xPostCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
+        let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        return isDark
+            ? NSColor(srgbRed: 0x24 / 255, green: 0x44 / 255, blue: 0x5C / 255, alpha: 1)
+            : NSColor(srgbRed: 0xE7 / 255, green: 0xF2 / 255, blue: 0xFA / 255, alpha: 1)
+    })
     static let border = Color(nsColor: .separatorColor)
 
     private static func semanticSurface(

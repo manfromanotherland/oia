@@ -149,7 +149,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   article file and native post detail. It does not acquire an automatic tag.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
-  use a black surface with white text and symbol. The board and window shell use
+  use a pale blue surface in light mode and deep blue in dark mode, with semantic text and symbol
+  colors. The board and window shell use
   progressively darker shades of the same semantic background. Image and video cards retain their
   material-backed media treatment.
 - Cards have 8–12 pt continuous corners and a semantic separator border, with no decorative lift
