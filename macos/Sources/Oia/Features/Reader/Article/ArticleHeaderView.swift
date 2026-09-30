@@ -17,9 +17,8 @@ struct ArticleHeaderView: View {
                 .tracking(theme.titleTracking)
                 .accessibilityIdentifier(A11y.Detail.title)
             if !row.tags.isEmpty {
-                Text(row.tags.map { "#\($0)" }.joined(separator: " "))
+                tagSummary
                     .font(theme.metadataFont)
-                    .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .accessibilityIdentifier(A11y.Detail.tags)
@@ -32,5 +31,13 @@ struct ArticleHeaderView: View {
         .frame(maxWidth: theme.contentMaxWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.horizontal, 20)
+    }
+
+    private var tagSummary: Text {
+        row.tags.enumerated().reduce(Text("")) { summary, entry in
+            let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, entry.element) }
+            return summary + Text("\(entry.offset == 0 ? "" : " ")#\(entry.element)")
+                .foregroundColor(isMachine ? .purple : .blue)
+        }
     }
 }

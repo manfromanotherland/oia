@@ -54,7 +54,7 @@ host, and macOS app.
 | Quote | A text card whose full text is stored as Markdown. Browser selections retain their page origin; source-less paste/drop text uses a private local identity. |
 | Lightweight link | An article card with no cleaned article body. It may be created by paste/drop or the browser toolbar and may retain page metadata, a social preview, and a favicon. It is explicitly marked `lightweight: true`; a later full browser capture upgrades the same reading in place. It shares the Links board scope with captured social posts but has no local post body. |
 | Recognized source | A public URL whose host and route match a Rust source adapter. A URL-only save can retrieve its durable text, metadata, and supported media without needing a live browser DOM. Unknown URLs retain the ordinary lightweight-link behavior. |
-| Source profile | Optional, versioned, provider-neutral frontmatter describing a recognized source and its ordered local attachments. It changes presentation without introducing a new card kind or user tag. |
+| Source profile | Optional, versioned, provider-neutral frontmatter describing a recognized source and its ordered local attachments. It changes presentation without introducing a new card kind or Tag. |
 | Social post | A full `article` reading with a `source_profile` whose type is `social_post`. Its text and attachments are durable local content, and its board card and detail may use a provider-aware presentation. It appears in the Links board scope and Link item-type search despite its full article storage format. |
 | Local identity | A deterministic, non-web `cuttings://local/...` URL used for source-less text, image, or video saves. It prevents machine-local paths leaking into synced files and is never shown as an openable source. |
 | Reading folder | The per-reading folder `articles/<prefix>/<id>/` (named by the reading id, under a two-character fan-out bucket) that holds the reading's `article.md`, its assets and highlights, and any preserved legacy sidecars. Moving or deleting a reading operates on this one folder. |
@@ -78,10 +78,13 @@ host, and macOS app.
 
 | Term | Definition |
 |------|------------|
-| Tag | User-defined label stored in a reading's frontmatter. Tags organize readings and are indexed by search. |
+| Tag | A subject or curation label stored in a reading's frontmatter and indexed by search. The Tags section combines user and machine Tags; matching ignores case and the user Tag wins a duplicate. |
+| User Tag | A label added by the user or retained from an import in `tags`. It has precedence over a machine Tag with the same spelling ignoring case. |
+| Machine Tag | A subject label inferred locally from saved text or media. `machine_tags` groups these labels by `image` or `text` source with `source_fingerprint` and `analyzer_version`. It appears with a distinct colour beside user Tags. |
+| Tag exclusion | A case-folded label key in `excluded_machine_tags`. Removing any effective Tag removes a matching user label and records this key, so a machine result cannot restore it later. |
 | Board scope | Exactly one toolbar selection: All, Images, Videos, Articles, Links, or Quotes. Images and Videos each select their matching reading kind; Articles selects full articles other than social posts, including longform X Articles; Links selects lightweight article placeholders and captured social posts. |
 | Board filter | The selected board scope, free-text query, and any scoped search terms, applied as one intersection to the board. |
-| Search token | A native search-field pill created from a suggestion. A tag token means an exact saved tag; a visual token means a derived label or colour found in the same reading's current visual analysis. Tokens narrow one another by intersection. |
+| Search token | A native search-field pill created from an item-type or exact Tag suggestion. Tokens narrow the free-text search and board scope by intersection. |
 | All | The unfiltered board scope. It includes every saved item, including files carrying a legacy `archived: true` value. |
 | Legacy state field | `read_at`, `archived`, `favorite`, or `rating` in a format-v1 file. The core preserves these for compatibility; the current macOS app does not display or mutate them. |
 | Board selection | The transient set of cards selected on the macOS board. A plain click or arrow move replaces it; Shift-click or Shift-arrow extends it from an anchor. Board actions such as delete apply to the complete set. |
@@ -127,8 +130,8 @@ host, and macOS app.
 | Reader | Main article reading surface in the macOS app. It renders Markdown natively and supports local assets, text selection, highlights, and typography settings. |
 | Card board | Full-width mixed masonry presentation of reading rows for the active board scope and search query. |
 | Reading list | Legacy name for the old row-based macOS presentation and for the core listing API; the current user-facing home is the card board. |
-| Search | A free-text query over indexed reading title, content, tags, and derived visual terms, optionally narrowed by exact tag or visual search tokens. Free text remains broad; scoped tokens keep their own meaning. |
-| Visual search term | A disposable index value derived from local image analysis, such as a detected label or colour family. It is not a user tag and is never written to the reading file. |
+| Search | A free-text query over indexed reading title, content, user and machine Tags, and derived visual terms, optionally narrowed by exact Tag or item-type tokens. Free text remains broad; scoped tokens keep their own meaning. |
+| Visual search term | A disposable index value derived from local image analysis, such as a detected raw label or colour family. It can improve free-text search but is not itself a Tag or a separate suggestion, and is not written to the reading file. The core writes qualifying subject labels as machine Tags through a separate file-first write. |
 | Board order | Fixed card-board ordering: newest saved first while browsing and relevance while searching. |
 | Optimistic UI | UI pattern where local state changes immediately, then the core write and refresh reconcile against persisted truth. |
 | Refresh | UI reload from the core/index after a mutation, sync, filter change, or search change. |
@@ -195,9 +198,9 @@ paragraphs, and the welcome article.
 >
 > **Dev:** "How does someone organize what they saved?"
 >
-> **Domain expert:** "Everything stays together on the board. They can add
-> **tags**, search for it later, or permanently **delete** it when it no longer
-> belongs."
+> **Domain expert:** "Everything stays together on the board. Óia adds local subject
+> **Tags** to saved items, and the user can add or remove Tags, search for an item later,
+> or permanently **delete** it when it no longer belongs."
 >
 > **Dev:** "So the **index** knows all of this?"
 >

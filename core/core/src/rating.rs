@@ -106,6 +106,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,

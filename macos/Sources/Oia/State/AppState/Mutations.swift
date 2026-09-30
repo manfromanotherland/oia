@@ -101,14 +101,11 @@ extension AppState {
         guard let core else { return }
         beginLibraryWrite()
         defer { endLibraryWrite() }
-        // Mirror the core: trim, dedup on exact match, append (no sort/lowercase),
-        // so the optimistic chip lands in the same place the reload confirms.
+        // A manually added name takes ownership of a matching machine tag.
         let tag = tag.trimmingCharacters(in: .whitespaces)
-        if let old = readings.first(where: { $0.id == id }),
-           !old.tags.contains(where: { ExactTagIdentity.matches($0, tag) })
-        {
+        if let old = readings.first(where: { $0.id == id }) {
             var updated = old
-            updated.tags.append(tag)
+            updated.applyTagEdit(tag, applies: true)
             applyOptimistic(old, updated)
         }
         try? await core.addTag(id: id, tag: tag)
@@ -123,7 +120,7 @@ extension AppState {
            old.tags.contains(where: { ExactTagIdentity.matches($0, tag) })
         {
             var updated = old
-            updated.tags.removeAll { ExactTagIdentity.matches($0, tag) }
+            updated.applyTagEdit(tag, applies: false)
             applyOptimistic(old, updated)
             advancePastFilteredRow(id: id)
         }

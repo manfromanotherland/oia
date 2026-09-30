@@ -5,11 +5,13 @@ import SwiftUI
 struct InspectorPill: View {
     let title: String
     var symbol: String?
+    var tint: Color?
     var action: () -> Void
 
-    init(_ title: String, symbol: String? = nil, action: @escaping () -> Void) {
+    init(_ title: String, symbol: String? = nil, tint: Color? = nil, action: @escaping () -> Void) {
         self.title = title
         self.symbol = symbol
+        self.tint = tint
         self.action = action
     }
 
@@ -24,6 +26,8 @@ struct InspectorPill: View {
         .buttonBorderShape(.capsule)
         .controlSize(.small)
         .font(.system(size: 12, weight: .medium))
+        .tint(tint ?? .accentColor)
+        .foregroundStyle(tint ?? .primary)
         .fixedSize(horizontal: true, vertical: false)
     }
 

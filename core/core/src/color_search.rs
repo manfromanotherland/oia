@@ -157,7 +157,8 @@ mod tests {
             ("blue", "#122ACF", "image", "room"),
             ("article", "#BCA98E", "article", "other"),
         ] {
-            conn.execute("INSERT INTO readings (id,title,url,canonical_url,saved_at,source_hash,tags_json,kind,visual_asset_hash,visual_analyzer_version) VALUES (?1,?1,?1,?1,'2026-09-25','',?2,?3,?1,'test')", rusqlite::params![id, format!("[\"{tag}\"]"), kind]).unwrap();
+            let entries = serde_json::json!([{"name": tag, "key": tag, "origin": "user"}]);
+            conn.execute("INSERT INTO readings (id,title,url,canonical_url,saved_at,source_hash,tags_json,tag_entries_json,kind,visual_asset_hash,visual_analyzer_version) VALUES (?1,?1,?1,?1,'2026-09-25','',?2,?3,?4,?1,'test')", rusqlite::params![id, format!("[\"{tag}\"]"), entries.to_string(), kind]).unwrap();
             let palette =
                 serde_json::to_string(&vec![parse(&format!("colour:{value}")).unwrap()]).unwrap();
             conn.execute("INSERT INTO visual_analysis (content_hash,analyzer_version,supported,labels_json,palette_json,visual_terms,completed_at) VALUES (?1,'test',1,'[]',?2,'','2026-09-25')", rusqlite::params![id,palette]).unwrap();

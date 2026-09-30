@@ -3,14 +3,14 @@
 import XCTest
 
 final class BoardSearchTests: XCTestCase {
-    func testTokenPreservesExactTagsAndNormalizesVisualValues() throws {
+    func testTokenPreservesStoredSpellingAndComparesNormalizedIdentity() throws {
         let tag = BoardSearchToken(kind: .tag, value: "  blue\n")
         let plainTag = BoardSearchToken(kind: .tag, value: "blue")
         let visual = BoardSearchToken(kind: .visual, value: "blue")
 
         XCTAssertEqual(tag.value, "  blue\n")
         XCTAssertEqual(tag.displayValue, "blue")
-        XCTAssertNotEqual(tag.id, plainTag.id)
+        XCTAssertEqual(tag.id, plainTag.id)
         XCTAssertNotEqual(tag.id, visual.id)
 
         let encoded = try JSONEncoder().encode(tag)
@@ -304,6 +304,18 @@ final class BoardSearchTests: XCTestCase {
             TagCount(tag: decomposed, count: 1)
         ])
         XCTAssertEqual(filters.searchTagCandidates.count, 2)
+    }
+
+    func testTagIdentityIgnoresCapitalization() {
+        XCTAssertTrue(ExactTagIdentity.matches("Chair", "chair"))
+        XCTAssertTrue(ExactTagIdentity.matches("ÉCOLE", "école"))
+        XCTAssertTrue(ExactTagIdentity.matches("Straße", "STRASSE"))
+        XCTAssertTrue(ExactTagIdentity.matches("ος", "οσ"))
+        let criteria = BoardSearchCriteria(tokens: [
+            BoardSearchToken(kind: .tag, value: "Chair"),
+            BoardSearchToken(kind: .tag, value: "chair")
+        ])
+        XCTAssertEqual(criteria.tagTerms, ["Chair"])
     }
 
     private func candidates(_ values: [String]) -> [BoardSearchTagCandidate] {

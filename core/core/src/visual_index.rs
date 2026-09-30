@@ -224,7 +224,25 @@ pub(crate) fn inspect_asset(
     reading_id: &str,
     relative_path: &str,
 ) -> Result<VisualAsset> {
-    inspect_asset_inner(library, reading_id, relative_path, false)
+    inspect_asset_inner(library, reading_id, relative_path, false, true)
+}
+
+/// Revalidate a machine-tag write using the same safe opener, without invoking
+/// the visual staging test hook a second time for one completed analysis.
+pub(crate) fn inspect_asset_for_tagging(
+    library: &LibraryRoot,
+    reading_id: &str,
+    relative_path: &str,
+) -> Result<VisualAsset> {
+    inspect_asset_inner(library, reading_id, relative_path, false, false)
+}
+
+pub(crate) fn inspect_image_asset_for_tagging(
+    library: &LibraryRoot,
+    reading_id: &str,
+    relative_path: &str,
+) -> Result<VisualAsset> {
+    inspect_asset_inner(library, reading_id, relative_path, true, false)
 }
 
 /// Hash an image preview and read its display dimensions from one pinned file
@@ -234,7 +252,7 @@ pub(crate) fn inspect_image_asset(
     reading_id: &str,
     relative_path: &str,
 ) -> Result<VisualAsset> {
-    inspect_asset_inner(library, reading_id, relative_path, true)
+    inspect_asset_inner(library, reading_id, relative_path, true, true)
 }
 
 fn inspect_asset_inner(
@@ -242,13 +260,18 @@ fn inspect_asset_inner(
     reading_id: &str,
     relative_path: &str,
     include_dimensions: bool,
+    notify_test_hook: bool,
 ) -> Result<VisualAsset> {
     #[cfg(test)]
-    VISUAL_IO_TEST_HOOK.with(|hook| {
-        if let Some(hook) = hook.borrow_mut().as_mut() {
-            hook();
-        }
-    });
+    if notify_test_hook {
+        VISUAL_IO_TEST_HOOK.with(|hook| {
+            if let Some(hook) = hook.borrow_mut().as_mut() {
+                hook();
+            }
+        });
+    }
+    #[cfg(not(test))]
+    let _ = notify_test_hook;
     let mut file = open_source_asset(library, reading_id, relative_path)?;
     let media_dimensions = include_dimensions
         .then(|| crate::media_dimensions::image_dimensions(&mut file))

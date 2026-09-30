@@ -77,6 +77,8 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var wordCount: UInt32?
     var lang: String?
     var tags: [String]
+    /// Active machine tags within `tags`; matching user tags have precedence.
+    var machineTags: [String] = []
     var kind: ReadingKind = .article
     var lightweight: Bool
     /// Core-derived board classification. Full social posts can be links while
@@ -112,6 +114,7 @@ extension ReadingRow {
         wordCount = row.wordCount
         lang = row.lang
         tags = row.tags
+        machineTags = row.machineTags
         kind = ReadingKind(row.kind)
         lightweight = row.lightweight
         isLink = row.isLink
@@ -126,6 +129,22 @@ extension ReadingRow {
 }
 
 extension ReadingRow {
+    /// Presentation-only mirror of a file-first tag edit until refresh settles it.
+    mutating func applyTagEdit(_ tag: String, applies: Bool) {
+        if applies {
+            if let index = tags.firstIndex(where: { ExactTagIdentity.matches($0, tag) }) {
+                if machineTags.contains(where: { ExactTagIdentity.matches($0, tag) }) {
+                    tags[index] = tag
+                }
+            } else {
+                tags.append(tag)
+            }
+        } else {
+            tags.removeAll { ExactTagIdentity.matches($0, tag) }
+        }
+        machineTags.removeAll { ExactTagIdentity.matches($0, tag) }
+    }
+
     private static let localVideoAssetPrefix = "cuttings-asset:"
 
     var localVideoAssetReference: String? {

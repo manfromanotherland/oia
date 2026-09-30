@@ -107,8 +107,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - Use one full-width board with no sidebar or navigation rail. Keep the first masonry row inset
   from the toolbar by the same 30 pt used at the board's horizontal edges.
 - Put the native search field in the unified window toolbar using `.searchable`, with the prompt
-  *"Search Óia"*. Native token suggestions can narrow the board to exact tags or terms found in
-  the same image or to an item type; completed terms remain value-only pills in that one field. Do not create a
+  *"Search Óia"*. Native token suggestions can narrow the board to exact tags or an item type;
+  completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
 - The empty suggestion menu offers Image, Video, Article, Link, and Quote. Selecting a completion
   creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
@@ -123,8 +123,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   comes from native suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
-  complete board snapshot remains correct. Multiple visual terms must occur in the same reading's
-  visual analysis; unrelated title, body, and tag text cannot satisfy them. Board order is fixed:
+  complete board snapshot remains correct. Free text searches reading text, user and machine Tags,
+  and derived visual terms. Exact Tag tokens match the combined Tags shown in the Inspector;
+  visual terms remain search facts rather than separate Tag suggestions. Board order is fixed:
   newest saved first when browsing and relevance when searching.
 - `⌘F` focuses the native search field; `/` does the same while the board has keyboard focus.
   `⌘1`–`⌘6` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle the scopes.
@@ -146,7 +147,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   no decorative placeholder. Lightweight links keep their separate card treatment.
 - **Social post:** a source-aware article card with avatar, author/handle, full post text, provider,
   and the first local attachment or video poster. It appears in Links while retaining its full local
-  article file and native post detail. It does not acquire an automatic tag.
+  article file and native post detail. Its source profile does not itself create a Tag; the saved
+  post text and attachments can acquire subject Tags through the same analysis as other readings.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
   use a subtle cool-gray surface in light mode and a slightly lighter cool gray than the board in
@@ -194,12 +196,16 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   titlebar. Its visibility is a per-device preference. The sidebar scrolls within short windows.
   Delete sits below the content and requires confirmation. macOS 15 uses system material, and
   Reduce Transparency uses an opaque system surface.
-- Below the title, the Inspector orders its sections as **Your tags**, **In this image**,
-  **Colours**, **Details**, then Delete. Sections without relevant image attributes or colours
-  are omitted. **Your tags** keeps its existing Add/Edit picker and search chips.
-- **In this image** retains its small information button explaining locally recognised
-  suggestions. Tags and attributes are native capsule glass buttons; attributes search the
-  library. **Colours** shows up to five distinct swatches for media and links as closely spaced
+- Below the title, the Inspector orders its sections as **Tags**, **Colours**, **Details**, then
+  Delete. The Tags section shows user and automatically generated subject Tags together, with
+  blue user Tags, purple machine Tags, and a quiet provenance cue. The Add/Edit picker adds user
+  Tags; a Tag may be removed there or from its chip. Adding a user Tag with the same spelling
+  ignoring case gives the user Tag ownership in the combined view. Removing any effective Tag
+  removes its user label and excludes matching machine labels, including future results. Analysis
+  adds machine Tags directly after saving or processing a reading, without a review step. There is
+  no separate image-label section or suggestion picker. Tags are native capsule glass buttons that
+  search the library.
+  **Colours** shows up to five distinct swatches for media and links as closely spaced
   flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
   hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by
   perceptual shade similarity.
@@ -389,8 +395,8 @@ At the top of the scrolling reader, each article shows:
 
 - **Title** at `1.5em` in the selected reader face. It shares the body's width and grows with the
   chosen body size.
-- **Tags** appear as a read-only text summary. The toolbar's `#` button opens the tag picker for
-  edits, so managing tags does not reflow the article header.
+- **Tags** appear as a read-only text summary of user and machine Tags. The toolbar's `#` button
+  opens the tag picker for edits, so managing tags does not reflow the article header.
 - The header has enough space below it to start the body clearly, without a decorative divider.
 
 The leading inspector is a full-height, borderless sidebar with a translucent, blurred macOS
@@ -447,7 +453,7 @@ The visible organizing model is deliberately small:
 
 | Curation | Frontmatter field | Notes |
 |----------|-------------------|-------|
-| Tags | `tags: [..]` | labels indexed by the global search field |
+| Tags | `tags`, `machine_tags`, `excluded_machine_tags`; see [library format](./docs/library-format.md) | user labels, machine labels with source fingerprints and analyser versions, and excluded label keys remain in the article file; the effective union is indexed by search |
 
 The main board includes every saved item. The format-v1 `read_at`, `archived`, `favorite`, and
 `rating` fields remain readable and round-trippable for compatibility with existing libraries and
@@ -459,6 +465,12 @@ Tag changes **apply to the UI instantly**; persistence happens in the background
 the tag flips on the next frame, and the core write + index refresh run behind it. Because the
 Markdown file is the source of truth and the refresh re-reads from it, a failed write simply
 reconciles back — no spinners, no manual undo.
+
+Automatic analysis runs after the saved reading and its assets are durable, or after a scan finds
+new or changed files. Its completion revalidates the reading against the analysed source before
+writing machine Tags to frontmatter and refreshing the index. Removing any effective Tag records
+an exclusion in that same file and removes a matching user label, so analysis does not restore the
+Tag on a later pass. User Tags take precedence over case-insensitive machine matches.
 
 **One motion, not two.** When removing a tag moves a card out of the active tag filter, the row
 slides out **and** selection advances to the neighbouring card in the same beat.

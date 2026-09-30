@@ -75,6 +75,19 @@ pub struct SourceAttachment {
     pub alt: Option<String>,
 }
 
+/// One file-backed set of inferred tags from a particular local analyzer.
+///
+/// The fingerprint is of the source content, rather than the reading ID, so a
+/// later edit or asset replacement can be analyzed again without discarding
+/// tags supplied by the other analyzer.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct MachineTagSource {
+    pub source: String,
+    pub source_fingerprint: String,
+    pub analyzer_version: String,
+    pub tags: Vec<String>,
+}
+
 /// All YAML frontmatter fields for a saved reading.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Metadata {
@@ -124,6 +137,12 @@ pub struct Metadata {
     #[serde(default)]
     pub rating: u8,
     pub tags: Vec<String>,
+    /// Inferred tags, grouped by source so text and image updates are independent.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub machine_tags: Vec<MachineTagSource>,
+    /// Case-folded tombstones for inferred tags the user removed.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub excluded_machine_tags: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub excerpt: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

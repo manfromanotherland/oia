@@ -53,8 +53,23 @@ pub(crate) fn rebuild_scanned(conn: &Connection, readings: &[ScannedReading]) ->
 }
 
 fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
-    let tags = serde_json::to_string(&r.metadata.tags)?;
-    let tags_text = r.metadata.tags.join(" ");
+    let tag_entries = crate::tags::tag_entries_for_reading(
+        &r.metadata,
+        &r.body,
+        r.visual_asset
+            .as_ref()
+            .map(|asset| asset.content_hash.as_str()),
+    );
+    let tags: Vec<_> = tag_entries.iter().map(|entry| entry.name.clone()).collect();
+    let machine_tags: Vec<_> = tag_entries
+        .iter()
+        .filter(|entry| entry.origin == "machine")
+        .map(|entry| entry.name.clone())
+        .collect();
+    let tags_json = serde_json::to_string(&tags)?;
+    let tag_entries_json = serde_json::to_string(&tag_entries)?;
+    let machine_tags_json = serde_json::to_string(&machine_tags)?;
+    let tags_text = tags.join(" ");
     let source_profile_json = r
         .metadata
         .source_profile
@@ -84,8 +99,8 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
           favorite, rating, source_hash, excerpt, word_count, lang, tags_json, tags_text,
           body_text, visual_asset_path, visual_asset_hash, visual_analyzer_version,
           visual_terms, predominant_color, media_aspect_ratio, source_profile_json,
-          card_description)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33)",
+          card_description, tag_entries_json, machine_tags_json)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35)",
         params![
             r.metadata.id,
             r.metadata.kind.as_str(),
@@ -109,7 +124,7 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.metadata.excerpt,
             card.word_count,
             r.metadata.lang,
-            tags,
+            tags_json,
             tags_text,
             r.body,
             r.visual_asset.as_ref().map(|asset| &asset.relative_path),
@@ -120,14 +135,31 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.media_aspect_ratio,
             source_profile_json,
             card.description,
+            tag_entries_json,
+            machine_tags_json,
         ],
     )?;
     Ok(())
 }
 
 fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
-    let tags = serde_json::to_string(&r.metadata.tags)?;
-    let tags_text = r.metadata.tags.join(" ");
+    let tag_entries = crate::tags::tag_entries_for_reading(
+        &r.metadata,
+        &r.body,
+        r.visual_asset
+            .as_ref()
+            .map(|asset| asset.content_hash.as_str()),
+    );
+    let tags: Vec<_> = tag_entries.iter().map(|entry| entry.name.clone()).collect();
+    let machine_tags: Vec<_> = tag_entries
+        .iter()
+        .filter(|entry| entry.origin == "machine")
+        .map(|entry| entry.name.clone())
+        .collect();
+    let tags_json = serde_json::to_string(&tags)?;
+    let tag_entries_json = serde_json::to_string(&tag_entries)?;
+    let machine_tags_json = serde_json::to_string(&machine_tags)?;
+    let tags_text = tags.join(" ");
     let source_profile_json = r
         .metadata
         .source_profile
@@ -158,7 +190,8 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
          source_hash=?19, excerpt=?20, word_count=?21, lang=?22, tags_json=?23,
          tags_text=?24, body_text=?25, visual_asset_path=?26, visual_asset_hash=?27,
          visual_analyzer_version=?28, visual_terms=?29, predominant_color=?30,
-         media_aspect_ratio=?31, source_profile_json=?32, card_description=?33
+         media_aspect_ratio=?31, source_profile_json=?32, card_description=?33,
+         tag_entries_json=?34, machine_tags_json=?35
          WHERE id=?1",
         params![
             r.metadata.id,
@@ -183,7 +216,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.metadata.excerpt,
             card.word_count,
             r.metadata.lang,
-            tags,
+            tags_json,
             tags_text,
             r.body,
             r.visual_asset.as_ref().map(|asset| &asset.relative_path),
@@ -194,6 +227,8 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             r.media_aspect_ratio,
             source_profile_json,
             card.description,
+            tag_entries_json,
+            machine_tags_json,
         ],
     )?;
     Ok(())
@@ -240,6 +275,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,

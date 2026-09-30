@@ -96,6 +96,16 @@ archived: false                            # required legacy state; current macO
 favorite: false                            # required legacy state; current macOS app ignores it
 rating: 0                                  # required legacy 0–5 value; current macOS app ignores it
 tags: [rust, local-first]                  # string[]; elements are lowercase, no spaces
+machine_tags:                              # optional inferred sources; independently refreshed
+  - source: text
+    source_fingerprint: sha256:abc123...
+    analyzer_version: foundation-tags-v1
+    tags: [design, typography]
+  - source: image
+    source_fingerprint: 3f4a1b8e...        # SHA-256 of the local preview bytes
+    analyzer_version: vision-classify-r2
+    tags: [chair, furniture]
+excluded_machine_tags: [chair]             # optional case-folded tags the user removed
 excerpt: One-sentence summary.             # optional; shown in the list view
 word_count: 1234                           # integer; word count of the cleaned body
 lang: en                                   # BCP-47 language tag; optional
@@ -109,7 +119,8 @@ source_hash: sha256:abc123...              # sha256 of the cleaned Markdown body
 
 #### Optional fields
 `kind`, `lightweight`, `media_url`, `preview_asset`, `favicon_asset`, `author`, `site`,
-`theme_color`, `source_profile`, `read_at`, `excerpt`, `word_count`, `lang`.
+`theme_color`, `source_profile`, `read_at`, `machine_tags`, `excluded_machine_tags`,
+`excerpt`, `word_count`, `lang`.
 
 `kind` is written for every new card but remains optional in the parser for backwards compatibility;
 an older file without it is an `article`. `lightweight` is omitted/false for ordinary captures and
@@ -152,7 +163,21 @@ is true for a link saved without a cleaned article body, from either the app or 
 - `read_at`, `archived`, `favorite`, and `rating` remain part of the format-v1 compatibility
   contract. Older clients may still interpret and mutate them, so current readers preserve them
   when rewriting a file. The current macOS product does not expose them as curation controls.
-- `tags` elements must be lowercase, trimmed, and contain no spaces (use `-` as separator).
+- `tags` remains the user-owned set. Imported tags are lowercase, trimmed, and contain no spaces
+  (use `-` as separator); interactive edits preserve the user's spelling. Tag identity for merging,
+  exact filters, and counts is Unicode full default case folding after surrounding whitespace is trimmed.
+  Canonically equivalent spellings with different Unicode byte sequences are not folded together.
+- `machine_tags` is optional and additive within format version 1. Each source record owns its
+  `source`, `source_fingerprint`, `analyzer_version`, and normalized lowercase `tags`. Text and
+  image analysis replace only their own source record, so results may arrive independently. The
+  text fingerprint hashes the current title, excerpt, and full Markdown body; the image
+  fingerprint hashes the local preview bytes. Inference from stale source content is ignored by
+  search until it is refreshed. Empty `tags` still records a completed analysis for that version.
+- The effective Tags group is the case-insensitive union of user `tags` and current inferred
+  `machine_tags`. The user's spelling wins a duplicate. Removing a tag adds its case-folded key to
+  `excluded_machine_tags`, so a later analysis cannot restore it automatically. Adding a tag
+  manually clears that exclusion and makes it user-owned. These exclusions are file-backed and
+  travel with the reading through external folder sync.
 - `source_hash` is recomputed on any edit to the body; the DB uses it to detect stale index entries.
 
 ### Body

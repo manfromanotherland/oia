@@ -40,7 +40,8 @@ final class ReadingRowMapperTests: XCTestCase {
             cardDescription: "The card description.",
             wordCount: 1234,
             lang: "en",
-            tags: ["rust", "local-first"]
+            tags: ["rust", "local-first", "software"],
+            machineTags: ["software"]
         )
     }
 
@@ -63,6 +64,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.wordCount, ffi.wordCount)
         XCTAssertEqual(row.lang, ffi.lang)
         XCTAssertEqual(row.tags, ffi.tags)
+        XCTAssertEqual(row.machineTags, ffi.machineTags)
         XCTAssertEqual(row.kind, .video)
         XCTAssertEqual(row.lightweight, ffi.lightweight)
         XCTAssertEqual(row.isLink, ffi.isLink)
@@ -100,6 +102,7 @@ final class ReadingRowMapperTests: XCTestCase {
         ffi.wordCount = nil
         ffi.lang = nil
         ffi.tags = []
+        ffi.machineTags = []
         let row = ReadingRow(ffi)
         XCTAssertNil(row.author)
         XCTAssertNil(row.site)
@@ -118,6 +121,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.dominantColor)
         XCTAssertNil(row.mediaAspectRatio)
         XCTAssertTrue(row.tags.isEmpty)
+        XCTAssertTrue(row.machineTags.isEmpty)
     }
 
     func testMapsQuoteKind() {

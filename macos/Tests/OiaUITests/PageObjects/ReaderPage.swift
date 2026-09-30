@@ -216,7 +216,11 @@ struct ReaderPage {
     }
 
     func openTagPicker() {
-        app.byId(A11y.Toolbar.tags).clickWhenReady()
+        let edit = app.byId(A11y.Inspector.editTags)
+        if !edit.exists {
+            app.byId(A11y.Inspector.toggle).clickWhenReady()
+        }
+        edit.clickWhenReady()
     }
 
     func showInspector() {

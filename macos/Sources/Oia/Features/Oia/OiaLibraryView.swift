@@ -60,6 +60,9 @@ struct OiaLibraryView: View {
             tagPicker
         }
         .environment(\.assetContentGeneration, appState.libraryContentGeneration)
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { appState.scheduleVisualSearchReconciliation() }
+        }
         .focusedSceneValue(\.boardActions, focusedBoardActions)
         .quickLookPreview($quickLookURL)
         .alert("Óia couldn’t complete that action", isPresented: errorAlertPresented) {
@@ -402,6 +405,7 @@ extension OiaLibraryView {
             TagPickerSheet(
                 applied: row.tags,
                 allTags: appState.filters.tags.map(\.tag),
+                machineTags: row.machineTags,
                 onToggle: { tag, shouldApply in
                     updateTag(tag, applies: shouldApply, to: row)
                 }
@@ -468,8 +472,8 @@ extension OiaLibraryView {
     private var tagTargetRow: ReadingRow? {
         let id = tagTargetID ?? (appState.showTagSheet ? appState.selectedId : nil)
         guard let id else { return nil }
-        return appState.readings.first(where: { $0.id == id })
-            ?? (presentedReading?.id == id ? presentedReading : nil)
+        return (presentedReading?.id == id ? presentedReading : nil)
+            ?? appState.readings.first(where: { $0.id == id })
     }
 
     private func updatePresentedRow(_ row: ReadingRow) {
@@ -517,11 +521,7 @@ extension OiaLibraryView {
 
     private func updateTag(_ tag: String, applies: Bool, to row: ReadingRow) {
         if var presented = presentedReading, presented.id == row.id {
-            if applies, !presented.tags.contains(tag) {
-                presented.tags.append(tag)
-            } else if !applies {
-                presented.tags.removeAll { $0 == tag }
-            }
+            presented.applyTagEdit(tag, applies: applies)
             updatePresentedRow(presented)
         }
         Task {

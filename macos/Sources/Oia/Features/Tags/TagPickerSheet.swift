@@ -17,6 +17,7 @@ struct TagPickerSheet: View {
     /// All library tag names, alphabetical (the order of `LibraryFilters.tags`).
     /// The sheet re-sorts anyway — applied tags float to the top on open.
     var allTags: [String]
+    var machineTags: [String]
     /// `(tag, shouldApply)` — apply the tag when `true`, remove it when `false`.
     var onToggle: (String, Bool) -> Void
 
@@ -29,21 +30,22 @@ struct TagPickerSheet: View {
     /// time the sheet reopens (fresh @State). Checkmarks track the live `applied`.
     @State private var order: [String]
 
-    init(applied: [String], allTags: [String], onToggle: @escaping (String, Bool) -> Void) {
+    init(applied: [String], allTags: [String], machineTags: [String] = [], onToggle: @escaping (String, Bool) -> Void) {
         self.applied = applied
         self.allTags = allTags
+        self.machineTags = machineTags
         self.onToggle = onToggle
         // Freeze the order at presentation: applied tags first, then the rest.
-        let appliedSet = Set(applied)
-        _order = State(initialValue: applied + allTags.filter { !appliedSet.contains($0) })
+        let appliedSet = Set(applied.map { ExactTagIdentity.bytes($0) })
+        _order = State(initialValue: applied + allTags.filter { !appliedSet.contains(ExactTagIdentity.bytes($0)) })
     }
 
     private var trimmedQuery: String {
         query.trimmingCharacters(in: .whitespaces)
     }
 
-    private var appliedSet: Set<String> {
-        Set(applied)
+    private var appliedSet: Set<Data> {
+        Set(applied.map { ExactTagIdentity.bytes($0) })
     }
 
     /// The list contents, drawn from the frozen `order`: idle shows the first ten,
@@ -63,7 +65,7 @@ struct TagPickerSheet: View {
         let typed = trimmedQuery
         guard !typed.isEmpty,
               TagRules.isWithinLength(typed),
-              !allTags.contains(where: { $0.caseInsensitiveCompare(typed) == .orderedSame })
+              !allTags.contains(where: { ExactTagIdentity.matches($0, typed) })
         else { return nil }
         return typed
     }
@@ -140,9 +142,11 @@ struct TagPickerSheet: View {
             ForEach(listed, id: \.self) { tag in
                 Button { toggle(tag) } label: {
                     HStack {
-                        Text("#\(tag)")
+                        let isMachine = machineTags.contains { ExactTagIdentity.matches($0, tag) }
+                        Label("#\(tag)", systemImage: isMachine ? "sparkles" : "person")
+                            .foregroundStyle(isMachine ? Color.purple : Color.blue)
                         Spacer()
-                        if appliedSet.contains(tag) {
+                        if appliedSet.contains(ExactTagIdentity.bytes(tag)) {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(.tint)
                         }
@@ -163,7 +167,7 @@ struct TagPickerSheet: View {
     }
 
     private func toggle(_ tag: String) {
-        onToggle(tag, !appliedSet.contains(tag))
+        onToggle(tag, !appliedSet.contains(ExactTagIdentity.bytes(tag)))
     }
 
     private func apply(_ tag: String) {
@@ -181,9 +185,10 @@ struct TagPickerSheet: View {
     private func submit() {
         let typed = trimmedQuery
         guard !typed.isEmpty else { return }
-        if let existing = allTags.first(where: { $0.caseInsensitiveCompare(typed) == .orderedSame }) {
-            if !appliedSet.contains(existing) {
-                onToggle(existing, true)
+        if let existing = allTags.first(where: { ExactTagIdentity.matches($0, typed) }) {
+            if !appliedSet.contains(ExactTagIdentity.bytes(existing))
+                || machineTags.contains(where: { ExactTagIdentity.matches($0, existing) }) {
+                onToggle(typed, true)
             }
         } else {
             // Block creating an over-length tag; keep the text so the inline

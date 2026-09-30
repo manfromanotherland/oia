@@ -136,6 +136,25 @@ actor CoreBridge {
         return assets
     }
 
+    func pendingTextTagging(
+        analyzerVersion: String, limit: UInt32, afterReadingID: String?
+    ) async throws -> TextTaggingBatch {
+        try await InteractionIdleGate.shared.waitUntilIdle()
+        return try await Self.background { [database, libraryPath] in
+            try TextTaggingBatch(database.pendingTextTagging(
+                libraryPath: libraryPath, analyzerVersion: analyzerVersion,
+                limit: limit, afterReadingId: afterReadingID
+            ))
+        }
+    }
+
+    @discardableResult
+    func completeTextTagging(task: TextTaggingWorkItem, tags: [String]) async throws -> Bool {
+        try await Self.background { [database, libraryPath] in
+            try database.completeTextTagging(libraryPath: libraryPath, task: task.ffi, tags: tags)
+        }
+    }
+
     /// Filesystem work can wait on external storage. Release the interactive
     /// actor while it runs; Rust keeps only short DB snapshots/commits locked.
     private nonisolated static func background<Value: Sendable>(

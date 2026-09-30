@@ -66,6 +66,22 @@ pub struct FfiReadingRow {
     pub word_count: Option<u32>,
     pub lang: Option<String>,
     pub tags: Vec<String>,
+    pub machine_tags: Vec<String>,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiTextTaggingTask {
+    pub reading_id: String,
+    pub title: String,
+    pub text: String,
+    pub source_fingerprint: String,
+    pub analyzer_version: String,
+}
+
+#[derive(uniffi::Record)]
+pub struct FfiTextTaggingBatch {
+    pub tasks: Vec<FfiTextTaggingTask>,
+    pub next_reading_id: Option<String>,
 }
 
 #[derive(uniffi::Record)]
@@ -327,6 +343,31 @@ impl From<crate::list::ReadingRow> for FfiReadingRow {
             word_count: r.word_count,
             lang: r.lang,
             tags: r.tags,
+            machine_tags: r.machine_tags,
+        }
+    }
+}
+
+impl From<crate::tags::TextTaggingTask> for FfiTextTaggingTask {
+    fn from(task: crate::tags::TextTaggingTask) -> Self {
+        Self {
+            reading_id: task.reading_id,
+            title: task.title,
+            text: task.text,
+            source_fingerprint: task.source_fingerprint,
+            analyzer_version: task.analyzer_version,
+        }
+    }
+}
+
+impl From<FfiTextTaggingTask> for crate::tags::TextTaggingTask {
+    fn from(task: FfiTextTaggingTask) -> Self {
+        Self {
+            reading_id: task.reading_id,
+            title: task.title,
+            text: task.text,
+            source_fingerprint: task.source_fingerprint,
+            analyzer_version: task.analyzer_version,
         }
     }
 }
@@ -814,28 +855,68 @@ impl Database {
         limit: u32,
     ) -> Result<FfiVisualAnalysisBatch, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
-        let _io = self.visual_cache_io.lock().unwrap();
-        let (candidates, hydrated_count, next_reading_id) = {
-            let conn = self.conn.lock().unwrap();
-            crate::visual_index::pending_visual_candidate_batch(
-                &conn,
+        let limit = limit.clamp(1, 64) as usize;
+        let (pending, hydrated_count, next_reading_id) = {
+            let _io = self.visual_cache_io.lock().unwrap();
+            let (candidates, hydrated_count, next_reading_id) = {
+                let conn = self.conn.lock().unwrap();
+                crate::visual_index::pending_visual_candidate_batch(
+                    &conn,
+                    &analyzer_version,
+                    after_reading_id.as_deref(),
+                    limit,
+                )
+                .map_err(e)?
+            };
+            let pending = crate::visual_index::stage_visual_analysis(
+                candidates,
+                hydrated_count,
+                &lib,
+                &self.visual_cache_root,
                 &analyzer_version,
-                after_reading_id.as_deref(),
-                limit.clamp(1, 64) as usize,
             )
-            .map_err(e)?
+            .map_err(e)?;
+            (pending, hydrated_count, next_reading_id)
         };
-        let pending = crate::visual_index::stage_visual_analysis(
-            candidates,
-            hydrated_count,
-            &lib,
-            &self.visual_cache_root,
-            &analyzer_version,
-        )
-        .map_err(e)?;
+        let machine_hydrated = {
+            let _update = self.reconciliation.lock().unwrap();
+            let candidates = {
+                let conn = self.conn.lock().unwrap();
+                crate::tags::cached_image_tagging_batch(
+                    &conn,
+                    &analyzer_version,
+                    after_reading_id.as_deref(),
+                    limit,
+                )
+                .map_err(e)?
+            };
+            let mut changed = Vec::new();
+            for (id, hash, labels) in candidates {
+                if crate::tags::complete_image_tagging_file(
+                    &lib,
+                    &id,
+                    &hash,
+                    &analyzer_version,
+                    &labels,
+                )
+                .map_err(e)?
+                    == Some(true)
+                {
+                    changed.push(crate::scanner::ScanDiff::Changed(
+                        crate::tags::scan_for_index(&lib, &id).map_err(e)?,
+                    ));
+                }
+            }
+            if !changed.is_empty() {
+                self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+                let conn = self.conn.lock().unwrap();
+                crate::reconcile::apply_diffs(&conn, &changed).map_err(e)?;
+            }
+            changed.len()
+        };
         Ok(FfiVisualAnalysisBatch {
             tasks: pending.tasks.into_iter().map(Into::into).collect(),
-            hydrated_count: hydrated_count as u32,
+            hydrated_count: (hydrated_count + machine_hydrated).min(u32::MAX as usize) as u32,
             next_reading_id,
         })
     }
@@ -888,12 +969,42 @@ impl Database {
     ) -> Result<bool, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
         let task = task.into();
-        let result = result.into();
+        let result: crate::VisualAnalysisResult = result.into();
         let Some(current) = crate::visual_index::verify_visual_analysis(&lib, &task).map_err(e)?
         else {
             return Ok(false);
         };
+        let _update = self.reconciliation.lock().unwrap();
+        let ids = {
+            let conn = self.conn.lock().unwrap();
+            crate::tags::reading_ids_for_visual_hash(&conn, &current.content_hash).map_err(e)?
+        };
+        let mut changed = Vec::new();
+        for id in ids {
+            if crate::tags::complete_image_tagging_file(
+                &lib,
+                &id,
+                &current.content_hash,
+                &task.analyzer_version,
+                if result.supported {
+                    &result.labels
+                } else {
+                    &[]
+                },
+            )
+            .map_err(e)?
+                == Some(true)
+            {
+                changed.push(crate::scanner::ScanDiff::Changed(
+                    crate::tags::scan_for_index(&lib, &id).map_err(e)?,
+                ));
+            }
+        }
         let conn = self.conn.lock().unwrap();
+        if !changed.is_empty() {
+            self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+        }
+        crate::reconcile::apply_diffs(&conn, &changed).map_err(e)?;
         crate::visual_index::complete_verified_visual_analysis(&conn, &current, &task, &result)
             .map_err(e)
     }
@@ -1087,6 +1198,46 @@ impl Database {
     }
 
     // ── Tags ──────────────────────────────────────────────────────────────
+
+    pub fn pending_text_tagging(
+        &self,
+        library_path: String,
+        analyzer_version: String,
+        limit: u32,
+        after_reading_id: Option<String>,
+    ) -> Result<FfiTextTaggingBatch, CoreError> {
+        let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
+        let (ids, next_reading_id) = crate::tags::pending_text_tagging_ids(
+            &self.conn.lock().unwrap(),
+            &analyzer_version,
+            limit.clamp(1, 64) as usize,
+            after_reading_id.as_deref(),
+        )
+        .map_err(e)?;
+        let batch = crate::tags::pending_text_tagging_for_ids(
+            &lib,
+            &analyzer_version,
+            ids,
+            next_reading_id,
+        );
+        Ok(FfiTextTaggingBatch {
+            tasks: batch.tasks.into_iter().map(Into::into).collect(),
+            next_reading_id: batch.next_reading_id,
+        })
+    }
+
+    pub fn complete_text_tagging(
+        &self,
+        library_path: String,
+        task: FfiTextTaggingTask,
+        tags: Vec<String>,
+    ) -> Result<bool, CoreError> {
+        let _update = self.reconciliation.lock().unwrap();
+        self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+        let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
+        let conn = self.conn.lock().unwrap();
+        crate::tags::complete_text_tagging(&lib, &conn, &task.into(), &tags).map_err(e)
+    }
 
     pub fn add_tag(&self, library_path: String, id: String, tag: String) -> Result<(), CoreError> {
         let _update = self.reconciliation.lock().unwrap();
@@ -2052,6 +2203,66 @@ mod tests {
             database.get_reading_row(scanned_id).unwrap().unwrap().tags,
             ["keep"]
         );
+    }
+
+    #[test]
+    fn staged_sync_restarts_after_image_machine_tags_are_written() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        for (bytes, title) in [
+            (b"first image".to_vec(), "First"),
+            (b"second image".to_vec(), "Second"),
+        ] {
+            database
+                .import_image(
+                    library_path.clone(),
+                    bytes,
+                    "image/png".into(),
+                    title.into(),
+                )
+                .unwrap();
+        }
+
+        let session = database.begin_sync(library_path.clone()).unwrap();
+        assert_eq!(database.sync_batch(session, 1).unwrap(), None);
+        let scanned_id = database
+            .reconciliation_session
+            .lock()
+            .unwrap()
+            .as_ref()
+            .unwrap()
+            .readings[0]
+            .id
+            .clone();
+        let task = database
+            .pending_visual_analysis_batch(library_path.clone(), "vision-test-v1".into(), None, 64)
+            .unwrap()
+            .tasks
+            .into_iter()
+            .find(|task| task.reading_id == scanned_id)
+            .unwrap();
+        assert!(database
+            .complete_visual_analysis(
+                library_path,
+                task,
+                FfiVisualAnalysisResult {
+                    supported: true,
+                    labels: vec![FfiVisualLabel {
+                        identifier: "chair".into(),
+                        confidence: 0.9
+                    }],
+                    palette: vec![],
+                },
+            )
+            .unwrap());
+        assert_eq!(database.sync_batch(session, 1).unwrap(), None);
+        assert_eq!(database.sync_batch(session, 1).unwrap(), Some(1));
+        let row = database.get_reading_row(scanned_id).unwrap().unwrap();
+        assert_eq!(row.tags, ["chair"]);
+        assert_eq!(row.machine_tags, ["chair"]);
     }
 
     #[test]

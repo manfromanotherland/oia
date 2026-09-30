@@ -11,7 +11,7 @@ import Foundation
 /// Most boundary DTOs (`Ffi*`) appear in the signatures because this is the
 /// bridge. The complete board snapshot is lifted to `ReadingRow` inside the
 /// bridge actor so thousands of row mappings never run on the main actor.
-protocol CoreBridging: VisualSearchCore {
+protocol CoreBridging: VisualSearchCore, TextTaggingCore {
     func rebuild() async throws
     @discardableResult func sync() async throws -> UInt32
 

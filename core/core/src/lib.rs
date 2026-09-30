@@ -65,7 +65,9 @@ pub use source_capture::{
 };
 pub use status::{set_archived, set_favorite, set_read};
 pub use tags::{add_tag, list_tags, remove_tag, MAX_TAG_LEN};
-pub use types::{LibraryRoot, Metadata, Reading, ReadingKind, SourceAttachment, SourceProfile};
+pub use types::{
+    LibraryRoot, MachineTagSource, Metadata, Reading, ReadingKind, SourceAttachment, SourceProfile,
+};
 pub use url_norm::normalize_url;
 pub use visual_index::{
     complete_visual_analysis, current_visual_assets, pending_visual_analysis,

@@ -21,11 +21,12 @@ struct TagCount: Identifiable, Equatable, Sendable {
 
 enum ExactTagIdentity {
     static func bytes(_ value: String) -> Data {
-        Data(value.utf8)
+        Data(value.trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX")).utf8)
     }
 
     static func matches(_ lhs: String, _ rhs: String) -> Bool {
-        lhs.utf8.elementsEqual(rhs.utf8)
+        bytes(lhs) == bytes(rhs)
     }
 }
 

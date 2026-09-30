@@ -32,9 +32,9 @@ struct BoardSearchToken: Identifiable, Hashable, Codable, Sendable {
         )
     }
 
-    /// Text shown inside the native search token. Exact tag bytes remain in
-    /// `value` for the core predicate even when an externally-authored tag has
-    /// surrounding whitespace or decomposed Unicode.
+    /// Text shown inside the native search token. Stored tag spelling remains
+    /// in `value`; the core compares case-insensitive keys without changing
+    /// Unicode composition.
     var displayValue: String {
         kind == .color ? value : BoardSearchNormalization.value(value)
     }

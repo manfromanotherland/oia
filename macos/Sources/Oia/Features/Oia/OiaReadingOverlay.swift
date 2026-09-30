@@ -34,13 +34,17 @@ struct OiaReadingOverlay: View {
                 guard !appState.isEditingText else { return }
                 onClose()
             }
+            .onChange(of: appState.readings.first { $0.id == row.id }) { _, updated in
+                if let updated { row = updated }
+            }
     }
 
     private var gallery: some View {
         NavigationSplitView(columnVisibility: inspectorVisibility) {
             OiaInspectorView(
                 row: row, isVisible: showsInspector,
-                onEditTags: onEditTags, onSearch: searchFromInspector
+                onEditTags: onEditTags, onSearch: searchFromInspector,
+                onToggleTag: updateTag
             )
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)
                 .background {
@@ -221,14 +225,11 @@ struct OiaReadingOverlay: View {
             }
     }
 
-    private func searchFromInspector(_ query: String) {
-        let value = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !value.isEmpty else { return }
-        // Palette matching and visual labels are distinct search token kinds.
+    private func searchFromInspector(_ token: BoardSearchToken) {
+        guard !token.displayValue.isEmpty else { return }
+        // Every named chip in Tags narrows by the same effective tag set.
         let nextQuery = ""
-        let nextTokens = [BoardSearchToken.colorQuery(value)
-            ?? BoardSearchToken(kind: .visual, value: value)]
-        guard !nextTokens[0].value.isEmpty else { return }
+        let nextTokens = [token]
         let searchChanged = appState.searchQuery != nextQuery
             || BoardSearchCriteria(tokens: appState.searchTokens)
             != BoardSearchCriteria(tokens: nextTokens)
@@ -239,6 +240,21 @@ struct OiaReadingOverlay: View {
         appState.searchTokens = nextTokens
         if !searchChanged {
             appState.searchDidChange()
+        }
+    }
+
+    private func updateTag(_ tag: String, applies: Bool) {
+        let id = row.id
+        row.applyTagEdit(tag, applies: applies)
+        Task {
+            if applies {
+                await appState.addTag(id: id, tag: tag)
+            } else {
+                await appState.removeTag(id: id, tag: tag)
+            }
+            if row.id == id, let refreshed = await appState.reloadRow(id: id) {
+                row = refreshed
+            }
         }
     }
 

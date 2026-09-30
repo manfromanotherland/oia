@@ -10,7 +10,7 @@ use std::{
 use anyhow::Result;
 use rustix::fs::{Mode, OFlags};
 
-use crate::{parse_reading, types::LibraryRoot, visual_index::VisualAsset, Metadata};
+use crate::{parse_reading, types::LibraryRoot, visual_index::VisualAsset, Metadata, Reading};
 
 /// One article as seen on disk.
 #[derive(Debug, Clone)]
@@ -282,6 +282,34 @@ fn open_reading_article(library: &LibraryRoot, directory: &Path) -> Result<Optio
     Ok(file.metadata()?.is_file().then_some(file))
 }
 
+/// Read one indexed ID through the same no-follow directory walk as a full
+/// scan, and reject frontmatter whose identity no longer matches its folder.
+pub(crate) fn read_reading_for_id(library: &LibraryRoot, id: &str) -> Result<Option<Reading>> {
+    Ok(read_reading_with_modified_at_for_id(library, id)?.map(|(reading, _)| reading))
+}
+
+/// Return the modification time from the pinned article descriptor as well as
+/// the parsed reading, so index updates never stat a later symlink replacement.
+pub(crate) fn read_reading_with_modified_at_for_id(
+    library: &LibraryRoot,
+    id: &str,
+) -> Result<Option<(Reading, std::time::SystemTime)>> {
+    let directory = library.reading_dir(id);
+    let Some(mut article) = open_reading_article(library, &directory)? else {
+        return Ok(None);
+    };
+    let modified_at = article.metadata()?.modified()?;
+    let mut content = String::new();
+    article.read_to_string(&mut content)?;
+    let Ok(reading) = parse_reading(&content) else {
+        return Ok(None);
+    };
+    Ok(
+        (reading.metadata.id == id && directory == library.reading_dir(&reading.metadata.id))
+            .then_some((reading, modified_at)),
+    )
+}
+
 pub(crate) fn inspect_media_aspect_ratio(
     library: &LibraryRoot,
     metadata: &Metadata,
@@ -397,6 +425,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,

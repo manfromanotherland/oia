@@ -2,21 +2,496 @@
 
 use anyhow::{bail, Result};
 use rusqlite::{params_from_iter, types::Value, Connection};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use unicode_casefold::UnicodeCaseFold;
 
 use crate::{
     list::{pinned_count_filter, CountScope, Facet, ResolvedSearch},
     locking::lock_reading,
-    parse_reading,
     reconcile::apply_diffs,
     scanner::{ScanDiff, ScannedReading},
     writer::write_reading_under_lock,
-    LibraryRoot,
+    LibraryRoot, MachineTagSource, Metadata,
 };
+
+#[cfg(test)]
+use crate::parse_reading;
 
 /// The longest a tag name may be, counted in Unicode scalar values (`char`s),
 /// not bytes. Enforced by [`add_tag`]; the macOS client mirrors this limit to
 /// surface the error before it reaches the core.
 pub const MAX_TAG_LEN: usize = 20;
+const MAX_MACHINE_TAGS_PER_SOURCE: usize = 8;
+const MAX_TEXT_TAGGING_CHARS: usize = 4_000;
+const IMAGE_TAG_MIN_CONFIDENCE: f64 = 0.25;
+const MAX_IMAGE_TAGS: usize = 5;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagEntry {
+    pub name: String,
+    pub key: String,
+    pub origin: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextTaggingTask {
+    pub reading_id: String,
+    pub title: String,
+    pub text: String,
+    pub source_fingerprint: String,
+    pub analyzer_version: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TextTaggingBatch {
+    pub tasks: Vec<TextTaggingTask>,
+    pub next_reading_id: Option<String>,
+}
+
+/// Case-insensitive identity without Unicode canonical normalization. This
+/// retains the existing distinction between precomposed and decomposed tags.
+pub fn tag_key(tag: &str) -> String {
+    tag.trim().case_fold().collect()
+}
+
+/// User tags lead and win spelling when a machine produces the same tag.
+pub fn tag_entries(metadata: &Metadata) -> Vec<TagEntry> {
+    tag_entries_with_current_sources(metadata, None, None, false)
+}
+
+/// Project only inference for the source bytes in this scanned reading.
+pub fn tag_entries_for_reading(
+    metadata: &Metadata,
+    body: &str,
+    visual_hash: Option<&str>,
+) -> Vec<TagEntry> {
+    let text_hash = text_source_content(metadata, body)
+        .map(|(title, excerpt, content)| text_fingerprint(title, excerpt, content));
+    tag_entries_with_current_sources(metadata, text_hash.as_deref(), visual_hash, true)
+}
+
+fn tag_entries_with_current_sources(
+    metadata: &Metadata,
+    text_hash: Option<&str>,
+    visual_hash: Option<&str>,
+    current_only: bool,
+) -> Vec<TagEntry> {
+    let mut entries = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for tag in &metadata.tags {
+        let key = tag_key(tag);
+        if !key.is_empty() && seen.insert(key.clone()) {
+            entries.push(TagEntry {
+                name: tag.clone(),
+                key,
+                origin: "user".into(),
+            });
+        }
+    }
+    let excluded: std::collections::HashSet<_> = metadata
+        .excluded_machine_tags
+        .iter()
+        .map(|tag| tag_key(tag))
+        .collect();
+    for source in &metadata.machine_tags {
+        if current_only
+            && ((source.source == "text" && text_hash != Some(source.source_fingerprint.as_str()))
+                || (source.source == "image"
+                    && visual_hash != Some(source.source_fingerprint.as_str())))
+        {
+            continue;
+        }
+        for tag in &source.tags {
+            let key = tag_key(tag);
+            if !key.is_empty() && !excluded.contains(&key) && seen.insert(key.clone()) {
+                entries.push(TagEntry {
+                    name: tag.clone(),
+                    key,
+                    origin: "machine".into(),
+                });
+            }
+        }
+    }
+    entries
+}
+
+pub fn effective_tags(metadata: &Metadata) -> Vec<String> {
+    tag_entries(metadata)
+        .into_iter()
+        .map(|entry| entry.name)
+        .collect()
+}
+
+pub fn active_machine_tags(metadata: &Metadata) -> Vec<String> {
+    tag_entries(metadata)
+        .into_iter()
+        .filter(|entry| entry.origin == "machine")
+        .map(|entry| entry.name)
+        .collect()
+}
+
+fn normalize_machine_tags(tags: &[String], limit: usize) -> Vec<String> {
+    let mut normalized = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for tag in tags {
+        let mut value = String::new();
+        let mut separator = false;
+        for character in tag.trim().to_lowercase().chars() {
+            if character.is_whitespace() || character == '_' {
+                separator = !value.is_empty();
+            } else {
+                if separator && !value.ends_with('-') {
+                    value.push('-');
+                }
+                value.push(character);
+                separator = false;
+            }
+        }
+        let value = value.trim_matches('-').to_string();
+        if !value.is_empty() && value.chars().count() <= MAX_TAG_LEN && seen.insert(tag_key(&value))
+        {
+            normalized.push(value);
+            if normalized.len() == limit {
+                break;
+            }
+        }
+    }
+    normalized
+}
+
+fn replace_machine_source(
+    metadata: &mut Metadata,
+    source: &str,
+    fingerprint: &str,
+    analyzer_version: &str,
+    tags: &[String],
+) -> bool {
+    let replacement = MachineTagSource {
+        source: source.into(),
+        source_fingerprint: fingerprint.into(),
+        analyzer_version: analyzer_version.into(),
+        tags: normalize_machine_tags(tags, MAX_MACHINE_TAGS_PER_SOURCE),
+    };
+    if let Some(existing) = metadata
+        .machine_tags
+        .iter_mut()
+        .find(|entry| entry.source == source)
+    {
+        if *existing == replacement {
+            return false;
+        }
+        *existing = replacement;
+    } else {
+        metadata.machine_tags.push(replacement);
+    }
+    true
+}
+
+fn text_source_content<'a>(
+    metadata: &'a Metadata,
+    body_markdown: &'a str,
+) -> Option<(&'a str, &'a str, &'a str)> {
+    let title = metadata.title.trim();
+    let excerpt = metadata.excerpt.as_deref().unwrap_or("").trim();
+    let body = if metadata.lightweight || metadata.kind.is_media() {
+        ""
+    } else {
+        body_markdown.trim()
+    };
+    let generic_title = title.is_empty()
+        || title.eq_ignore_ascii_case("saved link")
+        || title.eq_ignore_ascii_case("pasted image")
+        || title.eq_ignore_ascii_case("imported image")
+        || title.eq_ignore_ascii_case("imported video")
+        || title == metadata.url;
+    if generic_title && excerpt.is_empty() && body.is_empty() {
+        return None;
+    }
+    Some((title, excerpt, body))
+}
+
+fn text_fingerprint(title: &str, excerpt: &str, body: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(title.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(excerpt.as_bytes());
+    hasher.update(b"\n");
+    hasher.update(body.as_bytes());
+    format!("sha256:{}", hex::encode(hasher.finalize()))
+}
+
+fn text_tagging_input(metadata: &Metadata, body_markdown: &str) -> Option<(String, String)> {
+    let (title, excerpt, body) = text_source_content(metadata, body_markdown)?;
+    let fingerprint = text_fingerprint(title, excerpt, body);
+    let heading = format!("{title}\n{excerpt}\n");
+    let remaining = MAX_TEXT_TAGGING_CHARS.saturating_sub(heading.chars().count());
+    let body_chars: Vec<char> = body.chars().collect();
+    let sampled_body: String = if body_chars.len() <= remaining {
+        body.into()
+    } else if remaining < 30 {
+        String::new()
+    } else {
+        let each_end = remaining / 3;
+        let middle = remaining.saturating_sub(each_end * 2 + 12);
+        let midpoint = body_chars.len() / 2;
+        format!(
+            "{}\n…\n{}\n…\n{}",
+            body_chars[..each_end].iter().collect::<String>(),
+            body_chars[midpoint.saturating_sub(middle / 2)..][..middle]
+                .iter()
+                .collect::<String>(),
+            body_chars[body_chars.len() - each_end..]
+                .iter()
+                .collect::<String>()
+        )
+    };
+    let text: String = format!("{heading}{sampled_body}")
+        .chars()
+        .take(MAX_TEXT_TAGGING_CHARS)
+        .collect();
+    Some((text, fingerprint))
+}
+
+/// Scan a bounded ID window; completed sources are skipped without relying on
+/// disposable DB state. A missing model leaves the file untouched and pending.
+pub fn pending_text_tagging(
+    conn: &Connection,
+    library: &LibraryRoot,
+    analyzer_version: &str,
+    limit: usize,
+    after_reading_id: Option<&str>,
+) -> Result<TextTaggingBatch> {
+    let (ids, next_reading_id) =
+        pending_text_tagging_ids(conn, analyzer_version, limit, after_reading_id)?;
+    Ok(pending_text_tagging_for_ids(
+        library,
+        analyzer_version,
+        ids,
+        next_reading_id,
+    ))
+}
+
+/// Fetch only the bounded index window while the database connection is held.
+pub fn pending_text_tagging_ids(
+    conn: &Connection,
+    analyzer_version: &str,
+    limit: usize,
+    after_reading_id: Option<&str>,
+) -> Result<(Vec<String>, Option<String>)> {
+    if analyzer_version.trim().is_empty() {
+        bail!("analyzer version must not be blank");
+    }
+    let limit = limit.clamp(1, 64);
+    let mut stmt = conn.prepare("SELECT id FROM readings WHERE id > ?1 ORDER BY id LIMIT ?2")?;
+    let ids = stmt
+        .query_map(
+            rusqlite::params![after_reading_id.unwrap_or(""), limit as i64],
+            |row| row.get::<_, String>(0),
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    let next_reading_id = (ids.len() == limit).then(|| ids.last().unwrap().clone());
+    Ok((ids, next_reading_id))
+}
+
+/// Stage file-backed model input after releasing the database connection.
+pub fn pending_text_tagging_for_ids(
+    library: &LibraryRoot,
+    analyzer_version: &str,
+    ids: Vec<String>,
+    next_reading_id: Option<String>,
+) -> TextTaggingBatch {
+    let mut tasks = Vec::new();
+    for id in ids {
+        let Ok(Some(reading)) = crate::scanner::read_reading_for_id(library, &id) else {
+            continue;
+        };
+        let Some((text, fingerprint)) = text_tagging_input(&reading.metadata, &reading.body) else {
+            continue;
+        };
+        if reading.metadata.machine_tags.iter().any(|source| {
+            source.source == "text"
+                && source.source_fingerprint == fingerprint
+                && source.analyzer_version == analyzer_version
+        }) {
+            continue;
+        }
+        tasks.push(TextTaggingTask {
+            reading_id: id,
+            title: reading.metadata.title,
+            text,
+            source_fingerprint: fingerprint,
+            analyzer_version: analyzer_version.into(),
+        });
+    }
+    TextTaggingBatch {
+        tasks,
+        next_reading_id,
+    }
+}
+
+/// Apply a text-model result only to the exact file content that was analyzed.
+pub fn complete_text_tagging(
+    library: &LibraryRoot,
+    conn: &Connection,
+    task: &TextTaggingTask,
+    tags: &[String],
+) -> Result<bool> {
+    if task.analyzer_version.trim().is_empty() {
+        bail!("analyzer version must not be blank");
+    }
+    let lock = lock_reading(library, &task.reading_id)?;
+    let Some(mut reading) = crate::scanner::read_reading_for_id(library, &task.reading_id)? else {
+        return Ok(false);
+    };
+    let Some((_, fingerprint)) = text_tagging_input(&reading.metadata, &reading.body) else {
+        return Ok(false);
+    };
+    if fingerprint != task.source_fingerprint {
+        return Ok(false);
+    }
+    if replace_machine_source(
+        &mut reading.metadata,
+        "text",
+        &fingerprint,
+        &task.analyzer_version,
+        tags,
+    ) {
+        let written = write_reading_under_lock(library, reading.metadata, reading.body, &lock)?;
+        sync_index(library, conn, &written.metadata.id)?;
+    }
+    Ok(true)
+}
+
+/// Persist a conservative subset of Vision's existing labels for a preview.
+/// The hash check also rejects a source replaced by an external sync writer.
+pub fn complete_image_tagging_file(
+    library: &LibraryRoot,
+    id: &str,
+    content_hash: &str,
+    analyzer_version: &str,
+    labels: &[crate::VisualLabel],
+) -> Result<Option<bool>> {
+    if labels
+        .iter()
+        .any(|label| !label.confidence.is_finite() || !(0.0..=1.0).contains(&label.confidence))
+    {
+        bail!("image label confidences must be finite values from 0...1");
+    }
+    let lock = lock_reading(library, id)?;
+    let Some(reading) = crate::scanner::read_reading_for_id(library, id)? else {
+        return Ok(None);
+    };
+    let mut ordered = labels.to_vec();
+    ordered.sort_by(|a, b| {
+        b.confidence
+            .total_cmp(&a.confidence)
+            .then_with(|| a.identifier.cmp(&b.identifier))
+    });
+    let candidates: Vec<String> = ordered
+        .iter()
+        .filter(|label| label.confidence >= IMAGE_TAG_MIN_CONFIDENCE)
+        .take(MAX_IMAGE_TAGS)
+        .map(|label| label.identifier.clone())
+        .collect();
+    let normalized = normalize_machine_tags(&candidates, MAX_MACHINE_TAGS_PER_SOURCE);
+    let Some(asset) = reading.metadata.preview_asset.as_deref() else {
+        return Ok(None);
+    };
+    let Ok(inspected) = crate::visual_index::inspect_asset_for_tagging(library, id, asset) else {
+        return Ok(None);
+    };
+    if inspected.content_hash != content_hash {
+        return Ok(None);
+    }
+    // An external sync writer may update article.md while the asset is hashed.
+    // Apply inference to the latest safe reading so manual tags, exclusions, and
+    // body edits made during that I/O are retained.
+    let Some(mut reading) = crate::scanner::read_reading_for_id(library, id)? else {
+        return Ok(None);
+    };
+    if reading.metadata.preview_asset.as_deref() != Some(asset) {
+        return Ok(None);
+    }
+    if reading.metadata.machine_tags.iter().any(|source| {
+        source.source == "image"
+            && source.source_fingerprint == content_hash
+            && source.analyzer_version == analyzer_version
+            && source.tags == normalized
+    }) {
+        return Ok(Some(false));
+    }
+    if replace_machine_source(
+        &mut reading.metadata,
+        "image",
+        content_hash,
+        analyzer_version,
+        &candidates,
+    ) {
+        write_reading_under_lock(library, reading.metadata, reading.body, &lock)?;
+        return Ok(Some(true));
+    }
+    Ok(Some(false))
+}
+
+/// Every reading whose current index projection references these pixels.
+pub fn reading_ids_for_visual_hash(conn: &Connection, content_hash: &str) -> Result<Vec<String>> {
+    let mut stmt =
+        conn.prepare("SELECT id FROM readings WHERE visual_asset_hash=?1 ORDER BY id")?;
+    let ids = stmt
+        .query_map([content_hash], |row| row.get::<_, String>(0))?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    Ok(ids)
+}
+
+/// File-hydrate cached visual labels in the same bounded ID window whose DB
+/// projections were hydrated. Unchanged source stamps avoid rewriting files.
+pub fn cached_image_tagging_batch(
+    conn: &Connection,
+    analyzer_version: &str,
+    after_reading_id: Option<&str>,
+    limit: usize,
+) -> Result<Vec<(String, String, Vec<crate::VisualLabel>)>> {
+    let mut stmt = conn.prepare(
+        "SELECT r.id, r.visual_asset_hash, a.labels_json, a.supported
+         FROM readings r LEFT JOIN visual_analysis a
+           ON a.content_hash=r.visual_asset_hash AND a.analyzer_version=?1
+         WHERE r.id > ?2 ORDER BY r.id LIMIT ?3",
+    )?;
+    let rows = stmt
+        .query_map(
+            rusqlite::params![
+                analyzer_version,
+                after_reading_id.unwrap_or(""),
+                limit as i64
+            ],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, Option<i32>>(3)?,
+                ))
+            },
+        )?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+    drop(stmt);
+    let mut candidates = Vec::new();
+    for (id, hash, labels_json, supported) in rows {
+        let (Some(hash), Some(labels_json), Some(supported)) = (hash, labels_json, supported)
+        else {
+            continue;
+        };
+        let labels: Vec<crate::VisualLabel> = if supported != 0 {
+            serde_json::from_str(&labels_json)?
+        } else {
+            Vec::new()
+        };
+        candidates.push((id, hash, labels));
+    }
+    Ok(candidates)
+}
 
 /// Validate and normalize an imported tag according to the library format.
 ///
@@ -50,24 +525,41 @@ pub(crate) fn validate_imported_tag(tag: &str) -> Result<String> {
 /// index row.
 pub fn add_tag(library: &LibraryRoot, conn: &Connection, id: &str, tag: &str) -> Result<()> {
     let lock = lock_reading(library, id)?;
-    let path = library.article_path(id);
-    if !path.is_file() {
-        bail!("reading not found: {id}");
-    }
-
-    let content = std::fs::read_to_string(&path)?;
-    let mut reading = parse_reading(&content)?;
+    let Some(mut reading) = crate::scanner::read_reading_for_id(library, id)? else {
+        bail!("reading not found: {id}")
+    };
 
     let tag = tag.trim().to_string();
+    if tag.is_empty() {
+        bail!("tag must not be empty");
+    }
     let len = tag.chars().count();
     if len > MAX_TAG_LEN {
         bail!("tag is too long: {len} characters (max {MAX_TAG_LEN})");
     }
-    if reading.metadata.tags.contains(&tag) {
+    let key = tag_key(&tag);
+    let before_exclusions = reading.metadata.excluded_machine_tags.len();
+    reading
+        .metadata
+        .excluded_machine_tags
+        .retain(|excluded| tag_key(excluded) != key);
+    if reading
+        .metadata
+        .tags
+        .iter()
+        .any(|existing| tag_key(existing) == key)
+        && reading.metadata.excluded_machine_tags.len() == before_exclusions
+    {
         return Ok(());
     }
-
-    reading.metadata.tags.push(tag);
+    if !reading
+        .metadata
+        .tags
+        .iter()
+        .any(|existing| tag_key(existing) == key)
+    {
+        reading.metadata.tags.push(tag);
+    }
     let written = write_reading_under_lock(library, reading.metadata, reading.body, &lock)?;
     sync_index(library, conn, &written.metadata.id)
 }
@@ -78,17 +570,22 @@ pub fn add_tag(library: &LibraryRoot, conn: &Connection, id: &str, tag: &str) ->
 /// syncs the index row.
 pub fn remove_tag(library: &LibraryRoot, conn: &Connection, id: &str, tag: &str) -> Result<()> {
     let lock = lock_reading(library, id)?;
-    let path = library.article_path(id);
-    if !path.is_file() {
-        bail!("reading not found: {id}");
-    }
+    let Some(mut reading) = crate::scanner::read_reading_for_id(library, id)? else {
+        bail!("reading not found: {id}")
+    };
 
-    let content = std::fs::read_to_string(&path)?;
-    let mut reading = parse_reading(&content)?;
-
+    let key = tag_key(tag);
     let before = reading.metadata.tags.len();
-    reading.metadata.tags.retain(|t| t != tag);
-    if reading.metadata.tags.len() == before {
+    reading.metadata.tags.retain(|t| tag_key(t) != key);
+    let suppressed = !reading
+        .metadata
+        .excluded_machine_tags
+        .iter()
+        .any(|excluded| tag_key(excluded) == key);
+    if suppressed {
+        reading.metadata.excluded_machine_tags.push(key);
+    }
+    if reading.metadata.tags.len() == before && !suppressed {
         return Ok(());
     }
 
@@ -132,10 +629,15 @@ pub(crate) fn list_tags_with(
     let count_filter = pinned_count_filter(scope, Facet::Rating, search, &mut vals);
 
     let sql = format!(
-        "SELECT value, COUNT(*) FILTER (WHERE {count_filter}) AS cnt
-         FROM readings, json_each(readings.tags_json)
-         GROUP BY value
-         ORDER BY value ASC"
+        "SELECT COALESCE(
+             MIN(CASE WHEN json_extract(tag_entry.value, '$.origin') = 'user'
+                      THEN json_extract(tag_entry.value, '$.name') END),
+             MIN(json_extract(tag_entry.value, '$.name'))
+         ) AS display_name,
+         COUNT(*) FILTER (WHERE {count_filter}) AS cnt
+         FROM readings, json_each(readings.tag_entries_json) tag_entry
+         GROUP BY json_extract(tag_entry.value, '$.key')
+         ORDER BY json_extract(tag_entry.value, '$.key') ASC"
     );
     let mut stmt = conn.prepare(&sql)?;
 
@@ -148,18 +650,30 @@ pub(crate) fn list_tags_with(
 
 /// Re-read the article file from disk and update its index row.
 fn sync_index(library: &LibraryRoot, conn: &Connection, id: &str) -> Result<()> {
+    apply_diffs(conn, &[ScanDiff::Changed(scan_for_index(library, id)?)])
+}
+
+pub(crate) fn scan_for_index(library: &LibraryRoot, id: &str) -> Result<ScannedReading> {
     let path = library.article_path(id);
-    let content = std::fs::read_to_string(&path)?;
-    let reading = parse_reading(&content)?;
-    let modified_at = std::fs::metadata(&path)?.modified()?;
+    let Some((reading, modified_at)) =
+        crate::scanner::read_reading_with_modified_at_for_id(library, id)?
+    else {
+        bail!("reading not found: {id}")
+    };
     let visual_asset = reading.metadata.preview_asset.as_deref().and_then(|asset| {
         if matches!(
             reading.metadata.kind,
             crate::ReadingKind::Article | crate::ReadingKind::Image
         ) {
-            crate::visual_index::inspect_image_asset(library, &reading.metadata.id, asset).ok()
+            crate::visual_index::inspect_image_asset_for_tagging(
+                library,
+                &reading.metadata.id,
+                asset,
+            )
+            .ok()
         } else {
-            crate::visual_index::inspect_asset(library, &reading.metadata.id, asset).ok()
+            crate::visual_index::inspect_asset_for_tagging(library, &reading.metadata.id, asset)
+                .ok()
         }
     });
     let media_aspect_ratio = crate::scanner::inspect_media_aspect_ratio(
@@ -168,7 +682,7 @@ fn sync_index(library: &LibraryRoot, conn: &Connection, id: &str) -> Result<()> 
         visual_asset.as_ref(),
     );
 
-    let scanned = ScannedReading {
+    Ok(ScannedReading {
         id: reading.metadata.id.clone(),
         source_hash: reading.metadata.source_hash.clone(),
         modified_at,
@@ -178,9 +692,7 @@ fn sync_index(library: &LibraryRoot, conn: &Connection, id: &str) -> Result<()> 
         media_aspect_ratio,
         body: reading.body,
         metadata: reading.metadata,
-    };
-
-    apply_diffs(conn, &[ScanDiff::Changed(scanned)])
+    })
 }
 
 #[cfg(test)]
@@ -219,6 +731,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,
@@ -375,10 +889,9 @@ mod tests {
         remove_tag(&lib, &conn, &id, "rust").unwrap();
 
         let content = std::fs::read_to_string(lib.article_path(&id)).unwrap();
-        assert!(
-            !content.contains("rust"),
-            "removed tag should be gone from frontmatter"
-        );
+        let metadata = parse_reading(&content).unwrap().metadata;
+        assert_eq!(metadata.tags, vec!["async"]);
+        assert_eq!(metadata.excluded_machine_tags, vec!["rust"]);
 
         let tags = list_tags(&conn, &CountScope::default()).unwrap();
         assert_eq!(tags.len(), 1);
@@ -793,5 +1306,268 @@ mod tests {
 
         let result = add_tag(&lib, &conn, "nonexistent-id", "rust");
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn inferred_tags_merge_with_user_spelling_and_exact_filters_ignore_case() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let first = new_id();
+        let second = new_id();
+        let mut first_meta = meta(&first, "https://first.example");
+        first_meta.tags = vec!["Chair".into()];
+        write_reading(&lib, first_meta, "A wooden chair".into()).unwrap();
+        write_reading(
+            &lib,
+            meta(&second, "https://second.example"),
+            "An armchair in a room".into(),
+        )
+        .unwrap();
+        rebuild(&conn, &lib).unwrap();
+
+        let tasks = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks;
+        for task in tasks {
+            complete_text_tagging(&lib, &conn, &task, &["chair".into(), "FURNITURE".into()])
+                .unwrap();
+        }
+
+        assert_eq!(
+            list_tags(&conn, &CountScope::default()).unwrap(),
+            vec![("Chair".into(), 2), ("furniture".into(), 2)]
+        );
+        let rows = crate::list::list_readings(
+            &conn,
+            &crate::list::ListOptions {
+                tag: Some("CHAIR".into()),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 2);
+        let first_row = rows.iter().find(|row| row.id == first).unwrap();
+        assert_eq!(first_row.tags, vec!["Chair", "furniture"]);
+        assert_eq!(first_row.machine_tags, vec!["furniture"]);
+        let second_row = rows.iter().find(|row| row.id == second).unwrap();
+        assert_eq!(second_row.machine_tags, vec!["chair", "furniture"]);
+    }
+
+    #[test]
+    fn unicode_full_case_folding_merges_facets_and_exact_filters() {
+        assert_eq!(tag_key("Straße"), tag_key("STRASSE"));
+        assert_eq!(tag_key("ΟΣ"), tag_key("ος"));
+        assert_ne!(tag_key("Café"), tag_key("Cafe\u{301}"));
+        assert_eq!(
+            normalize_machine_tags(&["Straße".into(), "STRASSE".into()], 8),
+            vec!["straße"]
+        );
+
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let mut first = meta(&new_id(), "https://first.example");
+        first.tags = vec!["Straße".into()];
+        write_reading(&lib, first, "First".into()).unwrap();
+        let mut second = meta(&new_id(), "https://second.example");
+        second.tags = vec!["STRASSE".into()];
+        write_reading(&lib, second, "Second".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let facets = list_tags(&conn, &CountScope::default()).unwrap();
+        assert_eq!(facets.len(), 1);
+        assert_eq!(facets[0].1, 2);
+        let rows = crate::list::list_readings(
+            &conn,
+            &crate::list::ListOptions {
+                tag: Some("strasse".into()),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 2);
+    }
+
+    #[test]
+    fn removed_inference_stays_suppressed_and_manual_add_restores_it() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        write_reading(
+            &lib,
+            meta(&id, "https://example.com"),
+            "A science article".into(),
+        )
+        .unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        complete_text_tagging(&lib, &conn, &task, &["Science".into()]).unwrap();
+        assert_eq!(
+            crate::list::get_reading(&conn, &id)
+                .unwrap()
+                .unwrap()
+                .0
+                .machine_tags,
+            vec!["science"]
+        );
+
+        remove_tag(&lib, &conn, &id, "SCIENCE").unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v2", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        complete_text_tagging(&lib, &conn, &task, &["science".into()]).unwrap();
+        assert!(crate::list::get_reading(&conn, &id)
+            .unwrap()
+            .unwrap()
+            .0
+            .tags
+            .is_empty());
+        assert_eq!(
+            parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap())
+                .unwrap()
+                .metadata
+                .excluded_machine_tags,
+            vec!["science"]
+        );
+
+        add_tag(&lib, &conn, &id, "Science").unwrap();
+        let row = crate::list::get_reading(&conn, &id).unwrap().unwrap().0;
+        assert_eq!(row.tags, vec!["Science"]);
+        assert!(row.machine_tags.is_empty());
+        let metadata = parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap())
+            .unwrap()
+            .metadata;
+        assert!(metadata.excluded_machine_tags.is_empty());
+    }
+
+    #[test]
+    fn changed_text_invalidates_inference_and_rejects_stale_completion() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        write_reading(
+            &lib,
+            meta(&id, "https://example.com"),
+            "Original subject".into(),
+        )
+        .unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let original = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        let metadata = parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap())
+            .unwrap()
+            .metadata;
+        write_reading(&lib, metadata, "Revised subject".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        assert!(!complete_text_tagging(&lib, &conn, &original, &["old".into()]).unwrap());
+        let revised = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        assert_ne!(original.source_fingerprint, revised.source_fingerprint);
+        complete_text_tagging(&lib, &conn, &revised, &["new".into()]).unwrap();
+        assert_eq!(
+            crate::list::get_reading(&conn, &id)
+                .unwrap()
+                .unwrap()
+                .0
+                .tags,
+            vec!["new"]
+        );
+
+        let metadata = parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap())
+            .unwrap()
+            .metadata;
+        write_reading(&lib, metadata, "Another subject".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        assert!(crate::list::get_reading(&conn, &id)
+            .unwrap()
+            .unwrap()
+            .0
+            .tags
+            .is_empty());
+    }
+
+    #[test]
+    fn text_task_is_bounded_and_samples_the_end() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        let body = format!("{} useful ending", "beginning ".repeat(1200));
+        write_reading(&lib, meta(&id, "https://example.com"), body).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        assert!(task.text.chars().count() <= MAX_TEXT_TAGGING_CHARS);
+        assert!(task.text.contains("beginning"));
+        assert!(task.text.contains("useful ending"));
+    }
+
+    #[test]
+    fn text_tagging_rejects_swapped_article_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        write_reading(&lib, meta(&id, "https://example.com"), "Original".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        let article = lib.article_path(&id);
+        let outside = dir.path().join("outside.md");
+        let original = fs::read_to_string(&article).unwrap();
+        fs::write(&outside, &original).unwrap();
+        fs::remove_file(&article).unwrap();
+        symlink(&outside, &article).unwrap();
+
+        assert!(pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .is_empty());
+        assert!(!complete_text_tagging(&lib, &conn, &task, &["private".into()]).unwrap());
+        assert_eq!(fs::read_to_string(&outside).unwrap(), original);
+    }
+
+    #[test]
+    fn text_tagging_rejects_mismatched_frontmatter_identity() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        write_reading(&lib, meta(&id, "https://example.com"), "Original".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .pop()
+            .unwrap();
+        let article = lib.article_path(&id);
+        let mut reading = parse_reading(&fs::read_to_string(&article).unwrap()).unwrap();
+        reading.metadata.id = new_id();
+        let foreign = crate::render_reading(&reading).unwrap();
+        fs::write(&article, &foreign).unwrap();
+
+        assert!(pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .is_empty());
+        assert!(!complete_text_tagging(&lib, &conn, &task, &["wrong".into()]).unwrap());
+        assert_eq!(fs::read_to_string(&article).unwrap(), foreign);
     }
 }

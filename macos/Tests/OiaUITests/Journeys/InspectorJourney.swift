@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import CryptoKit
 import XCTest
 
 final class InspectorJourney: UITestCase {
@@ -49,7 +50,7 @@ final class InspectorJourney: UITestCase {
         list.open(cream)
         XCTAssertTrue(app.byId(A11y.Inspector.details).waitExists())
         XCTAssertTrue(app.staticTexts["Details"].exists)
-        XCTAssertTrue(app.staticTexts["Your tags"].exists)
+        XCTAssertTrue(app.staticTexts["Tags"].exists)
         XCTAssertFalse(app.staticTexts.matching(
             NSPredicate(format: "label CONTAINS 'cuttings-asset:'")
         ).firstMatch.exists)
@@ -62,14 +63,17 @@ final class InspectorJourney: UITestCase {
             NSPredicate(format: "identifier BEGINSWITH %@", A11y.Inspector.colorPrefix)
         ).firstMatch
         XCTAssertTrue(swatch.waitForExistence(timeout: 45), "Cached analysis publishes clickable colours")
-        let tags = app.staticTexts["Your tags"]
+        let tags = app.staticTexts["Tags"]
         let labels = app.staticTexts["In this image"]
         let colours = app.staticTexts["Colours"]
         let details = app.staticTexts["Details"]
         let delete = app.byId(A11y.Toolbar.delete)
-        XCTAssertTrue(labels.waitExists())
-        XCTAssertLessThan(tags.frame.minY, labels.frame.minY)
-        XCTAssertLessThan(labels.frame.minY, colours.frame.minY)
+        XCTAssertFalse(labels.exists, "Machine and user tags share one section")
+        XCTAssertTrue(app.byId(A11y.Inspector.attribute("cabinet")).waitExists())
+        XCTAssertEqual(app.byId(A11y.Inspector.attribute("cabinet")).label, "cabinet, machine tag")
+        XCTAssertEqual(app.byId(A11y.Inspector.attribute("Interiors")).label, "Interiors, your tag")
+        XCTAssertFalse(app.byId(A11y.Inspector.attribute("interiors")).exists, "Matching machine tag merges into the user tag")
+        XCTAssertLessThan(tags.frame.minY, colours.frame.minY)
         XCTAssertLessThan(colours.frame.minY, details.frame.minY)
         XCTAssertLessThan(details.frame.minY, delete.frame.minY)
         capture("Sidebar inspector · Details")
@@ -81,6 +85,31 @@ final class InspectorJourney: UITestCase {
         XCTAssertTrue(list.waitForRowCount(1), "Colour search excludes the blue image")
         XCTAssertEqual(list.orderedRowIds, [cream])
         XCTAssertFalse(app.byId(A11y.Inspector.panel).exists, "Searching returns to the board")
+    }
+
+    func testMachineTagsCanBeRemovedAndStayRemoved() throws {
+        let cream = try seedImages()
+        relaunchApp { $0.pinnedDefaults = ["showsReadingInspector": "1"] }
+        XCTAssertTrue(list.waitForRowCount(2))
+        list.open(cream)
+        XCTAssertTrue(app.byId(A11y.Inspector.attribute("cabinet")).waitExists())
+        app.byId(A11y.Inspector.editTags).clickWhenReady()
+        app.byId(A11y.TagPicker.row("cabinet")).clickWhenReady()
+        app.byId(A11y.TagPicker.done).clickWhenReady()
+        XCTAssertTrue(app.byId(A11y.Inspector.attribute("cabinet")).waitDisappears())
+        XCTAssertTrue(wait {
+            library.articleContents(id: cream)?.contains("excluded_machine_tags:") == true
+        }, "Removal is persisted before reopening the library")
+        let saved = try XCTUnwrap(library.articleContents(id: cream))
+        XCTAssertTrue(saved.contains("excluded_machine_tags:"))
+        XCTAssertTrue(saved.contains("cabinet"))
+
+        relaunchApp()
+        XCTAssertTrue(list.waitForRowCount(2))
+        list.open(cream)
+        XCTAssertTrue(app.byId(A11y.Inspector.editTags).waitExists())
+        XCTAssertFalse(app.byId(A11y.Inspector.attribute("cabinet")).exists)
+        XCTAssertTrue(app.byId(A11y.Inspector.attribute("Interiors")).exists)
     }
 
     private func seedImages() throws -> String {
@@ -104,6 +133,7 @@ final class InspectorJourney: UITestCase {
 
     private func writeImage(id: String, title: String, color: NSColor) throws {
         let data = try InspectorAnalysisFixture.png(color: color)
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         let fixture = ArticleFixture(
             id: id, url: "https://example.com/\(id)", title: title, savedAt: Date(), tags: ["Interiors"]
         )
@@ -114,6 +144,11 @@ final class InspectorJourney: UITestCase {
             kind: image
             media_url: cuttings-asset:assets/image.png
             preview_asset: assets/image.png
+            machine_tags:
+              - source: image
+                source_fingerprint: \(hash)
+                analyzer_version: inspector-ui-fixture
+                tags: [cabinet, interiors]
             """
         )
         try library.writeRaw(id: id, contents: markdown)

@@ -163,6 +163,8 @@ pub struct ReadingRow {
     pub word_count: Option<u32>,
     pub lang: Option<String>,
     pub tags: Vec<String>,
+    /// Active inferred tags only; names also appear in `tags`.
+    pub machine_tags: Vec<String>,
 }
 
 /// The SQL predicate that selects a smart view. Single source of truth shared
@@ -332,7 +334,7 @@ fn phrase_exists_in_count_scope(
              WHERE readings_fts MATCH ?1
                AND {view_clause}
                AND (?2 IS NULL OR EXISTS (
-                    SELECT 1 FROM json_each(r.tags_json) WHERE value = ?2
+                    SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?2
                ))
                AND (?3 IS NULL OR r.rating = ?3)
                AND (?4 IS NULL OR r.kind = ?4)
@@ -355,8 +357,8 @@ fn phrase_exists_in_count_scope(
                AND NOT EXISTS (
                     SELECT 1 FROM json_each(?7) requested_tag
                     WHERE NOT EXISTS (
-                        SELECT 1 FROM json_each(r.tags_json) reading_tag
-                        WHERE reading_tag.value = requested_tag.value
+                        SELECT 1 FROM json_each(r.tag_entries_json) reading_tag
+                        WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                     )
                )
          )"
@@ -365,12 +367,18 @@ fn phrase_exists_in_count_scope(
         &sql,
         params![
             phrase,
-            scope.tag.as_deref(),
+            scope.tag.as_deref().map(crate::tags::tag_key),
             scope.rating.map(i64::from),
             scope.kind.map(ReadingKind::as_str),
             scope.predominant_color.map(PredominantColor::as_str),
             crate::search::scoped_visual_query(&scope.visual_terms).unwrap_or_default(),
-            serde_json::to_string(&scope.tag_terms)?,
+            serde_json::to_string(
+                &scope
+                    .tag_terms
+                    .iter()
+                    .map(|tag| crate::tags::tag_key(tag))
+                    .collect::<Vec<_>>()
+            )?,
             serde_json::to_string(&scope.visual_semantic_candidate_ids)?
         ],
         |row| row.get(0),
@@ -386,15 +394,21 @@ fn append_structured_count_clauses(
     vals: &mut Vec<Value>,
 ) -> bool {
     if !scope.tag_terms.is_empty() {
-        let tags_json = serde_json::to_string(&scope.tag_terms)
-            .expect("serializing a string vector cannot fail");
+        let tags_json = serde_json::to_string(
+            &scope
+                .tag_terms
+                .iter()
+                .map(|tag| crate::tags::tag_key(tag))
+                .collect::<Vec<_>>(),
+        )
+        .expect("serializing a string vector cannot fail");
         vals.push(Value::Text(tags_json));
         clauses.push(format!(
             "NOT EXISTS (
                  SELECT 1 FROM json_each(?{}) requested_tag
                  WHERE NOT EXISTS (
-                     SELECT 1 FROM json_each(readings.tags_json) reading_tag
-                     WHERE reading_tag.value = requested_tag.value
+                     SELECT 1 FROM json_each(readings.tag_entries_json) reading_tag
+                     WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                  )
              )",
             vals.len()
@@ -460,9 +474,9 @@ pub(crate) fn count_where(
 
     if axis != Facet::Tag {
         if let Some(tag) = scope.tag.as_deref() {
-            vals.push(Value::Text(tag.to_string()));
+            vals.push(Value::Text(crate::tags::tag_key(tag)));
             clauses.push(format!(
-                "EXISTS (SELECT 1 FROM json_each(readings.tags_json) WHERE value = ?{})",
+                "EXISTS (SELECT 1 FROM json_each(readings.tag_entries_json) WHERE json_extract(value, '$.key') = ?{})",
                 vals.len()
             ));
         }
@@ -578,9 +592,9 @@ pub(crate) fn pinned_count_filter(
         }
         Facet::Tag => {
             if let Some(tag) = scope.tag.as_deref() {
-                vals.push(Value::Text(tag.to_string()));
+                vals.push(Value::Text(crate::tags::tag_key(tag)));
                 conds.push(format!(
-                    "EXISTS (SELECT 1 FROM json_each(readings.tags_json) WHERE value = ?{})",
+                    "EXISTS (SELECT 1 FROM json_each(readings.tag_entries_json) WHERE json_extract(value, '$.key') = ?{})",
                     vals.len()
                 ));
             }
@@ -740,10 +754,10 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description
+                source_profile_json, card_description, machine_tags_json
          FROM readings
          WHERE {view_clause}
-           AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tags_json) WHERE value = ?3))
+           AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
            AND (?4 = '' OR saved_at >= ?4)
            AND (?5 = '' OR saved_at <= ?5)
            AND (?6 = 0 OR rating = ?6)
@@ -767,8 +781,8 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
            AND NOT EXISTS (
                 SELECT 1 FROM json_each(?10) requested_tag
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM json_each(readings.tags_json) reading_tag
-                    WHERE reading_tag.value = requested_tag.value
+                    SELECT 1 FROM json_each(readings.tag_entries_json) reading_tag
+                    WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                 )
            )
            AND (?12 = '' OR readings.id IN (SELECT value FROM json_each(?12)))
@@ -790,7 +804,11 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
 
     let mut stmt = conn.prepare(&sql)?;
 
-    let tag_val = opts.tag.as_deref().unwrap_or("");
+    let tag_val = opts
+        .tag
+        .as_deref()
+        .map(crate::tags::tag_key)
+        .unwrap_or_default();
     let since_val = opts.since.as_deref().unwrap_or("");
     let until_val = opts.until.as_deref().unwrap_or("");
     let rating_val = opts.rating.unwrap_or(0) as i64;
@@ -800,7 +818,13 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
         .map(PredominantColor::as_str)
         .unwrap_or("");
 
-    let tag_terms_json = serde_json::to_string(&opts.tag_terms)?;
+    let tag_terms_json = serde_json::to_string(
+        &opts
+            .tag_terms
+            .iter()
+            .map(|tag| crate::tags::tag_key(tag))
+            .collect::<Vec<_>>(),
+    )?;
     let rows = stmt.query_map(
         params![
             opts.limit as i64,
@@ -841,7 +865,7 @@ fn phrase_exists_in_list_scope(
              WHERE readings_fts MATCH ?1
                AND {view_clause}
                AND (?2 = '' OR EXISTS (
-                    SELECT 1 FROM json_each(r.tags_json) WHERE value = ?2
+                    SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?2
                ))
                AND (?3 = '' OR r.saved_at >= ?3)
                AND (?4 = '' OR r.saved_at <= ?4)
@@ -866,8 +890,8 @@ fn phrase_exists_in_list_scope(
                AND NOT EXISTS (
                     SELECT 1 FROM json_each(?9) requested_tag
                     WHERE NOT EXISTS (
-                        SELECT 1 FROM json_each(r.tags_json) reading_tag
-                        WHERE reading_tag.value = requested_tag.value
+                        SELECT 1 FROM json_each(r.tag_entries_json) reading_tag
+                        WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                     )
                )
                AND (?11 = '' OR r.id IN (SELECT value FROM json_each(?11)))
@@ -889,7 +913,10 @@ fn phrase_exists_in_list_scope(
         &sql,
         params![
             phrase,
-            opts.tag.as_deref().unwrap_or(""),
+            opts.tag
+                .as_deref()
+                .map(crate::tags::tag_key)
+                .unwrap_or_default(),
             opts.since.as_deref().unwrap_or(""),
             opts.until.as_deref().unwrap_or(""),
             opts.rating.unwrap_or(0) as i64,
@@ -898,7 +925,13 @@ fn phrase_exists_in_list_scope(
                 .map(PredominantColor::as_str)
                 .unwrap_or(""),
             crate::search::scoped_visual_query(&opts.visual_terms).unwrap_or_default(),
-            serde_json::to_string(&opts.tag_terms)?,
+            serde_json::to_string(
+                &opts
+                    .tag_terms
+                    .iter()
+                    .map(|tag| crate::tags::tag_key(tag))
+                    .collect::<Vec<_>>()
+            )?,
             serde_json::to_string(&opts.visual_semantic_candidate_ids)?,
             color_ids_json,
             serde_json::to_string(&opts.item_type_terms)?,
@@ -922,14 +955,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description,
+                source_profile_json, card_description, machine_tags_json,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(27)?;
+        let body: String = row.get(28)?;
         Ok((row_data, body))
     })?;
 
@@ -995,10 +1028,10 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json, r.card_description
+                r.source_profile_json, r.card_description, r.machine_tags_json
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
-           AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tags_json) WHERE value = ?3))
+           AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
            AND (?4 = '' OR r.saved_at >= ?4)
            AND (?5 = '' OR r.saved_at <= ?5)
            AND (?6 = 0 OR r.rating = ?6)
@@ -1022,8 +1055,8 @@ fn list_readings_search(
            AND NOT EXISTS (
                 SELECT 1 FROM json_each(?12) requested_tag
                 WHERE NOT EXISTS (
-                    SELECT 1 FROM json_each(r.tags_json) reading_tag
-                    WHERE reading_tag.value = requested_tag.value
+                    SELECT 1 FROM json_each(r.tag_entries_json) reading_tag
+                    WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                 )
            )
            AND (?14 = '' OR r.id IN (SELECT value FROM json_each(?14)))
@@ -1044,7 +1077,11 @@ fn list_readings_search(
     );
 
     let mut stmt = conn.prepare(&sql)?;
-    let tag_val = opts.tag.as_deref().unwrap_or("");
+    let tag_val = opts
+        .tag
+        .as_deref()
+        .map(crate::tags::tag_key)
+        .unwrap_or_default();
     let since_val = opts.since.as_deref().unwrap_or("");
     let until_val = opts.until.as_deref().unwrap_or("");
     let rating_val = opts.rating.unwrap_or(0) as i64;
@@ -1067,7 +1104,13 @@ fn list_readings_search(
             match_query.unwrap_or("\"__oia_no_text_match__\""),
             semantic_json,
             crate::search::scoped_visual_query(&opts.visual_terms).unwrap_or_default(),
-            serde_json::to_string(&opts.tag_terms)?,
+            serde_json::to_string(
+                &opts
+                    .tag_terms
+                    .iter()
+                    .map(|tag| crate::tags::tag_key(tag))
+                    .collect::<Vec<_>>()
+            )?,
             serde_json::to_string(&opts.visual_semantic_candidate_ids)?,
             color_ids_json,
             serde_json::to_string(&opts.item_type_terms)?,
@@ -1081,6 +1124,8 @@ fn list_readings_search(
 fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
     let tags_json: String = row.get(13)?;
     let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+    let machine_tags_json: String = row.get(27)?;
+    let machine_tags: Vec<String> = serde_json::from_str(&machine_tags_json).unwrap_or_default();
     let palette_json: Option<String> = row.get(24)?;
     let kind = parse_kind(row.get::<_, String>(16)?.as_str())?;
     let lightweight = row.get::<_, i32>(21)? != 0;
@@ -1118,6 +1163,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         word_count: row.get(11)?,
         lang: row.get(12)?,
         tags,
+        machine_tags,
         rating: row.get::<_, i32>(14)? as u8,
         read_at: row.get(15)?,
     })
@@ -1191,6 +1237,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,

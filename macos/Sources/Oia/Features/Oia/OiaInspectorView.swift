@@ -9,7 +9,8 @@ struct OiaInspectorView: View {
     let row: ReadingRow
     let isVisible: Bool
     var onEditTags: () -> Void
-    var onSearch: (String) -> Void
+    var onSearch: (BoardSearchToken) -> Void
+    var onToggleTag: (String, Bool) -> Void
 
     @State private var inspector: ReadingInspector?
     @State private var loadedID: String?
@@ -72,21 +73,15 @@ struct OiaInspectorView: View {
     private var visualAnalysis: some View {
         VStack(alignment: .leading, spacing: 22) {
             if let data = currentInspector {
-                if !data.labels.isEmpty { labels(data.labels) }
                 if !row.isFullArticle, !data.colors.isEmpty { colors(data.colors) }
-                if !data.analysisAvailable, row.previewAsset != nil {
-                    status("Image attributes aren’t available yet.")
-                } else if data.analysisAvailable, data.labels.isEmpty, data.colors.isEmpty {
-                    status("No image attributes found.")
-                }
             } else if failed {
                 VStack(alignment: .leading, spacing: 8) {
-                    status("Image attributes couldn’t be loaded.")
+                    status("Image colours couldn’t be loaded.")
                     InspectorPill("Try again") { retry += 1 }
                 }
             } else {
                 ProgressView().controlSize(.small)
-                    .accessibilityLabel("Loading image attributes")
+                    .accessibilityLabel("Loading image colours")
             }
         }
     }
@@ -94,19 +89,34 @@ struct OiaInspectorView: View {
     private var tags: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                sectionTitle("Your tags")
+                sectionTitle("Tags")
+                Button { showsAnalysisInfo.toggle() } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("About tags")
+                .popover(isPresented: $showsAnalysisInfo) {
+                    Text("""
+                    Blue tags are yours. Purple tags are generated locally from the saved content.
+                    Edit or right-click a tag to remove it. Removed machine tags stay removed.
+                    """)
+                    .font(.callout)
+                    .padding(16)
+                    .frame(width: 280)
+                }
                 Spacer()
                 InspectorPill(row.tags.isEmpty ? "Add" : "Edit", symbol: "plus", action: onEditTags)
                     .accessibilityLabel("Edit tags")
                     .accessibilityIdentifier(A11y.Inspector.editTags)
             }
             if row.tags.isEmpty {
-                status("Add tags to make this yours.")
+                status("Add your own tags.")
             } else {
                 FlowLayout(spacing: 6) {
                     ForEach(row.tags, id: \.self) { tag in
-                        InspectorPill(tag) { onSearch(tag) }
-                            .help("Search for \(tag)")
+                        tagPill(tag)
                     }
                 }
             }
@@ -118,41 +128,29 @@ struct OiaInspectorView: View {
             sectionTitle("Colours")
             HStack(spacing: 0) {
                 ForEach(colors, id: \.hex) { color in
-                    InspectorSwatch(color: color) { onSearch(color.searchQuery) }
+                    InspectorSwatch(color: color) { onSearch(BoardSearchToken(kind: .color, value: color.searchQuery)) }
                 }
             }
             .padding(.leading, -3)
         }
     }
 
-    private func labels(_ labels: [String]) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 5) {
-                sectionTitle("In this image")
-                Button { showsAnalysisInfo.toggle() } label: {
-                    Image(systemName: "info.circle")
-                        .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("About image attributes")
-                .help("About image attributes")
-                .popover(isPresented: $showsAnalysisInfo) {
-                    Text("""
-                    Recognised on this Mac. Choose an attribute to search your library.
-                    These suggestions can be imperfect and don’t change your tags.
-                    """)
-                    .font(.callout)
-                    .padding(16)
-                    .frame(width: 270)
+    private func tagPill(_ tag: String) -> some View {
+        let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, tag) }
+        return InspectorPill(tag, symbol: isMachine ? "sparkles" : nil, tint: isMachine ? .purple : .blue) {
+            onSearch(BoardSearchToken(kind: .tag, value: tag))
+        }
+        .help("\(isMachine ? "Machine" : "Your") tag · Search for \(tag)")
+        .accessibilityLabel("\(tag), \(isMachine ? "machine tag" : "your tag")")
+        .accessibilityIdentifier(A11y.Inspector.attribute(tag))
+        .contextMenu {
+            if isMachine {
+                Button("Make this my tag", systemImage: "person") {
+                    onToggleTag(tag, true)
                 }
             }
-            FlowLayout(spacing: 6) {
-                ForEach(labels, id: \.self) { label in
-                    InspectorPill(label.capitalized) { onSearch(label) }
-                        .help("Search for \(label)")
-                        .accessibilityIdentifier(A11y.Inspector.attribute(label))
-                }
+            Button("Remove tag", systemImage: "xmark", role: .destructive) {
+                onToggleTag(tag, false)
             }
         }
     }

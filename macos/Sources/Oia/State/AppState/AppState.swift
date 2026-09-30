@@ -210,11 +210,13 @@ final class AppState {
     @ObservationIgnored var inboxRetryAttempt = 0
     var watcher: FolderWatcher?
     let visualSearchCoordinator: VisualSearchCoordinator?
+    let textTaggingCoordinator: TextTaggingCoordinator?
 
     private var editingMonitor: TextEditingMonitor?
 
     init() {
         visualSearchCoordinator = Self.makeVisualSearchCoordinator()
+        textTaggingCoordinator = TestHooks.isIsolatedRun ? nil : TextTaggingCoordinator(tagger: AppleSubjectTagger())
 
         let defaults = AppDefaults.store
 

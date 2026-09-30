@@ -8,7 +8,7 @@ extension OiaLibraryView {
             text: appState.searchQuery,
             tagCandidates: appState.filters.searchTagCandidates,
             selectedTokens: appState.searchTokens,
-            includeVisualToken: appState.hasAvailableVisualSearchSuggestion
+            includeVisualToken: false
         )
     }
 
@@ -35,13 +35,6 @@ extension OiaLibraryView {
                     Text(token.displayValue)
                         .searchCompletion(token)
                 }
-            }
-        }
-
-        if let token = suggestions.visualToken {
-            Section("In this image") {
-                Text(token.displayValue)
-                    .searchCompletion(token)
             }
         }
     }

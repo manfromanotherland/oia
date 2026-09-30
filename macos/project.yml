@@ -162,6 +162,9 @@ targets:
       - path: Sources/Oia/Platform/Spotlight
       - path: Sources/Oia/Platform/VisualAnalysis
       - path: Sources/Oia/Bridge/VisualSearchBridging.swift
+      - path: Sources/Oia/Bridge/TextTaggingBridging.swift
+      - path: Sources/Oia/Platform/ContentTagging
+      - path: Sources/Oia/State/TextTaggingCoordinator.swift
       - path: Sources/Oia/State/VisualSearchCoordinator.swift
       - path: Sources/Oia/State/InteractionIdleGate.swift
       - path: GeneratedBindings

@@ -67,6 +67,56 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 10 {
         migrate_v10(conn)?;
     }
+    if version < 11 {
+        migrate_v11(conn)?;
+    }
+    Ok(())
+}
+
+/// v11: keep display names and Unicode case-folded keys side by side so exact
+/// tag predicates and facets can merge user and inferred tags consistently.
+fn migrate_v11(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "BEGIN;
+        ALTER TABLE readings ADD COLUMN tag_entries_json TEXT NOT NULL DEFAULT '[]';
+        ALTER TABLE readings ADD COLUMN machine_tags_json TEXT NOT NULL DEFAULT '[]';",
+    )?;
+    let backfill = (|| -> Result<()> {
+        let mut stmt = conn.prepare("SELECT id, tags_json FROM readings")?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        drop(stmt);
+        for (id, tags_json) in rows {
+            let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
+            let mut seen = std::collections::HashSet::new();
+            let entries: Vec<crate::tags::TagEntry> = tags
+                .into_iter()
+                .filter_map(|name| {
+                    let key = crate::tags::tag_key(&name);
+                    (!key.is_empty() && seen.insert(key.clone())).then_some(crate::tags::TagEntry {
+                        name,
+                        key,
+                        origin: "user".into(),
+                    })
+                })
+                .collect();
+            conn.execute(
+                "UPDATE readings SET tag_entries_json=?2 WHERE id=?1",
+                rusqlite::params![id, serde_json::to_string(&entries)?],
+            )?;
+        }
+        Ok(())
+    })();
+    match backfill {
+        Ok(()) => conn.execute_batch("PRAGMA user_version = 11; COMMIT;")?,
+        Err(error) => {
+            conn.execute_batch("ROLLBACK;")?;
+            return Err(error);
+        }
+    }
     Ok(())
 }
 
@@ -485,7 +535,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
 
         // readings table exists
         let count: i64 = conn
@@ -600,7 +650,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -765,7 +815,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
         assert_eq!(projected, None);
     }
 
@@ -873,7 +923,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -915,7 +965,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 10);
+        assert_eq!(version, 11);
 
         let values: (i64, i64, String) = conn
             .query_row(

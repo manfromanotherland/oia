@@ -38,7 +38,7 @@ design inference, not an Apple API guarantee.
 
 Machine Tags should appear alongside user Tags with a distinct colour. Write both to the local
 Markdown reading so the files remain authoritative; retain provenance so a user Tag wins a
-case-insensitive duplicate. Removing a machine Tag needs a durable suppression record in the
+case-insensitive duplicate. Removing any effective Tag needs a durable machine-tag suppression record in the
 Markdown reading, or the next analysis pass will restore it. The exact frontmatter representation
 is a library-format design decision. Keep raw Vision labels/confidences, OCR text, colour data,
 model diagnostics, and Spotlight donations in the disposable per-device index. This boundary is

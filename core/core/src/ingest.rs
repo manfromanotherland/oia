@@ -596,6 +596,8 @@ fn save_capture_under_lock_with_state(
         favorite: imported_state.favorite,
         rating: 0,
         tags: imported_state.tags,
+        machine_tags: vec![],
+        excluded_machine_tags: vec![],
         excerpt: input.excerpt,
         word_count: input.word_count,
         lang: input.lang,
@@ -610,6 +612,8 @@ fn save_capture_under_lock_with_state(
         metadata.favorite = previous.favorite;
         metadata.rating = previous.rating;
         metadata.tags = previous.tags;
+        metadata.machine_tags = previous.machine_tags;
+        metadata.excluded_machine_tags = previous.excluded_machine_tags;
         if metadata.preview_asset.is_none() {
             metadata.preview_asset = previous.preview_asset;
         }
@@ -1410,6 +1414,8 @@ fn save_staged_video(
         favorite: imported_state.favorite,
         rating: 0,
         tags: imported_state.tags,
+        machine_tags: vec![],
+        excluded_machine_tags: vec![],
         excerpt,
         word_count,
         lang,
@@ -2651,6 +2657,8 @@ mod tests {
             favorite: false,
             rating: 0,
             tags: vec![],
+            machine_tags: vec![],
+            excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,
             lang: None,

@@ -56,9 +56,11 @@ These are load-bearing. Most architectural questions resolve by appealing to one
   upgrades the same URL-derived reading.
 - **Visual card board** — native app. Browse articles, images, videos, and quotes together in one
   full-width masonry layout with kind and tag filters.
-- **Search** — native app. Full-text search over readings (title, content, tags) via SQLite
-  FTS5. Word-occurrence lookup and word meanings are noted as future ideas, not v1 scope.
-- **Tags** — native app. Organize readings with labels stored in each file's frontmatter. (The
+- **Search** — native app. Full-text search over readings (title, content, Tags) via SQLite
+  FTS5, with local visual search facts. Word-occurrence lookup and word meanings are future ideas.
+- **Tags** — native app. User and automatically inferred subject Tags appear together with
+  blue user Tags and purple machine Tags. Both are stored in each reading's frontmatter; user Tags
+  win case-insensitive duplicates. A removed Tag stays excluded from later machine analysis. (The
   macOS mockup's "Lists" section is implemented as **Tags** — manual Lists are not planned.)
 - **Curation** — native app. Organize cards with tags or permanently delete cards that no longer
   belong.
@@ -88,9 +90,9 @@ These are load-bearing. Most architectural questions resolve by appealing to one
   + media identity; quotes hash origin + normalized selected Markdown. `canonical_url` is origin
   metadata, not a substitute identity key.
 - Start native clients with macOS / Swift (SwiftUI) via UniFFI.
-- **Search (v1) is full-text over readings** (title, content, tags) using SQLite FTS5. Design
-  the schema so word-occurrence lookup and a vector column can be added later without migration
-  pain — but they are not v1 scope.
+- **Search uses FTS5 over readings** (title, content, effective Tags) with derived visual terms
+  in the disposable local index. Keep the schema open to later word-occurrence lookup and vector
+  search without treating either as current scope.
 - **The extension saves via a native messaging host** (thin wrapper over `core`), not
   the Downloads API.
 - **Images are captured by the extension and written into the library** in each reading's own
@@ -117,6 +119,12 @@ These are load-bearing. Most architectural questions resolve by appealing to one
   archive. The main board includes every saved item. Legacy `read_at`, `archived`, `favorite`, and
   `rating` fields remain readable as format-v1 compatibility data but are not exposed by the
   current macOS product.
+- **Machine Tags are file-backed curation.** The macOS app automatically analyses saved or newly
+  scanned readings while it runs: Vision supplies image subjects on the macOS 15 baseline; the
+  on-device Foundation Models adapter supplies text topics on macOS 26+ when available. Rust
+  persists `machine_tags` per source and `excluded_machine_tags` in Markdown, revalidates the
+  source fingerprint before writing, and then refreshes the index. Raw visual terms, confidences,
+  colours, and Spotlight data remain disposable per-device search facts.
 - **UI preferences** (theme, reader font/size/width/line height) are per-device app
   preferences — not stored in the library and not synced.
 - **URL-only saves share one Rust facade.** Strictly recognized public sources may use bounded,

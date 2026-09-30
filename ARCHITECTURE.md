@@ -47,6 +47,14 @@ and tags — so browser saves, in-app saves, and files delivered by sync reconci
 index path. Captured social posts keep their complete local article files and assets but appear under
 Links on the macOS board and in Link item-type search. Longform X Articles remain under Articles.
 
+After a save or scan finds a new or changed reading, the macOS app analyses its saved content while
+the app is running. Vision classifies local image assets on the macOS 15 baseline; on macOS 26 and
+later, the on-device Foundation Models content-tagging adapter can infer text topics when its model
+is available. The Swift adapters return platform observations; the Rust core owns Tag selection,
+case-insensitive precedence, durable exclusions, file writes, and index reconciliation. Analysis
+completion rechecks the source fingerprint before writing, so a result for an older file cannot
+replace Tags for newer content. Machine Tags are added automatically, without a review step.
+
 The iOS **Óia!** Shortcut publishes sealed captures into `inbox/`
 inside the user's synced library. The Mac requests any missing iCloud bytes and
 passes ready files to the shared Rust Inbox importer. Rust validates private
@@ -100,8 +108,9 @@ every affected component.
 
 ### Engine (`core`, Rust)
 - **Responsibility:** owns the library format and all logic — validate and write extension or
-  URL-only saves, scan and index the library, full-text search, tags, highlights, and reconcile
-  changes that arrive via sync. The provider registry currently recognizes public X post URLs;
+  URL-only saves, scan and index the library, full-text search, user and machine Tags, highlights,
+  and reconcile changes that arrive via sync. The provider registry currently recognizes public X
+  post URLs;
   its seam is provider-neutral so additional social and video sources can be added independently.
 - **Shape:** a core library crate reused by the other native pieces (the macOS app and the native
   messaging host both link it). Not a long-running daemon.
@@ -112,6 +121,14 @@ every affected component.
   the article file visible. Recognized-source failure is reported rather than silently writing a
   misleading lightweight link.
 - **Index:** local SQLite database with FTS5. Rebuildable; per-device; never synced.
+- **Tag persistence:** `tags` contains user labels; `machine_tags` contains image/text source
+  entries with `source`, `source_fingerprint`, `analyzer_version`, and inferred `tags`;
+  `excluded_machine_tags` contains case-folded keys the user removed. The effective Tag set is
+  a case-insensitive union with user spelling and presentation ownership taking precedence.
+  Removing an effective Tag removes the user label, if present, and records its exclusion so an
+  existing or future machine result cannot restore it. The core revalidates the analysed source,
+  writes frontmatter first, re-reads it, then updates the index. The index caches effective Tags
+  and machine-only names for presentation.
 
 ### My Mind migration adapter (`core/mymind-import`)
 - **Responsibility:** map a My Mind `cards.csv` export and its local media into the shared core save
@@ -138,12 +155,18 @@ every affected component.
   script-execution surface. The UI is specified in [DESIGN.md](./DESIGN.md).
 - Card detail is a full-window native Gallery destination: the existing Markdown reader handles
   articles and quote bodies; image/video cards use local preview assets and source/media actions.
-  A persistent filmstrip navigates the current board order, while an optional trailing Inspector
+  Gallery navigation follows the current board order, while an optional leading Inspector
   exposes the origin page when one exists and identifies source-less cards as saved locally.
   Lightweight links bypass Gallery and open their origin directly in the system browser. Captured
   social posts appear under Links but retain their native detail view and local content.
 - Owns the local index and watches the library folder for changes (including files arriving via
   sync), reindexing incrementally.
+- Owns narrow macOS adapters for Vision image classification and, when available, Foundation
+  Models text topic extraction. Save completion and library reconciliation enqueue analysis for
+  missing or stale sources while the app is running. Image classification completion and cache
+  hydration write the image machine-Tag source; text inference checks the content fingerprint
+  before updating the text machine-Tag source. The UI presents the effective Tags together with
+  distinct user and machine colours.
 
 ### Why this shape
 - One writer to the index (the app), so no SQLite contention. The host only writes files; the app
@@ -203,12 +226,22 @@ The card metadata is additive and backwards compatible:
   app or browser toolbar. A later full browser capture
   replaces that placeholder at the same article id and clears the marker while preserving user
   state.
+- `tags`: user-authored or imported labels.
+- `machine_tags`: per-source (`image` or `text`) subject labels in records with `source`,
+  `source_fingerprint`, `analyzer_version`, and `tags`; each source is replaced only after its
+  current input is verified.
+- `excluded_machine_tags`: case-folded Tag keys removed by the user, kept in the article file so
+  later analysis respects the removal. Adding a matching user Tag gives it ownership in the
+  effective Tag set.
 
-- **Frontmatter is the source of truth** for metadata (title, tags, and legacy format-v1 state
-  fields, including `favorite`). The full, versioned schema is [`docs/library-format.md`](./docs/library-format.md); the
-  native-messaging contract is [`docs/native-messaging.md`](./docs/native-messaging.md).
+- **Frontmatter is the source of truth** for metadata (title, user and machine Tags, Tag
+  exclusions, and legacy format-v1 state fields, including `favorite`). The full, versioned
+  schema is [`docs/library-format.md`](./docs/library-format.md); the native-messaging contract is
+  [`docs/native-messaging.md`](./docs/native-messaging.md).
 - **The index DB is a disposable cache** — derived from the files, rebuildable by re-scanning, and
   stored **outside** the library (per-device, never synced).
+- Raw Vision labels/confidences, OCR text, colour data, and Spotlight donations are disposable
+  per-device search facts. The core writes qualifying subject labels as machine Tags in frontmatter.
 - **Mutations are file-first, index-second, and atomic.** Every metadata setter writes the `.md`
   frontmatter first, then syncs the derived index row from the re-read file. A folder watcher
   reconciles the index *from* the files, so writing the DB first would be clobbered on the next

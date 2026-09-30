@@ -24,6 +24,7 @@ nom-exif = "=3.6.2"
 rusqlite = { version = "0.32", features = ["bundled", "trace"] }
 rustix = { version = "1", features = ["fs"] }
 thiserror = "1"
+unicode-casefold = "0.2"
 uniffi = "0.29"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 plist = "1"

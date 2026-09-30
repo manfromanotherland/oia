@@ -13,7 +13,7 @@ final class TagOrganizingJourney: UITestCase {
         try launchApp(articles: Fixtures.standardCorpus)
         let tag = Self.newTag
 
-        list.open(Fixtures.Ids.minimal)
+        openReading(Fixtures.Ids.minimal)
         XCTAssertEqual(reader.titleText, "Minimal")
         reader.openTagPicker()
         XCTAssertTrue(tagPicker.isVisible, "tag picker opened")
@@ -27,7 +27,7 @@ final class TagOrganizingJourney: UITestCase {
         )
 
         reader.close()
-        list.open(Fixtures.Ids.unicode)
+        openReading(Fixtures.Ids.unicode)
         reader.openTagPicker()
         XCTAssertTrue(tagPicker.row(tag).waitExists(), "created tag is available on another card")
         XCTAssertEqual(tagPicker.orderedRowTags.first, "unicode", "the card's applied tag stays first")
@@ -40,7 +40,7 @@ final class TagOrganizingJourney: UITestCase {
         )
 
         reader.close()
-        list.open(Fixtures.Ids.minimal)
+        openReading(Fixtures.Ids.minimal)
         reader.openTagPicker()
         tagPicker.toggle(tag)
         tagPicker.done()
@@ -51,7 +51,7 @@ final class TagOrganizingJourney: UITestCase {
         reader.close()
         XCTAssertTrue(list.row(Fixtures.Ids.minimal).waitExists(), "minimal remains on the board")
 
-        list.open(Fixtures.Ids.unicode)
+        openReading(Fixtures.Ids.unicode)
         reader.openTagPicker()
         tagPicker.toggle(tag)
         tagPicker.done()
@@ -68,5 +68,10 @@ final class TagOrganizingJourney: UITestCase {
         XCTAssertTrue(list.waitForRowCount(Fixtures.standardCorpus.count), "full board returns")
         XCTAssertTrue(list.row(Fixtures.Ids.minimal).waitExists(), "minimal is visible again")
         XCTAssertTrue(list.row(Fixtures.Ids.unicode).waitExists(), "unicode is visible again")
+    }
+
+    private func openReading(_ id: String) {
+        list.select(id)
+        keyboard.openWithReturn()
     }
 }
