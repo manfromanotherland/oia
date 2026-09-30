@@ -31,7 +31,11 @@ struct OiaApp: App {
         WindowGroup("Óia") {
             ContentView()
                 .environment(appState)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(
+                    minWidth: MainWindowSize.minimumSize.width,
+                    minHeight: MainWindowSize.minimumSize.height
+                )
+                .background { MainWindowSizeObserver().frame(width: 0, height: 0) }
                 .containerBackground(
                     appState.libraryURL == nil ? OiaTheme.shellSurface : OiaTheme.boardSurface,
                     for: .window
@@ -40,9 +44,10 @@ struct OiaApp: App {
                     NSApplication.shared.appearance = mode.nsAppearance
                 }
         }
-        // Open roomy the first time (no saved frame yet); afterwards SwiftUI
-        // restores the size the user left it at, so `.defaultSize` is ignored.
-        .defaultSize(width: 1100, height: 720)
+        .defaultSize(
+            width: (MainWindowSize.saved ?? MainWindowSize.defaultSize).width,
+            height: (MainWindowSize.saved ?? MainWindowSize.defaultSize).height
+        )
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified(showsTitle: false))
         .commands {
