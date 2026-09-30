@@ -152,9 +152,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   use a black surface with white text and symbol. The board and window shell use
   progressively darker shades of the same semantic background. Image and video cards retain their
   material-backed media treatment.
-- Cards have 8–12 pt continuous corners and a semantic separator border. Hover reveals only a
-  small standard action menu; cards do not add decorative lift or shadow effects. Tags and actions
-  do not permanently clutter the board.
+- Cards have 8–12 pt continuous corners and a semantic separator border, with no decorative lift
+  or shadow effects. Actions live in the context menu and do not clutter the board.
 - A single click selects and focuses a card without opening it. Selection uses a restrained semantic
   accent outline. Arrow keys move spatially through the masonry columns and minimally scroll the
   focused card into view; Shift-click and Shift-arrow extend the selection from its anchor.

@@ -2,8 +2,7 @@
 
 import SwiftUI
 
-/// One action vocabulary used by both a card's context menu and its restrained
-/// hover ellipsis. Mutations still flow through `AppState`.
+/// Actions in a card's context menu. Mutations still flow through `AppState`.
 struct OiaReadingActions: View {
     @Environment(AppState.self) private var appState
 

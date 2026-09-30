@@ -20,7 +20,6 @@ struct OiaCardView: View {
     var onOpen: () -> Void
     var onEditTags: () -> Void
 
-    @State private var isHovered = false
     @State private var isSelectingWithMouse = false
     @State private var fallbackVisibility = false
 
@@ -65,11 +64,6 @@ struct OiaCardView: View {
                     onEditTags: onEditTags
                 )
             }
-            .onHover { hovering in
-                withAnimation(.easeOut(duration: 0.14)) {
-                    isHovered = hovering
-                }
-            }
     }
 
     private func accessibleCard(in size: CGSize) -> some View {
@@ -100,12 +94,6 @@ struct OiaCardView: View {
             .clipShape(cardShape)
             .overlay(cardShape.stroke(OiaTheme.border, lineWidth: 1))
             .overlay { selectionRing }
-            .overlay(alignment: .topTrailing) {
-                if isHovered {
-                    hoverMenu
-                        .transition(.opacity)
-                }
-            }
     }
 
     @ViewBuilder
@@ -340,26 +328,6 @@ private extension OiaCardView {
 
     private var articleSecondaryForeground: Color {
         .secondary
-    }
-
-    private var hoverMenu: some View {
-        Menu {
-            OiaReadingActions(
-                row: row,
-                onEditTags: onEditTags
-            )
-        } label: {
-            Image(systemName: "ellipsis")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.primary)
-                .frame(width: 30, height: 26)
-                .background(.regularMaterial, in: Capsule())
-        }
-        .menuStyle(.borderlessButton)
-        .menuIndicator(.hidden)
-        .fixedSize()
-        .padding(10)
-        .accessibilityLabel("More actions")
     }
 
     @ViewBuilder

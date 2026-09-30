@@ -50,8 +50,6 @@ struct ReadingListPage {
 
     /// Selects a card without opening it.
     func select(_ id: String) {
-        // Stay away from the trailing hover menu. SwiftUI can expose the
-        // combined card as either a Button or MenuButton depending on hover.
         row(id).clickWhenReady(at: CGVector(dx: 0.25, dy: 0.5))
     }
 
