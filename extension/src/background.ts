@@ -227,23 +227,38 @@ async function finishScreenshotPage(tabId: number, sessionId: string): Promise<v
 
 /** Read the loaded document's response, without re-fetching subscriber content. */
 async function rejectPaymentRequired(tabId: number): Promise<boolean> {
-  let status: number | undefined;
+  let blocked = false;
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      func: () => {
+      args: [(await chrome.tabs.get(tabId)).url ?? ""],
+      func: (pageUrl: string) => {
         const navigation = performance.getEntriesByType("navigation")[0] as
           | (PerformanceEntry & { responseStatus?: number })
           | undefined;
-        return navigation?.responseStatus;
+        if (navigation?.responseStatus === 402) return true;
+        const host = new URL(pageUrl).hostname;
+        if (host !== "economist.com" && host !== "www.economist.com") return false;
+        // The Economist also serves a subscription gate in successful responses.
+        // Require both gate-specific phrases, rather than a generic Subscribe button.
+        const text = (document.body?.innerText ?? document.body?.textContent ?? "").replace(
+          /\s+/g,
+          " ",
+        );
+        return (
+          /Continue with a free trial/i.test(text) &&
+          /(?:unlock just this article|Get full access to our independent journalism for free)/i.test(
+            text,
+          )
+        );
       },
     });
-    status = results[0]?.result;
+    blocked = results[0]?.result === true;
   } catch {
     // Restricted pages and older browsers may not expose navigation status.
     return false;
   }
-  if (status !== 402) return false;
+  if (!blocked) return false;
   await showBadge(tabId, "error");
   await showToast(tabId, "error", "Payment required", "This page wasn't saved.");
   return true;
@@ -974,7 +989,7 @@ async function showToast(
 ): Promise<void> {
   const message: ToastMessage = { action: "toast", status, title, detail, cta };
   try {
-    await chrome.tabs.sendMessage(tabId, message);
+    await requestContentResponse(tabId, message);
   } catch {
     // Tab closed/navigated or no content script reachable; the badge still conveys status.
   }

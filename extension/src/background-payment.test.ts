@@ -19,11 +19,28 @@ afterEach(() => {
 });
 
 describe("payment-required saves", () => {
-  it.each(["article", "link"])("rejects a %s save before capture or persistence", async (kind) => {
+  it.each([
+    ["article", 402],
+    ["link", 402],
+    ["article", 200],
+    ["link", 200],
+    ["article", undefined],
+    ["link", undefined],
+  ])("rejects a %s save with status %s before capture or persistence", async (kind, status) => {
     vi.resetModules();
     const runtimeMessageListeners: RuntimeMessageListener[] = [];
     const nativeRequests: object[] = [];
-    const tab = { id: 42, url: "https://example.com/article" };
+    const tab = { id: 42, url: "https://www.economist.com/science-and-technology/article" };
+    document.body.innerHTML =
+      status === 402
+        ? "<p>Payment required</p>"
+        : `<article><h1>How becoming a father shrinks your cerebrum</h1>
+      <section><h2>Continue with a free trial</h2>
+      <p>Get full access to our independent journalism for free</p>
+      <p>Or create a free account to unlock just this article</p></section></article>`;
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+      { responseStatus: status } as unknown as PerformanceEntry,
+    ]);
     const sendMessage = vi.fn(async () => undefined);
     const visibleCaptureTimes: number[] = [];
     const chromeMock = {
@@ -57,7 +74,13 @@ describe("payment-required saves", () => {
         ),
         lastError: undefined,
       },
-      scripting: { executeScript: vi.fn(async () => [{ result: 402 }]) },
+      scripting: {
+        executeScript: vi.fn(
+          async (options: { func: (...args: string[]) => unknown; args?: string[] }) => [
+            { result: options.func(...(options.args ?? [])) },
+          ],
+        ),
+      },
       storage: {
         local: {
           get: vi.fn(async () => ({})),
