@@ -119,6 +119,4 @@ page’s Navigation Timing entry reports HTTP 402. No save request reaches the
 native host, so no card is created or overwritten. This checks the browser’s
 existing response without fetching the page again. Browsers that do not expose
 `responseStatus` cannot detect this condition; paywalls served with HTTP 200 are
-not detected by this status check alone. The Economist’s visible subscription
-gate is also detected from its paired access prompts, including on HTTP 200
-responses or when navigation response status is unavailable.
+not detected by this status check.

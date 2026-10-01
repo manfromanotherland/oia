@@ -231,26 +231,11 @@ async function rejectPaymentRequired(tabId: number): Promise<boolean> {
   try {
     const results = await chrome.scripting.executeScript({
       target: { tabId },
-      args: [(await chrome.tabs.get(tabId)).url ?? ""],
-      func: (pageUrl: string) => {
+      func: () => {
         const navigation = performance.getEntriesByType("navigation")[0] as
           | (PerformanceEntry & { responseStatus?: number })
           | undefined;
-        if (navigation?.responseStatus === 402) return true;
-        const host = new URL(pageUrl).hostname;
-        if (host !== "economist.com" && host !== "www.economist.com") return false;
-        // The Economist also serves a subscription gate in successful responses.
-        // Require both gate-specific phrases, rather than a generic Subscribe button.
-        const text = (document.body?.innerText ?? document.body?.textContent ?? "").replace(
-          /\s+/g,
-          " ",
-        );
-        return (
-          /Continue with a free trial/i.test(text) &&
-          /(?:unlock just this article|Get full access to our independent journalism for free)/i.test(
-            text,
-          )
-        );
+        return navigation?.responseStatus === 402;
       },
     });
     blocked = results[0]?.result === true;

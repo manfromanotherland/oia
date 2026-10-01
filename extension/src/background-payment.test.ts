@@ -26,7 +26,7 @@ describe("payment-required saves", () => {
     ["link", 200],
     ["article", undefined],
     ["link", undefined],
-  ])("rejects a %s save with status %s before capture or persistence", async (kind, status) => {
+  ])("checks only HTTP status for a %s save with status %s", async (kind, status) => {
     vi.resetModules();
     const runtimeMessageListeners: RuntimeMessageListener[] = [];
     const nativeRequests: object[] = [];
@@ -41,7 +41,21 @@ describe("payment-required saves", () => {
     vi.spyOn(performance, "getEntriesByType").mockReturnValue([
       { responseStatus: status } as unknown as PerformanceEntry,
     ]);
-    const sendMessage = vi.fn(async () => undefined);
+    const sendMessage = vi.fn(async (_tabId: number, message: { action: string }) => {
+      if (message.action === "toast") return undefined;
+      return {
+        metadata: {
+          kind: "article",
+          url: tab.url,
+          canonical_url: tab.url,
+          title: "Test page",
+          saved_at: new Date().toISOString(),
+        },
+        markdown: "Captured text",
+        images: [],
+        unresolved: [],
+      };
+    });
     const visibleCaptureTimes: number[] = [];
     const chromeMock = {
       action: {
@@ -107,6 +121,22 @@ describe("payment-required saves", () => {
     await new Promise((resolve) => {
       runtimeMessageListeners[0]({ action: "toolbar-save", kind, tabId: 42 }, {}, resolve);
     });
+    if (status !== 402) {
+      expect(sendMessage).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({
+          action: kind === "article" ? "extract" : "capture-link",
+        }),
+      );
+      expect(nativeRequests).toHaveLength(1);
+      expect(sendMessage).not.toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({
+          title: "Payment required",
+        }),
+      );
+      return;
+    }
     expect(nativeRequests).toHaveLength(0);
     expect(sendMessage).toHaveBeenCalledWith(
       42,
