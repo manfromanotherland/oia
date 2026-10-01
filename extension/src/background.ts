@@ -225,12 +225,38 @@ async function finishScreenshotPage(tabId: number, sessionId: string): Promise<v
   }
 }
 
+/** Read the loaded document's response, without re-fetching subscriber content. */
+async function rejectPaymentRequired(tabId: number): Promise<boolean> {
+  let status: number | undefined;
+  try {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const navigation = performance.getEntriesByType("navigation")[0] as
+          | (PerformanceEntry & { responseStatus?: number })
+          | undefined;
+        return navigation?.responseStatus;
+      },
+    });
+    status = results[0]?.result;
+  } catch {
+    // Restricted pages and older browsers may not expose navigation status.
+    return false;
+  }
+  if (status !== 402) return false;
+  await showBadge(tabId, "error");
+  await showToast(tabId, "error", "Payment required", "This page wasn't saved.");
+  return true;
+}
+
 async function savePage(tab: chrome.tabs.Tab): Promise<void> {
   const tabId = tab.id;
   if (!tabId || !tab.url) {
     await log("warn", "Save ignored: no active tab id or URL", { tabId, url: tab.url });
     return;
   }
+
+  if (await rejectPaymentRequired(tabId)) return;
 
   await log("info", "Save triggered", { kind: "article", url: tab.url });
   await showToast(tabId, "loading", "Saving…");
@@ -267,6 +293,8 @@ async function saveLink(tab: chrome.tabs.Tab): Promise<void> {
     await log("warn", "Save link ignored: no active tab id or URL", { tabId, url: tab.url });
     return;
   }
+
+  if (await rejectPaymentRequired(tabId)) return;
 
   await log("info", "Save triggered", { kind: "link", url: tab.url });
   await showToast(tabId, "loading", "Saving link…");
