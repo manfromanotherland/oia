@@ -198,13 +198,16 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   Reduce Transparency uses an opaque system surface.
 - Below the title, the Inspector orders its sections as **Tags**, **Colours**, **Details**, then
   Delete. The Tags section shows user and automatically generated subject Tags together, with
-  neutral Liquid Glass styling. A sparkle icon identifies machine Tags. The Inspector action is
-  labeled **Edit Tags** without a plus icon; its picker adds user Tags. A Tag may be removed there
-  or from its chip. Adding a user Tag with the same spelling ignoring case gives the user Tag
-  ownership in the combined view. Removing any effective Tag removes its user label and excludes
+  neutral Liquid Glass styling. User Tags show the SF Symbol `tag`; machine Tags show `sparkles`.
+  Both icons have the same spacing from the label. Hovering a Tag changes its icon to
+  `xmark.circle.fill`; clicking that icon opens a native confirmation dialog, as with card
+  deletion, before removing the Tag from this reading. The label searches the library. The
+  Inspector action is labeled **Edit Tags** without a plus icon; its picker adds user Tags.
+  Adding a user Tag with the same spelling ignoring case gives the user Tag ownership in the
+  combined view. Removing any effective Tag removes its user label and excludes
   matching machine labels, including future results. Analysis adds machine Tags directly after
   saving or processing a reading, without a review step. There is no separate image-label section
-  or suggestion picker. Tag pills search the library.
+  or suggestion picker. Removing a Tag from a reading does not delete that name globally.
   **Colours** shows up to five distinct swatches for media and links as closely spaced
   flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
   hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by
@@ -470,7 +473,8 @@ Automatic analysis runs after the saved reading and its assets are durable, or a
 new or changed files. Its completion revalidates the reading against the analysed source before
 writing machine Tags to frontmatter and refreshing the index. Removing any effective Tag records
 an exclusion in that same file and removes a matching user label, so analysis does not restore the
-Tag on a later pass. User Tags take precedence over case-insensitive machine matches.
+Tag on a later pass. The removal applies only to that reading. User Tags take precedence over
+case-insensitive machine matches.
 
 **One motion, not two.** When removing a tag moves a card out of the active tag filter, the row
 slides out **and** selection advances to the neighbouring card in the same beat.

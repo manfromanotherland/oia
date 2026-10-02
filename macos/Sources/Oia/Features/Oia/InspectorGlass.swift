@@ -39,6 +39,66 @@ struct InspectorPill: View {
     }
 }
 
+/// Search and removal share one glass capsule. A fixed icon slot keeps the
+/// label in place when hover changes the symbol.
+struct InspectorTagPill: View {
+    let title: String
+    let symbol: String
+    var onSearch: () -> Void
+    var onRemove: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: onRemove) {
+                Image(systemName: isHovered ? "xmark.circle.fill" : symbol)
+                    .font(.system(size: 10, weight: .semibold))
+                    .frame(width: 12, height: 12)
+                    .padding(.leading, 8)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Remove \(title) tag")
+            .accessibilityLabel("Remove \(title) tag")
+            .accessibilityIdentifier(A11y.Inspector.removeTag(title))
+
+            Button(action: onSearch) {
+                Text(title).lineLimit(1).truncationMode(.middle).frame(maxWidth: 232)
+                    .padding(.trailing, 8)
+                    .padding(.vertical, 5)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Search for \(title)")
+            .accessibilityLabel("Search for \(title)")
+        }
+        .font(.system(size: 12, weight: .medium))
+        .modifier(InspectorTagGlass())
+        .fixedSize(horizontal: true, vertical: false)
+        .onHover { isHovered = $0 }
+        .accessibilityElement(children: .contain)
+    }
+}
+
+private struct InspectorTagGlass: ViewModifier {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+
+    func body(content: Content) -> some View {
+        let shape = Capsule()
+        if reduceTransparency {
+            content.background(Color(nsColor: .controlBackgroundColor), in: shape)
+                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
+        } else if #available(macOS 26.0, *) {
+            content.glassEffect(.regular.interactive(), in: shape)
+        } else {
+            content.background(.regularMaterial, in: shape)
+                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
+        }
+    }
+}
+
 struct InspectorSwatch: View {
     let color: InspectorColor
     var action: () -> Void

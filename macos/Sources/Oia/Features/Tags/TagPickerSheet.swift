@@ -141,9 +141,11 @@ struct TagPickerSheet: View {
             }
             ForEach(listed, id: \.self) { tag in
                 Button { toggle(tag) } label: {
-                    HStack {
+                    HStack(spacing: 4) {
                         let isMachine = machineTags.contains { ExactTagIdentity.matches($0, tag) }
-                        if isMachine { Image(systemName: "sparkles") }
+                        Image(systemName: isMachine ? "sparkles" : "tag")
+                            .font(.system(size: 10, weight: .semibold))
+                            .frame(width: 12, height: 12)
                         Text("#\(tag)")
                         Spacer()
                         if appliedSet.contains(ExactTagIdentity.bytes(tag)) {

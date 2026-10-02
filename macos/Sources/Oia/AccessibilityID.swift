@@ -94,6 +94,7 @@ enum A11y {
         static let details = "detail.inspector.details"
         static let colorPrefix = "detail.inspector.colour."
         static func attribute(_ label: String) -> String { "detail.inspector.attribute.\(label)" }
+        static func removeTag(_ label: String) -> String { "detail.inspector.removeTag.\(label)" }
     }
 
     /// ── Reader content ────────────────────────────────────────────────────────

@@ -16,6 +16,8 @@ struct OiaInspectorView: View {
     @State private var loadedID: String?
     @State private var failed = false
     @State private var showsAnalysisInfo = false
+    @State private var tagPendingRemoval: String?
+    @State private var showsTagRemovalConfirmation = false
     @State private var retry = 0
 
     var body: some View {
@@ -47,6 +49,23 @@ struct OiaInspectorView: View {
         .task(id: isVisible ? loadID : "") {
             guard isVisible else { return }
             await load()
+        }
+        .confirmationDialog(
+            "Remove this tag?",
+            isPresented: $showsTagRemovalConfirmation,
+            presenting: tagPendingRemoval
+        ) { tag in
+            Button("Remove tag", role: .destructive) {
+                onToggleTag(tag, false)
+                tagPendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingRemoval = nil }
+        } message: { tag in
+            Text("“\(tag)” will be removed from this item and won’t be added back automatically.")
+        }
+        .onChange(of: row.id) { _, _ in
+            showsTagRemovalConfirmation = false
+            tagPendingRemoval = nil
         }
     }
 
@@ -99,8 +118,8 @@ struct OiaInspectorView: View {
                 .accessibilityLabel("About tags")
                 .popover(isPresented: $showsAnalysisInfo) {
                     Text("""
-                    Tags with a sparkle icon are generated locally from the saved content.
-                    Use Edit Tags or right-click a tag to remove it. Removed machine tags stay removed.
+                    Tag icons mark your tags. Sparkle icons mark tags generated locally from the saved content.
+                    Hover a tag and click its × icon to remove it. Removed machine tags stay removed.
                     """)
                     .font(.callout)
                     .padding(16)
@@ -137,22 +156,29 @@ struct OiaInspectorView: View {
 
     private func tagPill(_ tag: String) -> some View {
         let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, tag) }
-        return InspectorPill(tag, symbol: isMachine ? "sparkles" : nil) {
-            onSearch(BoardSearchToken(kind: .tag, value: tag))
-        }
-        .help("\(isMachine ? "Machine" : "Your") tag · Search for \(tag)")
+        return InspectorTagPill(
+            title: tag,
+            symbol: isMachine ? "sparkles" : "tag",
+            onSearch: { onSearch(BoardSearchToken(kind: .tag, value: tag)) },
+            onRemove: { requestTagRemoval(tag) }
+        )
         .accessibilityLabel("\(tag), \(isMachine ? "machine tag" : "your tag")")
         .accessibilityIdentifier(A11y.Inspector.attribute(tag))
         .contextMenu {
             if isMachine {
-                Button("Make this my tag", systemImage: "person") {
+                Button("Make this my tag", systemImage: "tag") {
                     onToggleTag(tag, true)
                 }
             }
             Button("Remove tag", systemImage: "xmark", role: .destructive) {
-                onToggleTag(tag, false)
+                requestTagRemoval(tag)
             }
         }
+    }
+
+    private func requestTagRemoval(_ tag: String) {
+        tagPendingRemoval = tag
+        showsTagRemovalConfirmation = true
     }
 
     private func sectionTitle(_ text: String) -> some View {

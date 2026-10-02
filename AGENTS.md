@@ -59,10 +59,11 @@ These are load-bearing. Most architectural questions resolve by appealing to one
 - **Search** — native app. Full-text search over readings (title, content, Tags) via SQLite
   FTS5, with local visual search facts. Word-occurrence lookup and word meanings are future ideas.
 - **Tags** — native app. User and automatically inferred subject Tags appear together as neutral
-  Liquid Glass pills; machine Tags carry a sparkle icon. Both are stored in each reading's
-  frontmatter; user Tags win case-insensitive duplicates. A removed Tag stays excluded from later
-  machine analysis. (The macOS mockup's "Lists" section is implemented as **Tags** — manual Lists
-  are not planned.)
+  Liquid Glass pills, with `tag` on user Tags and `sparkles` on machine Tags. The icon becomes a
+  remove control on hover and requires confirmation; removal affects one reading, not the whole
+  library. Both types are stored in each reading's frontmatter; user Tags win case-insensitive
+  duplicates. A removed Tag stays excluded from later machine analysis. (The macOS mockup's
+  "Lists" section is implemented as **Tags** — manual Lists are not planned.)
 - **Curation** — native app. Organize cards with tags or permanently delete cards that no longer
   belong.
 - **Card kind** — every reading is an **article**, **image**, **video**, or **quote**. Older files

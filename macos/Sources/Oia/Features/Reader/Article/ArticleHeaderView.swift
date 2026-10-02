@@ -37,7 +37,7 @@ struct ArticleHeaderView: View {
     private var tagSummary: Text {
         row.tags.enumerated().reduce(Text("")) { summary, entry in
             let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, entry.element) }
-            let icon = isMachine ? Text(Image(systemName: "sparkles")) + Text(" ") : Text("")
+            let icon = Text(Image(systemName: isMachine ? "sparkles" : "tag")) + Text(" ")
             return summary + Text(entry.offset == 0 ? "" : " ") + icon + Text("#\(entry.element)")
         }
     }
