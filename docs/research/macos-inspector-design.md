@@ -34,11 +34,11 @@ The [Photos Info window](https://support.apple.com/en-ie/guide/photos/phta8b25fa
 
 ![Apple Photos Info window](https://ipcdn-web.apple.com/assets/v2/web/11c23372-dd0a-4694-92f0-8579c4dd989d)
 
-### Ulysses: understated headings and keyword entry
+### Pixelmator Pro: cohesive translucent panels
 
-The [Mac Dashboard](https://help.ulysses.app/the-dashboard/dashboard) puts keywords, creation dates and other document facts in a narrow inspector. The September 2026 screenshot shows muted section labels, aligned date rows and a lightweight **Add keyword** field. Borrow its restrained typography and section spacing; show Óia's user/machine distinction through its existing icons.
+Apple's [Pixelmator Pro Mac interface guide](https://support.apple.com/en-ca/guide/pixelmator-pro/pix96e754af4/mac) shows a translucent right tool pane with grouped controls, compact typography and restrained control backgrounds. The pane changes to show settings for the selected tool. Borrow the coherent panel material and the quieter surfaces inside it; Óia has fewer controls and can keep its existing section structure. This is the strongest reference here for the overall panel finish.
 
-![Ulysses Mac Dashboard](https://static.helpjuice.com/helpjuice_production/uploads/upload/image/16213/direct/1789107601469/Screenshot%202026-09-11%20at%2008.19.45.png)
+![Pixelmator Pro Mac interface](https://ipcdn-web.apple.com/assets/v2/web/2b3dd883-4db8-4afb-85db-9c8da475b4fc)
 
 ### Sketch: consistent fields and section hierarchy
 
@@ -56,3 +56,5 @@ This is a proposal; the application has not been restyled as part of this resear
 | Metadata | Secondary labels, regular-weight values, and separators between groups instead of every row. |
 | Secondary actions | Standard compact controls or plain icon/text actions; keep Delete visually secondary and retain its card-deletion confirmation. |
 | Pane and toolbar | Let their structural system material carry the depth. Keep the existing board and toolbar direction. |
+
+Recommended combination: Pixelmator Pro's cohesive panel finish, Sketch's compact fields and consistent section hierarchy, and Photos' inline keyword interaction.
