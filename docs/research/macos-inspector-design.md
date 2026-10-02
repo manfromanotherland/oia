@@ -2,7 +2,9 @@
 
 Research date: 2026-10-02. Sources are current Apple Human Interface Guidelines, Apple developer documentation, and WWDC25 sessions. Recommendations below are design inferences from those sources, not Apple rules for Óia specifically.
 
-## Recommendation
+Status: research only. The user considers Photos and Sketch acceptable but wants a more distinctive aesthetic with exceptional finish. Things establishes a quality bar but is not the desired style. No visual direction has been selected or implemented.
+
+## Native control considerations
 
 Keep the inline **Add a tag…** control as a native, rounded text field with its own clear boundary. Do **not** add a separate Liquid Glass effect to the field simply because its Inspector is glass. The Inspector is the structural surface; the text field is a small, precise input inside it. Apple says system controls adopt the current design automatically, advises sparing use of custom glass, and cautions against layering glass controls on one another. [Materials](https://developer.apple.com/design/human-interface-guidelines/materials), [Adopting Liquid Glass](https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass)
 
@@ -44,7 +46,7 @@ Apple's [Pixelmator Pro Mac interface guide](https://support.apple.com/en-ca/gui
 
 The [Sketch Inspector](https://www.sketch.com/docs/interface-and-settings/the-mac-app-interface/the-inspector/) documentation, updated April 2026, shows compact rounded fields, small secondary icons and clear sections. Borrow its consistency between field geometry, type size and alignment. Óia needs fewer controls, so it can preserve more breathing room. The documentation image uses a signed CDN URL; use the page to retrieve the current image rather than depending on an expiring link.
 
-## Proposed direction for Óia
+## Conventional implementation proposal
 
 This is a proposal; the application has not been restyled as part of this research.
 
@@ -57,4 +59,26 @@ This is a proposal; the application has not been restyled as part of this resear
 | Secondary actions | Standard compact controls or plain icon/text actions; keep Delete visually secondary and retain its card-deletion confirmation. |
 | Pane and toolbar | Let their structural system material carry the depth. Keep the existing board and toolbar direction. |
 
-Recommended combination: Pixelmator Pro's cohesive panel finish, Sketch's compact fields and consistent section hierarchy, and Photos' inline keyword interaction.
+The baseline above establishes control hierarchy. It does not settle Óia's visual identity.
+
+## More distinctive aesthetic references
+
+### Screen Studio: matte, spacious editing controls
+
+Its [background settings guide](https://screen.studio/guide/background) includes a close-up of a dark settings panel: generous spacing, consistent symbols, understated section labels, low-contrast controls and one focused accent. The panel reads as one coherent surface. This is a reference for a modern matte Inspector, independent of the purple marketing background surrounding the panel.
+
+![Screen Studio background controls](https://cdn.sanity.io/images/2ltoq22u/production/87d27ef535d8133201ac161b2e6366d663f7cb9a-2560x1920.png?w=1600&q=80&fit=max&auto=format)
+
+### Raycast: precise typography and a unified input family
+
+Raycast's [2026 redesign](https://www.raycast.com/blog/the-new-raycast) describes a refreshed macOS interface with selective Liquid Glass. Its [TagPicker documentation](https://developers.raycast.com/api-reference/user-interface/form#formtagpicker) shows tokens, an input and suggestions with coordinated geometry and surfaces. The TagPicker screenshot was inspected separately; its exact app version is unspecified. Borrow the relationship between the field, tokens and menu, while preserving Óia's current Tag behavior and provenance symbols.
+
+![Raycast app](https://www.raycast.com/uploads/blog-new-raycast/app.png)
+
+### Craft: soft surfaces and an integrated content frame
+
+Craft's [September 2026 Mac update](https://www.craft.do/blog/craft-update-3-6-5) shows sidebars integrated into the window surface with an inset document, restrained navigation and coordinated corner radii. It offers a softer, more atmospheric direction. The product screenshot combines Mac and iPad; it is an overall surface reference, not a close-up of Mac Tag entry.
+
+![Craft Mac and iPad surfaces](https://www.craft.do/images/content/blog/craft-update-3-6-5/image-2.jpg)
+
+These are alternative visual directions to compare. The choice should follow the user's taste rather than treating native platform conventions as the aesthetic target.
