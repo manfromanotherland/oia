@@ -19,6 +19,7 @@ struct ArticleHeaderView: View {
             if !row.tags.isEmpty {
                 tagSummary
                     .font(theme.metadataFont)
+                    .foregroundStyle(.secondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .accessibilityIdentifier(A11y.Detail.tags)
@@ -36,8 +37,8 @@ struct ArticleHeaderView: View {
     private var tagSummary: Text {
         row.tags.enumerated().reduce(Text("")) { summary, entry in
             let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, entry.element) }
-            return summary + Text("\(entry.offset == 0 ? "" : " ")#\(entry.element)")
-                .foregroundColor(isMachine ? .purple : .blue)
+            let icon = isMachine ? Text(Image(systemName: "sparkles")) + Text(" ") : Text("")
+            return summary + Text(entry.offset == 0 ? "" : " ") + icon + Text("#\(entry.element)")
         }
     }
 }

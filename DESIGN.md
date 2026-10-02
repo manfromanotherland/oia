@@ -198,13 +198,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   Reduce Transparency uses an opaque system surface.
 - Below the title, the Inspector orders its sections as **Tags**, **Colours**, **Details**, then
   Delete. The Tags section shows user and automatically generated subject Tags together, with
-  blue user Tags, purple machine Tags, and a quiet provenance cue. The Add/Edit picker adds user
-  Tags; a Tag may be removed there or from its chip. Adding a user Tag with the same spelling
-  ignoring case gives the user Tag ownership in the combined view. Removing any effective Tag
-  removes its user label and excludes matching machine labels, including future results. Analysis
-  adds machine Tags directly after saving or processing a reading, without a review step. There is
-  no separate image-label section or suggestion picker. Tags are native capsule glass buttons that
-  search the library.
+  neutral Liquid Glass styling. A sparkle icon identifies machine Tags. The Inspector action is
+  labeled **Edit Tags** without a plus icon; its picker adds user Tags. A Tag may be removed there
+  or from its chip. Adding a user Tag with the same spelling ignoring case gives the user Tag
+  ownership in the combined view. Removing any effective Tag removes its user label and excludes
+  matching machine labels, including future results. Analysis adds machine Tags directly after
+  saving or processing a reading, without a review step. There is no separate image-label section
+  or suggestion picker. Tag pills search the library.
   **Colours** shows up to five distinct swatches for media and links as closely spaced
   flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
   hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by

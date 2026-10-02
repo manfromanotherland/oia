@@ -143,8 +143,8 @@ struct TagPickerSheet: View {
                 Button { toggle(tag) } label: {
                     HStack {
                         let isMachine = machineTags.contains { ExactTagIdentity.matches($0, tag) }
-                        Label("#\(tag)", systemImage: isMachine ? "sparkles" : "person")
-                            .foregroundStyle(isMachine ? Color.purple : Color.blue)
+                        if isMachine { Image(systemName: "sparkles") }
+                        Text("#\(tag)")
                         Spacer()
                         if appliedSet.contains(ExactTagIdentity.bytes(tag)) {
                             Image(systemName: "checkmark")

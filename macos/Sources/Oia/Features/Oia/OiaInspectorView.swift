@@ -88,7 +88,7 @@ struct OiaInspectorView: View {
 
     private var tags: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 4) {
                 sectionTitle("Tags")
                 Button { showsAnalysisInfo.toggle() } label: {
                     Image(systemName: "info.circle")
@@ -99,16 +99,16 @@ struct OiaInspectorView: View {
                 .accessibilityLabel("About tags")
                 .popover(isPresented: $showsAnalysisInfo) {
                     Text("""
-                    Blue tags are yours. Purple tags are generated locally from the saved content.
-                    Edit or right-click a tag to remove it. Removed machine tags stay removed.
+                    Tags with a sparkle icon are generated locally from the saved content.
+                    Use Edit Tags or right-click a tag to remove it. Removed machine tags stay removed.
                     """)
                     .font(.callout)
                     .padding(16)
                     .frame(width: 280)
                 }
                 Spacer()
-                InspectorPill(row.tags.isEmpty ? "Add" : "Edit", symbol: "plus", action: onEditTags)
-                    .accessibilityLabel("Edit tags")
+                InspectorPill("Edit Tags", action: onEditTags)
+                    .accessibilityLabel("Edit Tags")
                     .accessibilityIdentifier(A11y.Inspector.editTags)
             }
             if row.tags.isEmpty {
@@ -137,7 +137,7 @@ struct OiaInspectorView: View {
 
     private func tagPill(_ tag: String) -> some View {
         let isMachine = row.machineTags.contains { ExactTagIdentity.matches($0, tag) }
-        return InspectorPill(tag, symbol: isMachine ? "sparkles" : nil, tint: isMachine ? .purple : .blue) {
+        return InspectorPill(tag, symbol: isMachine ? "sparkles" : nil) {
             onSearch(BoardSearchToken(kind: .tag, value: tag))
         }
         .help("\(isMachine ? "Machine" : "Your") tag · Search for \(tag)")

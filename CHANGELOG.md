@@ -10,9 +10,10 @@ and versions track the app's `CFBundleShortVersionString`. See
 ### Added
 
 - Tags can now be generated locally from saved text and image content. Text tagging uses
-  Apple Intelligence on supported Macs with macOS 26 or later. Machine tags appear in purple
-  beside blue user tags; matching names merge regardless of capitalization, and removed tags
-  stay excluded from future automatic results. Both sets are saved in the reading's file.
+  Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share
+  neutral Liquid Glass styling, with a sparkle icon on machine Tags. Matching names merge
+  regardless of capitalization, and removed Tags stay excluded from future automatic results.
+  Both sets are saved in the reading's file. The Inspector action is labeled **Edit Tags**.
 
 - Instagram post and reel shares through **Óia!** can now queue a local Mac
   download of the selected photo/video. Carousel shares preserve `img_index`;

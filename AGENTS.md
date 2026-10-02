@@ -58,10 +58,11 @@ These are load-bearing. Most architectural questions resolve by appealing to one
   full-width masonry layout with kind and tag filters.
 - **Search** — native app. Full-text search over readings (title, content, Tags) via SQLite
   FTS5, with local visual search facts. Word-occurrence lookup and word meanings are future ideas.
-- **Tags** — native app. User and automatically inferred subject Tags appear together with
-  blue user Tags and purple machine Tags. Both are stored in each reading's frontmatter; user Tags
-  win case-insensitive duplicates. A removed Tag stays excluded from later machine analysis. (The
-  macOS mockup's "Lists" section is implemented as **Tags** — manual Lists are not planned.)
+- **Tags** — native app. User and automatically inferred subject Tags appear together as neutral
+  Liquid Glass pills; machine Tags carry a sparkle icon. Both are stored in each reading's
+  frontmatter; user Tags win case-insensitive duplicates. A removed Tag stays excluded from later
+  machine analysis. (The macOS mockup's "Lists" section is implemented as **Tags** — manual Lists
+  are not planned.)
 - **Curation** — native app. Organize cards with tags or permanently delete cards that no longer
   belong.
 - **Card kind** — every reading is an **article**, **image**, **video**, or **quote**. Older files
@@ -202,8 +203,10 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>  ← AI co-author traile
   `macos/build/Build/Products/Debug/Óia.app`. Run Xcode builds and tests from
   `macos/` with `-derivedDataPath build` so they use that single app output.
 - **Always build after macOS code changes.** Before reporting a macOS fix complete,
-  build the current source into that debug app and report the build result. A
-  running app must be restarted to load the new executable.
+  build the current source into that debug app and report the build result. Do not launch or
+  restart Óia for routine small styling, copy, or UI edits unless the user asks. For complex
+  behavior changes, launch or restart when verification requires it. A running app loads a new
+  executable only after a restart.
 - Never assume single-writer access to the library; always reconcile against the files.
 - Never persist anything important only in the DB, and never sync the DB.
 - **Native UIs update optimistically; persistence happens in the background.** A mutation already

@@ -80,7 +80,7 @@ host, and macOS app.
 |------|------------|
 | Tag | A subject or curation label stored in a reading's frontmatter and indexed by search. The Tags section combines user and machine Tags; matching ignores case and the user Tag wins a duplicate. |
 | User Tag | A label added by the user or retained from an import in `tags`. It has precedence over a machine Tag with the same spelling ignoring case. |
-| Machine Tag | A subject label inferred locally from saved text or media. `machine_tags` groups these labels by `image` or `text` source with `source_fingerprint` and `analyzer_version`. It appears with a distinct colour beside user Tags. |
+| Machine Tag | A subject label inferred locally from saved text or media. `machine_tags` groups these labels by `image` or `text` source with `source_fingerprint` and `analyzer_version`. It appears beside user Tags in neutral Liquid Glass styling, identified by a sparkle icon. |
 | Tag exclusion | A case-folded label key in `excluded_machine_tags`. Removing any effective Tag removes a matching user label and records this key, so a machine result cannot restore it later. |
 | Board scope | Exactly one toolbar selection: All, Images, Videos, Articles, Links, or Quotes. Images and Videos each select their matching reading kind; Articles selects full articles other than social posts, including longform X Articles; Links selects lightweight article placeholders and captured social posts. |
 | Board filter | The selected board scope, free-text query, and any scoped search terms, applied as one intersection to the board. |
