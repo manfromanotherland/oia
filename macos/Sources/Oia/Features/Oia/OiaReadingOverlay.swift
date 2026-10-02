@@ -14,7 +14,7 @@ struct OiaReadingOverlay: View {
     var onMove: (Int) -> Void
     var canMovePrevious: Bool
     var canMoveNext: Bool
-    var onEditTags: () -> Void
+    var tagInputFocusRequest: TagInputFocusRequest?
 
     var body: some View {
         gallery
@@ -43,7 +43,8 @@ struct OiaReadingOverlay: View {
         NavigationSplitView(columnVisibility: inspectorVisibility) {
             OiaInspectorView(
                 row: row, isVisible: showsInspector,
-                onEditTags: onEditTags, onSearch: searchFromInspector,
+                tagInputFocusRequest: tagInputFocusRequest,
+                onSearch: searchFromInspector,
                 onToggleTag: updateTag
             )
                 .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)

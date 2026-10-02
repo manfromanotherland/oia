@@ -132,8 +132,8 @@ class UITestCase: XCTestCase {
         ReaderPage(app: app)
     }
 
-    var tagPicker: TagPickerPage {
-        TagPickerPage(app: app)
+    var tagInput: InspectorTagInputPage {
+        InspectorTagInputPage(app: app)
     }
 
     var highlightsInspector: HighlightsPage {

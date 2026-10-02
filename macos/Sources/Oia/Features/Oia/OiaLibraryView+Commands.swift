@@ -19,6 +19,11 @@ extension OiaLibraryView {
             canFocusSearch: presentedReading == nil && !appState.isFocusMode,
             canScrollToTop: presentedReading == nil && !appState.readings.isEmpty,
             openSelection: openSelection,
+            editTags: { id in
+                guard let row = (presentedReading?.id == id ? presentedReading : nil)
+                    ?? appState.readings.first(where: { $0.id == id }) else { return }
+                requestEditTags(row)
+            },
             toggleQuickLook: toggleQuickLook,
             focusSearch: focusSearch,
             scrollToTop: scrollBoardToTop

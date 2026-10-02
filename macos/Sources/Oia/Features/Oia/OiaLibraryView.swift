@@ -16,7 +16,8 @@ struct OiaLibraryView: View {
 
     @State var presentedReading: ReadingRow?
     @State private var gallerySnapshot = GallerySnapshot<ReadingRow>()
-    @State private var tagTargetID: String?
+    @State private var tagInputFocusRequest: TagInputFocusRequest?
+    @State private var tagInputFocusGeneration: UInt64 = 0
     @State private var isDropTargeted = false
     @State var cardTextMetrics = OiaCardTextMetrics()
     @State private var videoPlaybackPositions = VideoPlaybackPositionStore()
@@ -55,9 +56,6 @@ struct OiaLibraryView: View {
                 onToggle: toggleInspector
             )
             .frame(width: 0, height: 0)
-        }
-        .sheet(isPresented: tagSheetPresented) {
-            tagPicker
         }
         .environment(\.assetContentGeneration, appState.libraryContentGeneration)
         .onChange(of: scenePhase) { _, phase in
@@ -318,7 +316,7 @@ extension OiaLibraryView {
                                 )
                             },
                             onOpen: { open(row) },
-                            onEditTags: { tagTargetID = row.id }
+                            onAddTag: { requestEditTags(row) }
                         )
                         .environment(appState)
                         .accessibilityIdentifier(A11y.List.row(row.id))
@@ -394,25 +392,8 @@ extension OiaLibraryView {
                 onMove: moveOverlay,
                 canMovePrevious: canMoveOverlay(-1),
                 canMoveNext: canMoveOverlay(1),
-                onEditTags: { tagTargetID = row.id }
+                tagInputFocusRequest: tagInputFocusRequest
             )
-        }
-    }
-
-    @ViewBuilder
-    private var tagPicker: some View {
-        if let row = tagTargetRow {
-            TagPickerSheet(
-                applied: row.tags,
-                allTags: appState.filters.tags.map(\.tag),
-                machineTags: row.machineTags,
-                onToggle: { tag, shouldApply in
-                    updateTag(tag, applies: shouldApply, to: row)
-                }
-            )
-        } else {
-            ContentUnavailableView("Item unavailable", systemImage: "exclamationmark.triangle")
-                .frame(width: 380, height: 460)
         }
     }
 
@@ -422,18 +403,6 @@ extension OiaLibraryView {
             .foregroundStyle(.clear)
             .accessibilityIdentifier(A11y.List.rows)
             .accessibilityValue(ids.joined(separator: ","))
-    }
-
-    private var tagSheetPresented: Binding<Bool> {
-        Binding(
-            get: { tagTargetID != nil || appState.showTagSheet },
-            set: { showing in
-                if !showing {
-                    tagTargetID = nil
-                    appState.showTagSheet = false
-                }
-            }
-        )
     }
 
     private var detailPresented: Binding<Bool> {
@@ -469,13 +438,6 @@ extension OiaLibraryView {
         )
     }
 
-    private var tagTargetRow: ReadingRow? {
-        let id = tagTargetID ?? (appState.showTagSheet ? appState.selectedId : nil)
-        guard let id else { return nil }
-        return (presentedReading?.id == id ? presentedReading : nil)
-            ?? appState.readings.first(where: { $0.id == id })
-    }
-
     private func updatePresentedRow(_ row: ReadingRow) {
         gallerySnapshot.update(row)
         presentedReading = row
@@ -494,12 +456,29 @@ extension OiaLibraryView {
         if presentedReading == nil {
             gallerySnapshot = GallerySnapshot(appState.readings.filter { !($0.isLink && $0.lightweight) })
         }
+        tagInputFocusRequest = nil
         boardFocused = false
         updatePresentedRow(row)
     }
 
+    func requestEditTags(_ row: ReadingRow) {
+        appState.selectReading(id: row.id, extending: false)
+        if presentedReading == nil {
+            gallerySnapshot = GallerySnapshot(appState.readings.filter { !($0.isLink && $0.lightweight) })
+        }
+        boardFocused = false
+        updatePresentedRow(row)
+        showsInspector = true
+        tagInputFocusGeneration &+= 1
+        tagInputFocusRequest = TagInputFocusRequest(
+            readingID: row.id,
+            generation: tagInputFocusGeneration
+        )
+    }
+
     func closeOverlay() {
         presentedReading = nil
+        tagInputFocusRequest = nil
         gallerySnapshot = GallerySnapshot()
         appState.showHighlights = false
         if let id = appState.selectedId {
@@ -517,23 +496,6 @@ extension OiaLibraryView {
     private func canMoveOverlay(_ direction: Int) -> Bool {
         guard let id = presentedReading?.id else { return false }
         return gallerySnapshot.neighbor(of: id, direction: direction) != nil
-    }
-
-    private func updateTag(_ tag: String, applies: Bool, to row: ReadingRow) {
-        if var presented = presentedReading, presented.id == row.id {
-            presented.applyTagEdit(tag, applies: applies)
-            updatePresentedRow(presented)
-        }
-        Task {
-            if applies {
-                await appState.addTag(id: row.id, tag: tag)
-            } else {
-                await appState.removeTag(id: row.id, tag: tag)
-            }
-            if let refreshed = await appState.reloadRow(id: row.id), presentedReading?.id == row.id {
-                updatePresentedRow(refreshed)
-            }
-        }
     }
 
     private func advanceOverlayPastCurrent() {

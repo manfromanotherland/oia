@@ -8,7 +8,7 @@ struct OiaInspectorView: View {
     @Environment(AppState.self) private var appState
     let row: ReadingRow
     let isVisible: Bool
-    var onEditTags: () -> Void
+    var tagInputFocusRequest: TagInputFocusRequest?
     var onSearch: (BoardSearchToken) -> Void
     var onToggleTag: (String, Bool) -> Void
 
@@ -126,13 +126,17 @@ struct OiaInspectorView: View {
                     .frame(width: 280)
                 }
                 Spacer()
-                InspectorPill("Edit Tags", action: onEditTags)
-                    .accessibilityLabel("Edit Tags")
-                    .accessibilityIdentifier(A11y.Inspector.editTags)
             }
-            if row.tags.isEmpty {
-                status("Add your own tags.")
-            } else {
+            InspectorTagInput(
+                readingID: row.id,
+                candidates: appState.filters.searchTagCandidates,
+                userTags: row.tags.filter { tag in
+                    !row.machineTags.contains { ExactTagIdentity.matches($0, tag) }
+                },
+                focusRequest: tagInputFocusRequest,
+                onAdd: { onToggleTag($0, true) }
+            )
+            if !row.tags.isEmpty {
                 FlowLayout(spacing: 6) {
                     ForEach(row.tags, id: \.self) { tag in
                         tagPill(tag)

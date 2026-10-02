@@ -215,12 +215,8 @@ struct ReaderPage {
         app.byId(A11y.Toolbar.openInBrowser).clickWhenReady()
     }
 
-    func openTagPicker() {
-        let edit = app.byId(A11y.Inspector.editTags)
-        if !edit.exists {
-            app.byId(A11y.Inspector.toggle).clickWhenReady()
-        }
-        edit.clickWhenReady()
+    func focusTagInput() {
+        app.typeKey("t", modifierFlags: [.command, .shift])
     }
 
     func showInspector() {

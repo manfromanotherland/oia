@@ -90,7 +90,8 @@ enum A11y {
     enum Inspector {
         static let panel = "detail.inspector"
         static let toggle = "detail.inspector.toggle"
-        static let editTags = "detail.inspector.editTags"
+        static let tagInput = "detail.inspector.tagInput"
+        static let tagInputError = "detail.inspector.tagInputError"
         static let details = "detail.inspector.details"
         static let colorPrefix = "detail.inspector.colour."
         static func attribute(_ label: String) -> String { "detail.inspector.attribute.\(label)" }
@@ -118,20 +119,6 @@ enum A11y {
         /// The "select some text first" popover raised by `highlight`.
         static let highlightHint = "toolbar.highlightHint"
         static let delete = "toolbar.delete"
-    }
-
-    /// ── Tag picker sheet ────────────────────────────────────────────────────
-    enum TagPicker {
-        static let searchField = "tagPicker.search"
-        static let addRow = "tagPicker.add"
-        /// Inline message shown when the typed name exceeds the tag-length limit.
-        static let lengthError = "tagPicker.lengthError"
-        /// An existing-tag toggle row, keyed by tag name.
-        static func row(_ tag: String) -> String {
-            "tagPicker.row.\(tag)"
-        }
-
-        static let done = "tagPicker.done"
     }
 
     /// ── Highlights inspector ────────────────────────────────────────────────

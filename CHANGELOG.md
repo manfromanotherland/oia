@@ -15,7 +15,9 @@ and versions track the app's `CFBundleShortVersionString`. See
   reveals a remove control; clicking it asks for confirmation and removes that Tag only from the
   current reading. The label still searches. Matching names merge regardless of capitalization,
   and removed Tags stay excluded from future automatic results on that reading. Both sets are
-  saved in the reading's file. The Inspector action is labeled **Edit Tags**.
+  saved in the reading's file. A dropdown of matching library Tags can fill the inline field below
+  Tags; Return adds its entered name as a user Tag. Adding an existing machine Tag's name makes it
+  a user Tag.
 
 - Instagram post and reel shares through **Óia!** can now queue a local Mac
   download of the selected photo/video. Carousel shares preserve `img_index`;

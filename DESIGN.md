@@ -175,7 +175,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - Browser right-click uses one **"Save to Óia"** command for a page, image, video, or selected
   text. Selection becomes a quote card; image bytes and video posters are copied locally when
   available.
-- The native card context menu provides tags, open origin, and permanent delete.
+- The native card context menu provides tag editing, open origin, and permanent delete. Tag
+  editing focuses the Inspector's inline Tag field.
   Destructive actions retain confirmation.
 
 ### Card detail
@@ -201,13 +202,15 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   neutral Liquid Glass styling. User Tags show the SF Symbol `tag`; machine Tags show `sparkles`.
   Both icons have the same spacing from the label. Hovering a Tag changes its icon to
   `xmark.circle.fill`; clicking that icon opens a native confirmation dialog, as with card
-  deletion, before removing the Tag from this reading. The label searches the library. The
-  Inspector action is labeled **Edit Tags** without a plus icon; its picker adds user Tags.
-  Adding a user Tag with the same spelling ignoring case gives the user Tag ownership in the
-  combined view. Removing any effective Tag removes its user label and excludes
-  matching machine labels, including future results. Analysis adds machine Tags directly after
+  deletion, before removing the Tag from this reading. The label searches the library. An inline
+  field below the Tags heading filters a dropdown of matching library Tags, like board search.
+  Choosing a suggestion fills the field; Return adds the entered name as a user Tag. Keyboard and
+  context-menu tag-editing actions focus this field, with no modal editor. Adding a user Tag with
+  the same spelling ignoring case gives the user Tag ownership in the combined view. Removing any
+  effective Tag removes its user label and excludes matching machine labels, including future
+  results. Analysis adds machine Tags directly after
   saving or processing a reading, without a review step. There is no separate image-label section
-  or suggestion picker. Removing a Tag from a reading does not delete that name globally.
+  or image-label suggestion picker. Removing a Tag from a reading does not delete that name globally.
   **Colours** shows up to five distinct swatches for media and links as closely spaced
   flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
   hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by
@@ -398,8 +401,8 @@ At the top of the scrolling reader, each article shows:
 
 - **Title** at `1.5em` in the selected reader face. It shares the body's width and grows with the
   chosen body size.
-- **Tags** appear as a read-only text summary of user and machine Tags. The toolbar's `#` button
-  opens the tag picker for edits, so managing tags does not reflow the article header.
+- **Tags** appear as a read-only text summary of user and machine Tags. The **Add Tag…** command
+  focuses the Inspector's inline Tag field, so managing tags does not reflow the article header.
 - The header has enough space below it to start the body clearly, without a decorative divider.
 
 The leading inspector is a full-height, borderless sidebar with a translucent, blurred macOS

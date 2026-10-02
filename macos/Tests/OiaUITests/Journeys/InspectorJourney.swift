@@ -78,9 +78,7 @@ final class InspectorJourney: UITestCase {
         XCTAssertLessThan(details.frame.minY, delete.frame.minY)
         capture("Sidebar inspector · Details")
 
-        app.byId(A11y.Inspector.editTags).clickWhenReady()
-        XCTAssertTrue(app.byId(A11y.TagPicker.done).waitExists())
-        app.byId(A11y.TagPicker.done).clickWhenReady()
+        XCTAssertTrue(tagInput.field.waitExists(), "Tags can be edited inline")
         swatch.click()
         XCTAssertTrue(list.waitForRowCount(1), "Colour search excludes the blue image")
         XCTAssertEqual(list.orderedRowIds, [cream])
@@ -93,9 +91,7 @@ final class InspectorJourney: UITestCase {
         XCTAssertTrue(list.waitForRowCount(2))
         list.open(cream)
         XCTAssertTrue(app.byId(A11y.Inspector.attribute("cabinet")).waitExists())
-        app.byId(A11y.Inspector.editTags).clickWhenReady()
-        app.byId(A11y.TagPicker.row("cabinet")).clickWhenReady()
-        app.byId(A11y.TagPicker.done).clickWhenReady()
+        tagInput.remove("cabinet")
         XCTAssertTrue(app.byId(A11y.Inspector.attribute("cabinet")).waitDisappears())
         XCTAssertTrue(wait {
             library.articleContents(id: cream)?.contains("excluded_machine_tags:") == true
@@ -107,7 +103,7 @@ final class InspectorJourney: UITestCase {
         relaunchApp()
         XCTAssertTrue(list.waitForRowCount(2))
         list.open(cream)
-        XCTAssertTrue(app.byId(A11y.Inspector.editTags).waitExists())
+        XCTAssertTrue(tagInput.field.waitExists())
         XCTAssertFalse(app.byId(A11y.Inspector.attribute("cabinet")).exists)
         XCTAssertTrue(app.byId(A11y.Inspector.attribute("Interiors")).exists)
     }

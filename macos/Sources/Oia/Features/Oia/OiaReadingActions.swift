@@ -7,7 +7,7 @@ struct OiaReadingActions: View {
     @Environment(AppState.self) private var appState
 
     let row: ReadingRow
-    var onEditTags: () -> Void
+    var onAddTag: () -> Void
 
     var body: some View {
         Button("Copy") {
@@ -18,7 +18,7 @@ struct OiaReadingActions: View {
 
         Divider()
 
-        Button("Edit Tags…") { onEditTags() }
+        Button("Add Tag…") { onAddTag() }
             .keyboardShortcut(ShortcutCatalog.editTags)
             .disabled(disablesSingleReadingActions || appState.isDeleting)
 

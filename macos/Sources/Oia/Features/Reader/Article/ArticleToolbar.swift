@@ -2,7 +2,7 @@
 
 import SwiftUI
 
-/// The reader's primary-action toolbar: open in browser, tags, highlight, and
+/// The reader's primary-action toolbar: open in browser, highlight, and
 /// delete. The parent resolves which row to build
 /// it for (see `ArticleDetailView.currentRow`); actions write through
 /// `appState`, whose refresh supplies the updated row on the next render.
@@ -28,14 +28,6 @@ struct ArticleToolbar: ToolbarContent {
                 .help("Open original URL")
                 .accessibilityIdentifier(A11y.Toolbar.openInBrowser)
             }
-
-            Button {
-                appState.showTagSheet = true
-            } label: {
-                Label("Tags", systemImage: "number")
-            }
-            .help("Edit tags")
-            .accessibilityIdentifier(A11y.Toolbar.tags)
 
             Button {
                 // Toggles, like the reader's context-menu command: pressing it

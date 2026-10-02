@@ -78,7 +78,7 @@ host, and macOS app.
 
 | Term | Definition |
 |------|------------|
-| Tag | A subject or curation label stored in a reading's frontmatter and indexed by search. The Tags section combines user and machine Tags; matching ignores case and the user Tag wins a duplicate. Its label searches; its icon becomes a per-reading remove control on hover, requiring confirmation. |
+| Tag | A subject or curation label stored in a reading's frontmatter and indexed by search. The Tags section combines user and machine Tags; matching ignores case and the user Tag wins a duplicate. Matching library Tag suggestions fill its inline input; Return adds the entered name as a user Tag. Its label searches; its icon becomes a per-reading remove control on hover, requiring confirmation. |
 | User Tag | A label added by the user or retained from an import in `tags`. It has precedence over a machine Tag with the same spelling ignoring case and shows the SF Symbol `tag`. |
 | Machine Tag | A subject label inferred locally from saved text or media. `machine_tags` groups these labels by `image` or `text` source with `source_fingerprint` and `analyzer_version`. It appears beside user Tags in neutral Liquid Glass styling, identified by `sparkles`. |
 | Tag exclusion | A case-folded label key in `excluded_machine_tags`. Removing a Tag from one reading removes a matching user label there and records this key, so a machine result cannot restore it later. It does not delete the Tag name from other readings. |

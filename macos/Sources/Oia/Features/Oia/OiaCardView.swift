@@ -18,7 +18,7 @@ struct OiaCardView: View {
     var scenePhase: ScenePhase = .active
     var onSelect: () -> Void
     var onOpen: () -> Void
-    var onEditTags: () -> Void
+    var onAddTag: () -> Void
 
     @State private var isSelectingWithMouse = false
     @State private var fallbackVisibility = false
@@ -61,7 +61,7 @@ struct OiaCardView: View {
             .contextMenu {
                 OiaReadingActions(
                     row: row,
-                    onEditTags: onEditTags
+                    onAddTag: onAddTag
                 )
             }
     }

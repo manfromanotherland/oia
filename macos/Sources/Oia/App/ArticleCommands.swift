@@ -34,11 +34,13 @@ struct ArticleCommands: Commands {
 
                 Divider()
 
-                Button("Edit Tags…") {
-                    appState.showTagSheet = true
+                Button("Add Tag…") {
+                    if let selectedRow {
+                        boardActions?.editTags(selectedRow.id)
+                    }
                 }
                 .keyboardShortcut(ShortcutCatalog.editTags)
-                .disabled(selectedRows.count != 1 || appState.isDeleting)
+                .disabled(selectedRows.count != 1 || boardActions == nil || appState.isDeleting)
 
                 Button(appState.showHighlights ? "Hide Highlights" : "Show Highlights") {
                     appState.showHighlights.toggle()

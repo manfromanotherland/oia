@@ -123,11 +123,6 @@ final class AppState {
     /// Readings awaiting delete confirmation, in their current board order.
     var pendingDelete: [ReadingRow]?
 
-    /// Drives the tag-picker sheet for the open reading. Held here (rather than in
-    /// the detail view) so both the toolbar button and the ⌘⇧T menu command can
-    /// open it.
-    var showTagSheet: Bool = false
-
     /// Drives the highlights inspector for the open reading. Opened from the
     /// Article menu and its ⌘⇧H shortcut.
     var showHighlights: Bool = false

@@ -51,12 +51,11 @@ final class InboxZeroJourney: UITestCase {
         XCTAssertTrue(list.rowHasIndicator(Fixtures.Ids.unicode, label: "Favorite"), "heart on the row")
         XCTAssertTrue(waitForFrontmatter(id: Fixtures.Ids.unicode) { $0.favorite }, "favorite on disk")
 
-        // 4. Also read later → add the "weekend" tag via the picker. Chip on the
+        // 4. Also read later → add the "weekend" tag in the Inspector. Chip on the
         //    article, a new sidebar tile with count 1, tag written to the file.
-        reader.openTagPicker()
-        XCTAssertTrue(tagPicker.isVisible, "tag picker opened")
-        tagPicker.createAndApply("weekend")
-        tagPicker.done()
+        reader.focusTagInput()
+        XCTAssertTrue(tagInput.isVisible, "Inspector Tag input opened")
+        tagInput.add("weekend")
         XCTAssertTrue(sidebar.waitForTagCount("weekend", equals: 1), "sidebar gains #weekend (1)")
         XCTAssertTrue(waitForFrontmatter(id: Fixtures.Ids.unicode) { $0.tags.contains("weekend") }, "tag on disk")
 

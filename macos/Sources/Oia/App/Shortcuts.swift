@@ -106,7 +106,7 @@ enum ShortcutCatalog {
         alternatives: [openWithReturn]
     )
     static let quickLook = AppShortcut(title: "Quick Look", key: .space, modifiers: [], keyGlyph: "Space")
-    static let editTags = AppShortcut(title: "Edit Tags", key: "t", modifiers: [.command, .shift], keyGlyph: "T")
+    static let editTags = AppShortcut(title: "Add Tag…", key: "t", modifiers: [.command, .shift], keyGlyph: "T")
     static let toggleHighlights = AppShortcut(title: "Show / Hide Highlights", key: "h", modifiers: [.command, .shift], keyGlyph: "H")
     static let delete = AppShortcut(title: "Delete", key: .delete, modifiers: .command, keyGlyph: "⌫")
     static let openInBrowser = AppShortcut(title: "Open in Browser", key: "o", modifiers: [.command, .shift], keyGlyph: "O")

@@ -61,9 +61,11 @@ These are load-bearing. Most architectural questions resolve by appealing to one
 - **Tags** — native app. User and automatically inferred subject Tags appear together as neutral
   Liquid Glass pills, with `tag` on user Tags and `sparkles` on machine Tags. The icon becomes a
   remove control on hover and requires confirmation; removal affects one reading, not the whole
-  library. Both types are stored in each reading's frontmatter; user Tags win case-insensitive
-  duplicates. A removed Tag stays excluded from later machine analysis. (The macOS mockup's
-  "Lists" section is implemented as **Tags** — manual Lists are not planned.)
+  library. An inline field below Tags offers matching library Tags to fill the input; Return adds
+  the entered name as a user Tag. Adding a machine Tag's name gives the user ownership. Both types
+  are stored in each reading's frontmatter; user Tags win case-insensitive duplicates. A removed
+  Tag stays excluded from later machine analysis. (The macOS mockup's "Lists" section is
+  implemented as **Tags** — manual Lists are not planned.)
 - **Curation** — native app. Organize cards with tags or permanently delete cards that no longer
   belong.
 - **Card kind** — every reading is an **article**, **image**, **video**, or **quote**. Older files
@@ -173,7 +175,7 @@ Optional body explaining why, not what.
 
 Good examples:
 ```
-feat: add tag picker sheet to the article header
+feat: add inline tag suggestions to the inspector
 fix(search): include every saved item in search results
 feat(core): add per-reading text highlights
 test: isolate native-host library resolution from the host machine

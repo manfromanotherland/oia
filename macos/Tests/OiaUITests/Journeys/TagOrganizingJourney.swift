@@ -15,11 +15,10 @@ final class TagOrganizingJourney: UITestCase {
 
         openReading(Fixtures.Ids.minimal)
         XCTAssertEqual(reader.titleText, "Minimal")
-        reader.openTagPicker()
-        XCTAssertTrue(tagPicker.isVisible, "tag picker opened")
-        XCTAssertTrue(tagPicker.row("programming").waitExists(), "existing tags are listed")
-        tagPicker.createAndApply(tag)
-        tagPicker.done()
+        reader.focusTagInput()
+        XCTAssertTrue(tagInput.isVisible, "Inspector Tag input opened")
+        XCTAssertTrue(app.byId(A11y.Inspector.attribute("programming")).waitExists())
+        tagInput.add(tag)
         XCTAssertTrue(reader.waitForTag(tag), "#\(tag) appears on the first card")
         XCTAssertTrue(
             waitForFrontmatter(id: Fixtures.Ids.minimal) { $0.tags.contains(tag) },
@@ -28,11 +27,8 @@ final class TagOrganizingJourney: UITestCase {
 
         reader.close()
         openReading(Fixtures.Ids.unicode)
-        reader.openTagPicker()
-        XCTAssertTrue(tagPicker.row(tag).waitExists(), "created tag is available on another card")
-        XCTAssertEqual(tagPicker.orderedRowTags.first, "unicode", "the card's applied tag stays first")
-        tagPicker.toggle(tag)
-        tagPicker.done()
+        reader.focusTagInput()
+        tagInput.add(tag)
         XCTAssertTrue(reader.waitForTag(tag), "#\(tag) appears on the second card")
         XCTAssertTrue(
             waitForFrontmatter(id: Fixtures.Ids.unicode) { $0.tags.contains(tag) },
@@ -41,9 +37,7 @@ final class TagOrganizingJourney: UITestCase {
 
         reader.close()
         openReading(Fixtures.Ids.minimal)
-        reader.openTagPicker()
-        tagPicker.toggle(tag)
-        tagPicker.done()
+        tagInput.remove(tag)
         XCTAssertTrue(
             waitForFrontmatter(id: Fixtures.Ids.minimal) { !$0.tags.contains(tag) },
             "tag removed from minimal's frontmatter"
@@ -52,9 +46,7 @@ final class TagOrganizingJourney: UITestCase {
         XCTAssertTrue(list.row(Fixtures.Ids.minimal).waitExists(), "minimal remains on the board")
 
         openReading(Fixtures.Ids.unicode)
-        reader.openTagPicker()
-        tagPicker.toggle(tag)
-        tagPicker.done()
+        tagInput.remove(tag)
         XCTAssertTrue(
             waitForFrontmatter(id: Fixtures.Ids.unicode) { !$0.tags.contains(tag) },
             "tag removed from unicode's frontmatter"
