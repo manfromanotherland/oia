@@ -12,7 +12,7 @@ and versions track the app's `CFBundleShortVersionString`. See
 - Tags can now be generated locally from saved text and image content. Text tagging uses
   Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share
   neutral Liquid Glass styling, with `tag` and `sparkles` icons respectively. Hovering a Tag
-  reveals a remove control; clicking it asks for confirmation and removes that Tag only from the
+  reveals a remove control; clicking it immediately removes that Tag only from the
   current reading. The label still searches. Matching names merge regardless of capitalization,
   and removed Tags stay excluded from future automatic results on that reading. Both sets are
   saved in the reading's file. A dropdown of matching library Tags can fill the inline field below

@@ -22,6 +22,5 @@ struct InspectorTagInputPage {
 
     func remove(_ tag: String) {
         app.byId(A11y.Inspector.removeTag(tag)).clickWhenReady()
-        app.buttons["Remove tag"].clickWhenReady()
     }
 }

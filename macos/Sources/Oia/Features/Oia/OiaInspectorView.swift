@@ -16,8 +16,6 @@ struct OiaInspectorView: View {
     @State private var loadedID: String?
     @State private var failed = false
     @State private var showsAnalysisInfo = false
-    @State private var tagPendingRemoval: String?
-    @State private var showsTagRemovalConfirmation = false
     @State private var retry = 0
 
     var body: some View {
@@ -52,23 +50,6 @@ struct OiaInspectorView: View {
         .task(id: isVisible ? loadID : "") {
             guard isVisible else { return }
             await load()
-        }
-        .confirmationDialog(
-            "Remove this tag?",
-            isPresented: $showsTagRemovalConfirmation,
-            presenting: tagPendingRemoval
-        ) { tag in
-            Button("Remove tag", role: .destructive) {
-                onToggleTag(tag, false)
-                tagPendingRemoval = nil
-            }
-            Button("Cancel", role: .cancel) { tagPendingRemoval = nil }
-        } message: { tag in
-            Text("“\(tag)” will be removed from this item and won’t be added back automatically.")
-        }
-        .onChange(of: row.id) { _, _ in
-            showsTagRemovalConfirmation = false
-            tagPendingRemoval = nil
         }
     }
 
@@ -159,7 +140,7 @@ struct OiaInspectorView: View {
             title: tag,
             symbol: isMachine ? "sparkles" : "tag",
             onSearch: { onSearch(BoardSearchToken(kind: .tag, value: tag)) },
-            onRemove: { requestTagRemoval(tag) }
+            onRemove: { onToggleTag(tag, false) }
         )
         .accessibilityLabel("\(tag), \(isMachine ? "machine tag" : "your tag")")
         .accessibilityIdentifier(A11y.Inspector.attribute(tag))
@@ -170,14 +151,9 @@ struct OiaInspectorView: View {
                 }
             }
             Button("Remove tag", systemImage: "xmark", role: .destructive) {
-                requestTagRemoval(tag)
+                onToggleTag(tag, false)
             }
         }
-    }
-
-    private func requestTagRemoval(_ tag: String) {
-        tagPendingRemoval = tag
-        showsTagRemovalConfirmation = true
     }
 
     private func sectionTitle(_ text: String) -> some View {

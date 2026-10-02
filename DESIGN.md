@@ -197,9 +197,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   The dialog retains its target cards while background refreshes run and remains open for
   additional names until **Done** or Escape. With one card selected, it shows every user and
   machine Tag. With several selected, it shows the names added during that dialog session.
-  These Tags use the Inspector's same pills, hover removal control, label search, machine ownership
-  action, and removal confirmation. Edits appear immediately; ordered background writes and
-  authoritative row reloads reconcile their stored state, including cards hidden by a tag filter.
+  These Tags use the Inspector's same pills, hover removal control, label search, and machine
+  ownership action. Removal from this dialog requires confirmation. Edits appear immediately;
+  ordered background writes and authoritative row reloads reconcile their stored state, including
+  cards hidden by a tag filter.
 - Delete applies to every selected card after one explicit confirmation. Commands that only make
   sense for one reading, such as opening its source, are unavailable while several cards are
   selected. `⌘Delete` requests the same confirmed permanent deletion.
@@ -216,7 +217,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - The native card context menu provides tag editing, open origin, and permanent delete. On the
   board, **Add Tag…** opens the dialog for the complete selection when the clicked card belongs
   to it, or just that card otherwise. In Gallery, tag editing focuses the Inspector's inline field.
-  Destructive actions retain confirmation.
+  Permanent card deletion retains confirmation.
 
 ### Card detail
 
@@ -240,9 +241,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   Delete. The Tags section shows user and automatically generated subject Tags together, with
   neutral Liquid Glass styling. User Tags show the SF Symbol `tag`; machine Tags show `sparkles`.
   Both icons have the same spacing from the label. Hovering a Tag changes its icon to
-  `xmark.circle.fill`; clicking that icon opens a native confirmation dialog, as with card
-  deletion, before removing the Tag from this reading. The label searches the library. An inline
-  field below the Tags heading filters a dropdown of matching library Tags, like board search.
+  `xmark.circle.fill`; clicking it removes the Tag from this reading immediately. The label
+  searches the library. An inline field below the Tags heading filters a dropdown of matching
+  library Tags, like board search.
   Choosing a suggestion fills the field; Return adds the entered name as a user Tag. Keyboard and
   context-menu tag-editing actions in Gallery focus this field. Adding a user Tag with
   the same spelling ignoring case gives the user Tag ownership in the combined view. Removing any
