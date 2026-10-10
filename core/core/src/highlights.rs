@@ -3,20 +3,24 @@
 //! Per-reading text highlights, stored as a Markdown document.
 //!
 //! Each reading's highlights live in `highlights.md` inside the reading's own
-//! folder, beside its `article.md`. They stay out of the SQLite index, and the
+//! folder, beside its `article.md`. Featured passage text is projected into the
+//! disposable SQLite index, and the
 //! scanner keys on the fixed `article.md` filename, so it never mistakes the
 //! highlights file for a reading. A highlight is the verbatim text the user
 //! selected in the reader; the file renders each as a Markdown block quote
 //! followed by an HTML comment carrying a stable id, so highlights can be listed
 //! and deleted individually while the file stays human-readable.
 
-use std::io::Write as _;
+use std::{
+    fs,
+    io::{Read as _, Write as _},
+};
 
 use anyhow::{bail, Result};
 
 use crate::{
     locking::{lock_reading, ReadingLock},
-    new_id, LibraryRoot,
+    new_id, LibraryRoot, Metadata, ReadingKind,
 };
 
 /// A single saved highlight: a stable id and the verbatim selected text.
@@ -40,10 +44,10 @@ fn list_highlights_under_lock(
 ) -> Result<Vec<Highlight>> {
     lock.ensure_protects(library, reading_id)?;
     let path = library.highlights_path(reading_id);
-    if !path.is_file() {
+    if !fs::symlink_metadata(&path).is_ok_and(|metadata| metadata.file_type().is_file()) {
         return Ok(Vec::new());
     }
-    let content = std::fs::read_to_string(&path)?;
+    let content = fs::read_to_string(&path)?;
     Ok(parse(&content))
 }
 
@@ -52,21 +56,51 @@ fn list_highlights_under_lock(
 /// Duplicates are never stored: re-adding an existing passage returns the
 /// existing highlight unchanged.
 pub fn add_highlight(library: &LibraryRoot, reading_id: &str, text: &str) -> Result<Highlight> {
+    add_highlight_impl(library, reading_id, text, false)
+}
+
+/// Selection ingress requires an existing article before touching its sidecar.
+pub(crate) fn add_featured_highlight(
+    library: &LibraryRoot,
+    reading_id: &str,
+    text: &str,
+) -> Result<Highlight> {
+    add_highlight_impl(library, reading_id, text, true)
+}
+
+fn add_highlight_impl(
+    library: &LibraryRoot,
+    reading_id: &str,
+    text: &str,
+    require_article: bool,
+) -> Result<Highlight> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         bail!("highlight text is empty");
     }
     let lock = lock_reading(library, reading_id)?;
-    let mut highlights = list_highlights_under_lock(library, reading_id, &lock)?;
-    if let Some(existing) = highlights.iter().find(|h| h.text == trimmed) {
-        return Ok(existing.clone());
+    if require_article
+        && crate::scanner::read_reading_for_id(library, reading_id)?
+            .is_none_or(|reading| reading.metadata.kind != ReadingKind::Article)
+    {
+        bail!("article disappeared before the selection could be saved");
     }
-    let highlight = Highlight {
-        id: new_id(),
-        text: trimmed.to_string(),
+    let mut highlights = list_highlights_under_lock(library, reading_id, &lock)?;
+    let highlight = if let Some(existing) = highlights
+        .iter()
+        .find(|highlight| highlight.text == trimmed)
+    {
+        existing.clone()
+    } else {
+        let highlight = Highlight {
+            id: new_id(),
+            text: trimmed.into(),
+        };
+        highlights.push(highlight.clone());
+        write_under_lock(library, reading_id, &highlights, &lock)?;
+        highlight
     };
-    highlights.push(highlight.clone());
-    write_under_lock(library, reading_id, &highlights, &lock)?;
+    update_featured_highlight_under_lock(library, reading_id, Some(&highlight.id), &lock)?;
     Ok(highlight)
 }
 
@@ -88,13 +122,17 @@ pub fn toggle_highlight(library: &LibraryRoot, reading_id: &str, text: &str) -> 
         } else {
             write_under_lock(library, reading_id, &highlights, &lock)?;
         }
+        reconcile_featured_highlight_under_lock(library, reading_id, &highlights, &lock)?;
         Ok(false)
     } else {
-        highlights.push(Highlight {
+        let highlight = Highlight {
             id: new_id(),
             text: trimmed.to_string(),
-        });
+        };
+        let featured_id = highlight.id.clone();
+        highlights.push(highlight);
         write_under_lock(library, reading_id, &highlights, &lock)?;
+        update_featured_highlight_under_lock(library, reading_id, Some(&featured_id), &lock)?;
         Ok(true)
     }
 }
@@ -110,17 +148,19 @@ pub fn delete_highlight(library: &LibraryRoot, reading_id: &str, highlight_id: &
         return Ok(());
     }
     if highlights.is_empty() {
-        delete_all_highlights_under_lock(library, reading_id, &lock)
+        delete_all_highlights_under_lock(library, reading_id, &lock)?;
     } else {
-        write_under_lock(library, reading_id, &highlights, &lock)
+        write_under_lock(library, reading_id, &highlights, &lock)?;
     }
+    reconcile_featured_highlight_under_lock(library, reading_id, &highlights, &lock)
 }
 
 /// Remove a reading's entire highlights file. Used when the reading itself is
 /// deleted. A no-op if the file does not exist.
 pub fn delete_all_highlights(library: &LibraryRoot, reading_id: &str) -> Result<()> {
     let lock = lock_reading(library, reading_id)?;
-    delete_all_highlights_under_lock(library, reading_id, &lock)
+    delete_all_highlights_under_lock(library, reading_id, &lock)?;
+    update_featured_highlight_under_lock(library, reading_id, None, &lock)
 }
 
 fn delete_all_highlights_under_lock(
@@ -133,6 +173,128 @@ fn delete_all_highlights_under_lock(
     if path.is_file() {
         std::fs::remove_file(&path)?;
     }
+    Ok(())
+}
+
+/// Resolve only the featured ID from the durable sidecar. Missing, externally
+/// removed, or malformed passages produce no preview; the article stays valid.
+pub(crate) fn featured_highlight_text(
+    library: &LibraryRoot,
+    metadata: &Metadata,
+) -> Option<String> {
+    if metadata.kind != ReadingKind::Article {
+        return None;
+    }
+    let featured_id = metadata.featured_highlight_id.as_deref()?;
+    let directory = crate::notes::open_reading_dir_components(library, &metadata.id).ok()?;
+    let descriptor = rustix::fs::openat(
+        &directory,
+        "highlights.md",
+        rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::CLOEXEC | rustix::fs::OFlags::NOFOLLOW,
+        rustix::fs::Mode::empty(),
+    )
+    .ok()?;
+    let mut file = fs::File::from(descriptor);
+    if !file.metadata().ok()?.is_file() {
+        return None;
+    }
+    let mut text = String::new();
+    file.read_to_string(&mut text).ok()?;
+    parse(&text)
+        .into_iter()
+        .find(|highlight| highlight.id == featured_id && !highlight.text.trim().is_empty())
+        .map(|highlight| highlight.text)
+}
+
+fn reconcile_featured_highlight_under_lock(
+    library: &LibraryRoot,
+    reading_id: &str,
+    highlights: &[Highlight],
+    lock: &ReadingLock,
+) -> Result<()> {
+    let Some(reading) = crate::scanner::read_reading_for_id(library, reading_id)? else {
+        return Ok(());
+    };
+    if reading
+        .metadata
+        .featured_highlight_id
+        .as_ref()
+        .is_some_and(|id| !highlights.iter().any(|highlight| &highlight.id == id))
+    {
+        update_featured_highlight_under_lock(
+            library,
+            reading_id,
+            highlights.last().map(|highlight| highlight.id.as_str()),
+            lock,
+        )?;
+    }
+    Ok(())
+}
+
+/// Patch just this scalar in frontmatter, preserving unknown YAML, Markdown
+/// bytes, source_hash, and file permissions. The full snapshot is rechecked
+/// immediately before rename so an external writer's changed file is retained.
+fn update_featured_highlight_under_lock(
+    library: &LibraryRoot,
+    reading_id: &str,
+    featured_id: Option<&str>,
+    lock: &ReadingLock,
+) -> Result<()> {
+    lock.ensure_protects(library, reading_id)?;
+    let Some(reading) = crate::scanner::read_reading_for_id(library, reading_id)? else {
+        return Ok(());
+    };
+    if reading.metadata.kind != ReadingKind::Article
+        || reading.metadata.featured_highlight_id.as_deref() == featured_id
+    {
+        return Ok(());
+    }
+    let path = library.article_path(reading_id);
+    let original = fs::read_to_string(&path)?;
+    let parsed = crate::parse_reading(&original)?;
+    if parsed.metadata.id != reading_id || parsed.metadata.kind != ReadingKind::Article {
+        bail!("reading changed while featuring a highlight");
+    }
+    let rest = original
+        .strip_prefix("---\n")
+        .ok_or_else(|| anyhow::anyhow!("missing frontmatter"))?;
+    let close = rest
+        .find("\n---\n")
+        .ok_or_else(|| anyhow::anyhow!("missing frontmatter close"))?;
+    let mut retained = String::new();
+    let mut skipping = false;
+    for line in rest[..close].split_inclusive('\n') {
+        let top_level = !line.starts_with([' ', '\t']) && !line.trim().is_empty();
+        if top_level && !line.starts_with('#') {
+            skipping = line.split_once(':').is_some_and(|(key, _)| {
+                key.trim().trim_matches(['\'', '"']) == "featured_highlight_id"
+            });
+        }
+        if !skipping || (top_level && line.starts_with('#')) {
+            retained.push_str(line);
+        }
+    }
+    if !retained.ends_with('\n') {
+        retained.push('\n');
+    }
+    if let Some(id) = featured_id {
+        retained.push_str("featured_highlight_id: ");
+        retained.push_str(&serde_yaml::to_string(id)?);
+    }
+    let updated = format!("---\n{retained}{}", &rest[close + 1..]);
+    let mut staged = tempfile::NamedTempFile::new_in(library.reading_dir(reading_id))?;
+    staged
+        .as_file()
+        .set_permissions(fs::metadata(&path)?.permissions())?;
+    staged.write_all(updated.as_bytes())?;
+    staged.as_file().sync_all()?;
+    if fs::read_to_string(&path)? != original {
+        bail!(
+            "reading changed while featuring a highlight; selection was retained in highlights.md"
+        );
+    }
+    staged.persist(&path).map_err(|error| error.error)?;
+    fs::File::open(library.reading_dir(reading_id))?.sync_all()?;
     Ok(())
 }
 

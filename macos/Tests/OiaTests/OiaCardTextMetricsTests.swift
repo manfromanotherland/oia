@@ -5,6 +5,20 @@ import XCTest
 
 @MainActor
 final class OiaCardTextMetricsTests: XCTestCase {
+    func testHighlightHeightTracksPassageAndVisibleLineLimit() {
+        let metrics = OiaCardTextMetrics()
+        let short = "A selected passage."
+        let paragraphs = "A first selected paragraph.\nA second selected paragraph.\nA third selected paragraph."
+        XCTAssertGreaterThan(
+            metrics.highlightCardHeight(for: paragraphs, width: 300, cardSize: .medium),
+            metrics.highlightCardHeight(for: short, width: 300, cardSize: .medium)
+        )
+        XCTAssertEqual(
+            metrics.highlightCardHeight(for: String(repeating: "line\n", count: 20), width: 300, cardSize: .medium),
+            metrics.highlightCardHeight(for: String(repeating: "line\n", count: 40), width: 300, cardSize: .medium)
+        )
+    }
+
     func testWidthScopedCacheReusesRecentWidthsAndEvictsTheOldest() {
         var cache = WidthScopedHeightCache<String>()
         var calculations = 0
@@ -344,7 +358,7 @@ extension OiaCardTextMetricsTests {
         description: String?,
         width: CGFloat
     ) -> CGFloat {
-        var row = makeReadingRow(wordCount: 2_500)
+        var row = makeReadingRow(wordCount: 2500)
         row.title = title
         row.cardDescription = description
         row.site = "example.com"

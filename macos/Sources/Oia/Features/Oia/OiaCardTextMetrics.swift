@@ -12,7 +12,7 @@ struct WidthScopedHeightCache<Key: Hashable> {
     private let maximumWidths: Int
     private let maximumEntriesPerWidth: Int
 
-    init(maximumWidths: Int = 3, maximumEntriesPerWidth: Int = 20_000) {
+    init(maximumWidths: Int = 3, maximumEntriesPerWidth: Int = 20000) {
         self.maximumWidths = max(1, maximumWidths)
         self.maximumEntriesPerWidth = max(1, maximumEntriesPerWidth)
     }
@@ -119,6 +119,9 @@ final class OiaCardTextMetrics {
     static let quoteLineLimit = 12
     static let quoteDetailPointSize: CGFloat = 34
     static let quoteDetailLineSpacing: CGFloat = 10
+    static let highlightPadding: CGFloat = 20
+    static let highlightLineSpacing: CGFloat = 4
+    static let highlightLineLimit = 12
     static let socialPostPadding: CGFloat = 16
     static let socialPostSpacing: CGFloat = 12
     static let socialPostHeaderHeight = max(
@@ -141,6 +144,7 @@ final class OiaCardTextMetrics {
     private var articleFooterHeights = WidthScopedHeightCache<String>()
     private var fullArticleHeights = WidthScopedHeightCache<FullArticleHeightKey>()
     private var quoteHeights = WidthScopedHeightCache<QuoteHeightKey>()
+    private var highlightHeights = WidthScopedHeightCache<QuoteHeightKey>()
     private var socialPostHeights = WidthScopedHeightCache<SocialPostHeightKey>()
 
     func articleFooterHeight(for title: String, width: CGFloat) -> CGFloat {
@@ -207,6 +211,25 @@ final class OiaCardTextMetrics {
                     + markHeight * 2
                     + markSpacing * 2
                     + measured
+            )
+        }
+    }
+
+    static func highlightFont(for cardSize: CardSize) -> NSFont {
+        NSFont.systemFont(ofSize: quotePointSize(for: cardSize))
+    }
+
+    func highlightCardHeight(for text: String, width: CGFloat, cardSize: CardSize) -> CGFloat {
+        let textWidth = max(1, width - Self.highlightPadding * 2)
+        let halfPointWidth = Int((textWidth * 2).rounded())
+        let key = QuoteHeightKey(text: text, cardSize: cardSize)
+        return highlightHeights.value(for: key, width: halfPointWidth) {
+            Self.highlightPadding * 2 + Self.measuredTextHeight(
+                text,
+                width: CGFloat(halfPointWidth) / 2,
+                font: Self.highlightFont(for: cardSize),
+                lineSpacing: Self.highlightLineSpacing,
+                lineLimit: Self.highlightLineLimit
             )
         }
     }

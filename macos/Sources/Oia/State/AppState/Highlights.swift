@@ -44,12 +44,16 @@ extension AppState {
         } catch {
             self.error = error.localizedDescription
         }
+        await refresh()
     }
 
     /// Toggle a highlight for `id`: clears it if the exact passage is already
     /// highlighted, otherwise adds it. Reloads either way.
     func toggleHighlight(id: String, text: String) async {
         guard let core else { return }
+        if let highlight = highlights.first(where: { $0.text == text.trimmingCharacters(in: .whitespacesAndNewlines) }) {
+            removeHighlightOptimistically(readingId: id, highlightId: highlight.id)
+        }
         beginLibraryWrite()
         defer { endLibraryWrite() }
         do {
@@ -58,14 +62,29 @@ extension AppState {
         } catch {
             self.error = error.localizedDescription
         }
+        await refresh()
     }
 
     /// Remove a single highlight from `id`, then reload.
     func deleteHighlight(id: String, highlightId: String) async {
         guard let core else { return }
+        removeHighlightOptimistically(readingId: id, highlightId: highlightId)
         beginLibraryWrite()
         defer { endLibraryWrite() }
         try? await core.deleteHighlight(readingId: id, highlightId: highlightId)
         await loadHighlights(id: id)
+        await refresh()
+    }
+
+    private func removeHighlightOptimistically(readingId: String, highlightId: String) {
+        guard selectedId == readingId,
+              let removed = highlights.first(where: { $0.id == highlightId })
+        else { return }
+        highlights.removeAll { $0.id == highlightId }
+        if let index = readings.firstIndex(where: { $0.id == readingId }),
+           readings[index].featuredHighlightText == removed.text
+        {
+            readings[index].featuredHighlightText = highlights.last?.text
+        }
     }
 }

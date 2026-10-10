@@ -30,7 +30,7 @@ describe("capture contract", () => {
       { kind: "video", mediaUrl: "https://e.com/video.mp4" },
     );
     expect(contextCaptureTarget({ selectionText: "  A selected thought  " })).toEqual({
-      kind: "quote",
+      kind: "selection",
       text: "A selected thought",
     });
     expect(contextCaptureTarget({})).toEqual({ kind: "article" });

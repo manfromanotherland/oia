@@ -14,6 +14,7 @@ import type {
   SaveKind,
   SaveLinkRequest,
   SaveRequest,
+  SaveSelectionRequest,
   SaveResponse,
 } from "./protocol.js";
 import { PROTOCOL_VERSION } from "./protocol.js";
@@ -49,6 +50,8 @@ import {
   isToolbarSaveMessage,
   type ToolbarSaveKind,
 } from "./toolbar.js";
+import type { SelectionCapture } from "./selection-capture.js";
+import { buildSaveSelectionRequest } from "./selection-request.js";
 
 const NOTIF_HOST_MISSING = "host-missing";
 
@@ -149,12 +152,19 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
  * message fails, inject the script programmatically (allowed by the `<all_urls>`
  * host permission) and retry once.
  */
-async function requestContentResponse<T>(tabId: number, message: object): Promise<T> {
+export async function requestContentResponse<T>(
+  tabId: number,
+  message: object,
+  frameId = 0,
+): Promise<T> {
   try {
-    return (await chrome.tabs.sendMessage(tabId, message)) as T;
+    return (await chrome.tabs.sendMessage(tabId, message, { frameId })) as T;
   } catch {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["dist/content.js"] });
-    return (await chrome.tabs.sendMessage(tabId, message)) as T;
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [frameId] },
+      files: ["dist/content.js"],
+    });
+    return (await chrome.tabs.sendMessage(tabId, message, { frameId })) as T;
   }
 }
 
@@ -183,16 +193,21 @@ function requestMediaCapture(
   });
 }
 
-function requestQuoteCapture(
+function requestSelectionCapture(
   tabId: number,
   pageUrl: string,
   text: string,
-): Promise<PageCapture | { error: string }> {
-  return requestContentResponse(tabId, {
-    action: "capture-quote",
-    pageUrl,
-    text,
-  });
+  frameId: number,
+): Promise<SelectionCapture | { error: string }> {
+  return requestContentResponse(
+    tabId,
+    {
+      action: "capture-selection",
+      pageUrl,
+      text,
+    },
+    frameId,
+  );
 }
 
 async function requestScreenshotPageState(
@@ -515,45 +530,55 @@ async function saveMedia(
   await saveCapture(tab, capture);
 }
 
-async function saveQuote(tab: chrome.tabs.Tab, text: string): Promise<void> {
+async function saveSelection(
+  tab: chrome.tabs.Tab,
+  text: string,
+  frameId: number,
+  pageUrl: string,
+): Promise<void> {
   const tabId = tab.id;
   if (!tabId || !tab.url || !text.trim()) {
-    await log("warn", "Save quote ignored: missing tab, page URL, or selected text", {
+    await log("warn", "Save selection ignored: missing tab, page URL, or selected text", {
       tabId,
       pageUrl: tab.url,
     });
     return;
   }
 
-  await log("info", "Save triggered", { kind: "quote", url: tab.url });
-  await showToast(tabId, "loading", "Saving quote…");
+  await log("info", "Save triggered", { kind: "selection", url: pageUrl });
+  await showToast(tabId, "loading", "Saving selection…");
 
-  let capture: PageCapture;
+  let capture: SelectionCapture;
   try {
-    const result = await requestQuoteCapture(tabId, tab.url, text);
+    const result = await requestSelectionCapture(tabId, pageUrl, text, frameId);
     if (result && "error" in result && result.error) {
       await showBadge(tabId, "error");
-      await showToast(tabId, "error", "Couldn't save quote", result.error);
-      await log("error", "Quote capture failed", { url: tab.url, error: result.error });
+      await showToast(tabId, "error", "Couldn't save selection", result.error);
+      await log("error", "Selection capture failed", { url: pageUrl, error: result.error });
       return;
     }
-    capture = result as PageCapture;
+    capture = result as SelectionCapture;
   } catch (err) {
     await showBadge(tabId, "error");
     await showToast(
       tabId,
       "error",
-      "Couldn't save quote",
+      "Couldn't save selection",
       "The selected text couldn't be read from this page.",
     );
-    await log("error", "Could not reach content script for quote capture", {
+    await log("error", "Could not reach content script for selection capture", {
       url: tab.url,
       error: err,
     });
     return;
   }
 
-  await saveCapture(tab, capture);
+  capture.images = await completeCaptureImages(capture);
+  await persistSave(tab, buildSaveSelectionRequest(capture), {
+    ...feedbackFor(capture, "selection"),
+    selection: true,
+    sourceUrl: pageUrl,
+  });
 }
 
 async function saveCapture(
@@ -704,7 +729,7 @@ function deduplicateImages(images: ImageData[]): ImageData[] {
   });
 }
 
-type NativeSaveRequest = SaveRequest | SaveLinkRequest;
+type NativeSaveRequest = SaveRequest | SaveLinkRequest | SaveSelectionRequest;
 
 interface SaveFeedback {
   kind: SaveKind;
@@ -712,6 +737,8 @@ interface SaveFeedback {
   title: string;
   canonicalUrl: string;
   mediaUrl?: string;
+  selection?: boolean;
+  sourceUrl?: string;
 }
 
 function feedbackFor(capture: PageCapture, itemOverride?: string): SaveFeedback {
@@ -761,8 +788,16 @@ async function presentSaveResponse(
 ): Promise<void> {
   const tabId = tab.id!;
   if (response.ok) {
-    await showToast(tabId, "ok", "Saved to Óia", feedback.title);
-    if (feedback.kind === "article") {
+    const title =
+      feedback.selection && response.selection_kind
+        ? `Saved ${response.selection_kind} to Óia`
+        : "Saved to Óia";
+    await showToast(tabId, "ok", title, feedback.title);
+    if (
+      feedback.kind === "article" &&
+      (!feedback.selection ||
+        (response.selection_kind === "highlight" && feedback.sourceUrl === tab.url))
+    ) {
       markSaved(tabId, tab.url!, feedback.canonicalUrl);
     }
     await log("info", "Saved", {
@@ -773,7 +808,7 @@ async function presentSaveResponse(
     });
   } else if (response.error === "duplicate") {
     await showToast(tabId, "ok", "Already in Óia", feedback.title);
-    if (feedback.kind === "article") {
+    if (feedback.kind === "article" && !feedback.selection) {
       markSaved(tabId, tab.url!, feedback.canonicalUrl);
     }
     await log("info", "Already saved (duplicate)", { url: tab.url });
@@ -836,8 +871,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   const target = contextCaptureTarget(info);
   if (target.kind === "article") {
     void savePage(tab);
-  } else if (target.kind === "quote") {
-    void saveQuote(tab, target.text);
+  } else if (target.kind === "selection") {
+    void saveSelection(tab, target.text, info.frameId ?? 0, info.frameUrl ?? tab.url ?? "");
   } else if (target.mediaUrl) {
     void saveMedia(tab, target.kind, target.mediaUrl);
   }

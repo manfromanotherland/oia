@@ -167,7 +167,7 @@ fn open_reading_dir(library: &LibraryRoot, reading_id: &str) -> Result<rustix::f
 /// Open and pin a reading directory without requiring its article commit
 /// marker. Callers must validate the article separately unless they are in the
 /// narrow pre-commit import path.
-fn open_reading_dir_components(
+pub(crate) fn open_reading_dir_components(
     library: &LibraryRoot,
     reading_id: &str,
 ) -> Result<rustix::fd::OwnedFd> {
@@ -225,6 +225,7 @@ mod tests {
             author: None,
             site: Some("example.com".to_string()),
             product: None,
+            featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

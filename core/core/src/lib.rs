@@ -24,6 +24,7 @@ pub mod rating;
 pub mod reconcile;
 pub mod scanner;
 mod search;
+pub mod selection;
 pub mod source_capture;
 pub mod status;
 pub mod tags;
@@ -64,6 +65,10 @@ pub use product::{
 pub use rating::{list_ratings, set_rating};
 pub use reconcile::{apply_diffs, rebuild};
 pub use scanner::{diff, scan_library, ScanDiff, ScannedReading};
+pub use selection::{
+    save_selection, selection_kind, SelectionContext, SelectionKind, SelectionSaveInput,
+    MAX_SELECTION_TEXT_BYTES,
+};
 pub use source_capture::{
     find_saved_url, save_special_url, save_url, SaveUrlError, UrlSaveRequest,
 };

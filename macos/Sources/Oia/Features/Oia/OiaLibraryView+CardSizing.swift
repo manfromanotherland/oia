@@ -15,6 +15,11 @@ extension OiaLibraryView {
                 cardSize: cardSize
             )
         case .article:
+            if let highlight = row.featuredHighlight {
+                return cardTextMetrics.highlightCardHeight(
+                    for: highlight, width: width, cardSize: cardSize
+                )
+            }
             if let profile = row.socialPostProfile {
                 return cardTextMetrics.socialPostCardHeight(
                     for: row.socialPostText,

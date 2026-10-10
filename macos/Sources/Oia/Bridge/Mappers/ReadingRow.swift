@@ -92,6 +92,8 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var mediaAspectRatio: Double?
     var sourceProfile: ReadingSourceProfile?
     var product: ReadingProductMetadata?
+    /// Verbatim passage resolved by core from the article's featured highlight.
+    var featuredHighlightText: String?
 }
 
 extension ReadingRow {
@@ -127,10 +129,19 @@ extension ReadingRow {
         mediaAspectRatio = row.mediaAspectRatio
         sourceProfile = ReadingSourceProfile.decode(row.sourceProfileJson)
         product = ReadingProductMetadata.decode(row.productJson)
+        featuredHighlightText = row.featuredHighlightText
     }
 }
 
 extension ReadingRow {
+    var featuredHighlight: String? {
+        guard kind == .article,
+              let text = featuredHighlightText,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        else { return nil }
+        return text
+    }
+
     /// Presentation-only mirror of a file-first tag edit until refresh settles it.
     mutating func applyTagEdit(_ tag: String, applies: Bool) {
         if applies {

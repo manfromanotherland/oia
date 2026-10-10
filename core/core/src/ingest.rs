@@ -614,6 +614,7 @@ fn save_capture_under_lock_with_state(
         site: input.site,
         source_profile,
         product: input.product.and_then(crate::product::validate_product),
+        featured_highlight_id: None,
         saved_at: input.saved_at,
         read_at: None,
         archived: false,
@@ -630,6 +631,7 @@ fn save_capture_under_lock_with_state(
 
     if let Some(previous) = previous.filter(|_| upgrading || enriching || replacing_source) {
         let previous = previous.reading.metadata;
+        metadata.featured_highlight_id = previous.featured_highlight_id;
         metadata.saved_at = previous.saved_at;
         metadata.read_at = previous.read_at;
         metadata.archived = previous.archived;
@@ -1442,6 +1444,7 @@ fn save_staged_video(
         site,
         source_profile: None,
         product: None,
+        featured_highlight_id: None,
         saved_at: imported_saved_at(saved_at),
         read_at: None,
         archived: false,
@@ -2688,6 +2691,7 @@ mod tests {
             site: Some("x.com".into()),
             source_profile: Some(source_profile(vec![])),
             product: None,
+            featured_highlight_id: None,
             saved_at: "2026-09-22T18:42:00.000Z".into(),
             read_at: None,
             archived: false,

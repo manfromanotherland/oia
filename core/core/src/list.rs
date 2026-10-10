@@ -141,6 +141,8 @@ pub struct ReadingRow {
     pub source_profile_json: Option<String>,
     /// Disposable projection of the file-backed product presentation snapshot.
     pub product_json: Option<String>,
+    /// Featured passage derived from article.md and highlights.md.
+    pub featured_highlight_text: Option<String>,
     /// Representative exact sRGB cluster from the current derived visual
     /// analysis. A large extreme-neutral canvas may yield to a substantial
     /// secondary surface colour. This is presentation metadata only; the
@@ -756,7 +758,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text
          FROM readings
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -957,14 +959,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json,
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(29)?;
+        let body: String = row.get(30)?;
         Ok((row_data, body))
     })?;
 
@@ -1030,7 +1032,7 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json
+                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json, r.featured_highlight_text
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -1155,6 +1157,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         theme_color: row.get(20)?,
         source_profile_json,
         product_json,
+        featured_highlight_text: row.get(29)?,
         dominant_color,
         media_aspect_ratio: row.get(23)?,
         canonical_url: row.get(3)?,
@@ -1237,6 +1240,7 @@ mod tests {
             author: None,
             site: None,
             product: None,
+            featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

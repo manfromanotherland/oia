@@ -122,6 +122,9 @@ struct ArticleDetailView: View {
                     OversizeNotice(url: row.sourceURL)
                 }
             }
+        } else if row.lightweight, let highlight = row.featuredHighlight {
+            excerptFallback(row: row, excerpt: highlight)
+                .id(row.id)
         } else if let articleDocument {
             reader(row: row, document: articleDocument)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

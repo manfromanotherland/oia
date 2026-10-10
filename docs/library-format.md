@@ -148,6 +148,9 @@ is true for a link saved without a cleaned article body, from either the app or 
   local favicon. A later full browser capture at the same URL replaces the captured metadata/body
   and clears this marker while preserving `saved_at`, state, rating, and tags.
 - `kind` is one of `article`, `image`, `video`, or `quote`.
+- `featured_highlight_id`, when present on an article, refers to a stable highlight id in that
+  reading's `highlights.md`. It changes the card preview, not the article's identity or saved body.
+  Clients resolve the passage from the sidecar; a missing or externally removed id has no preview.
 - `media_url` is meaningful only for `image` and `video` cards. Every newly browser-saved video is
   streamed or recorded into the library and uses `cuttings-asset:assets/<filename>` as its
   content-derived identity; transient `blob:` and `data:` URLs are never persisted. Source-less
@@ -294,6 +297,16 @@ Markdown block quote, ended by an HTML comment carrying a stable id:
 
 The scanner keys on the fixed `article.md` name, so a reading's `highlights.md` (and its `assets/`)
 are never mistaken for readings.
+
+Ordinary browser selections save or reuse an article at its URL-derived id, add their verbatim
+passage to this file, and set `featured_highlight_id` in its frontmatter. Re-selecting a passage
+features its existing highlight instead of duplicating it. Full recaptures preserve highlights
+and the featured reference. The disposable index derives the featured passage from these files
+and reconciles changes to either file, including external sidecar edits.
+
+Browser selections wholly enclosed in matching quotation marks or a single `<blockquote>`/`<q>`
+element instead use the existing quote-card identity and Markdown representation. Missing or
+mismatched DOM evidence defaults to an article highlight.
 
 ---
 

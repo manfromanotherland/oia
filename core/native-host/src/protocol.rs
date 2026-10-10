@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use oia_core::ReadingKind;
+use oia_core::{ReadingKind, SelectionContext, SelectionKind};
 
 /// The wire protocol version shared with the browser extension.
 pub const PROTOCOL_VERSION: u32 = 4;
@@ -21,6 +21,16 @@ pub struct SaveRequest {
     pub preview_url: Option<String>,
     #[serde(default)]
     pub favicon_url: Option<String>,
+}
+
+/// Save selected text with its whole-page capture; Rust classifies quote or highlight.
+#[derive(Debug, Deserialize)]
+pub struct SaveSelectionRequest {
+    #[serde(flatten)]
+    pub capture: SaveRequest,
+    pub selected_text: String,
+    #[serde(default)]
+    pub selection_context: Option<SelectionContext>,
 }
 
 /// Incoming lightweight-link request with metadata/assets read from the live page.
@@ -123,6 +133,9 @@ pub struct SaveResponse {
     /// Present only in responses to a `check` action.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub saved: Option<bool>,
+    /// Present only after a successful `save_selection` action.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub selection_kind: Option<SelectionKind>,
 }
 
 impl SaveResponse {
@@ -135,6 +148,7 @@ impl SaveResponse {
             error: None,
             message: None,
             saved: None,
+            selection_kind: None,
         }
     }
 
@@ -147,6 +161,7 @@ impl SaveResponse {
             error: None,
             message: None,
             saved: None,
+            selection_kind: None,
         }
     }
 
@@ -159,6 +174,7 @@ impl SaveResponse {
             error: Some(code.to_string()),
             message: Some(msg.to_string()),
             saved: None,
+            selection_kind: None,
         }
     }
 
@@ -167,6 +183,7 @@ impl SaveResponse {
             protocol_version: PROTOCOL_VERSION,
             ok: true,
             saved: Some(is_saved),
+            selection_kind: None,
             id,
             path: None,
             error: None,

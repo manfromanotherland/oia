@@ -73,6 +73,15 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 12 {
         migrate_v12(conn)?;
     }
+    if version < 13 {
+        migrate_v13(conn)?;
+    }
+    Ok(())
+}
+
+/// v13: resolve the featured passage from the article pointer and sidecar files.
+fn migrate_v13(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN; ALTER TABLE readings ADD COLUMN featured_highlight_text TEXT; PRAGMA user_version = 13; COMMIT;")?;
     Ok(())
 }
 
@@ -544,7 +553,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
 
         // readings table exists
         let count: i64 = conn
@@ -659,7 +668,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -824,7 +833,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
         assert_eq!(projected, None);
     }
 
@@ -932,7 +941,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -974,7 +983,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 12);
+        assert_eq!(version, 13);
 
         let values: (i64, i64, String) = conn
             .query_row(

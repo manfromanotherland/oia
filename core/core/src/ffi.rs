@@ -52,6 +52,7 @@ pub struct FfiReadingRow {
     pub theme_color: Option<String>,
     pub source_profile_json: Option<String>,
     pub product_json: Option<String>,
+    pub featured_highlight_text: Option<String>,
     pub dominant_color: Option<FfiWeightedColor>,
     pub media_aspect_ratio: Option<f64>,
     pub canonical_url: String,
@@ -325,6 +326,7 @@ impl From<crate::list::ReadingRow> for FfiReadingRow {
             theme_color: r.theme_color,
             source_profile_json: r.source_profile_json,
             product_json: r.product_json,
+            featured_highlight_text: r.featured_highlight_text,
             dominant_color: r.dominant_color.map(|color| FfiWeightedColor {
                 red: color.red,
                 green: color.green,
@@ -778,7 +780,7 @@ impl Database {
         // Cache pruning belongs to the next visual reconciliation, rather than
         // walking every cached image for a one-reading filesystem event.
         Ok(Some((diffs.len() as u32).max(u32::from(
-            crate::scanner::changed_paths_include_assets(&lib, &changed_paths),
+            crate::scanner::changed_paths_require_presentation_refresh(&lib, &changed_paths),
         ))))
     }
 
@@ -1350,9 +1352,12 @@ impl Database {
         text: String,
     ) -> Result<FfiHighlight, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
-        crate::add_highlight(&lib, &reading_id, &text)
-            .map_err(e)
-            .map(Into::into)
+        let highlight = crate::add_highlight(&lib, &reading_id, &text).map_err(e)?;
+        self.sync_paths(
+            library_path,
+            vec![lib.article_path(&reading_id).display().to_string()],
+        )?;
+        Ok(highlight.into())
     }
 
     /// Toggle a highlight by its text: removes it if the exact passage is
@@ -1365,7 +1370,12 @@ impl Database {
         text: String,
     ) -> Result<bool, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
-        crate::toggle_highlight(&lib, &reading_id, &text).map_err(e)
+        let highlighted = crate::toggle_highlight(&lib, &reading_id, &text).map_err(e)?;
+        self.sync_paths(
+            library_path,
+            vec![lib.article_path(&reading_id).display().to_string()],
+        )?;
+        Ok(highlighted)
     }
 
     /// Remove a single highlight from a reading.
@@ -1376,7 +1386,12 @@ impl Database {
         highlight_id: String,
     ) -> Result<(), CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
-        crate::delete_highlight(&lib, &reading_id, &highlight_id).map_err(e)
+        crate::delete_highlight(&lib, &reading_id, &highlight_id).map_err(e)?;
+        self.sync_paths(
+            library_path,
+            vec![lib.article_path(&reading_id).display().to_string()],
+        )?;
+        Ok(())
     }
 }
 
@@ -2118,6 +2133,69 @@ mod tests {
                 > 0,
             "asset events must invalidate presentation even when indexed metadata is unchanged"
         );
+    }
+
+    #[test]
+    fn precise_path_sync_invalidates_nonfeatured_highlight_edits_and_removals() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        let imported =
+            crate::import_link(&library, "https://example.com/highlight-events").unwrap();
+        let first = crate::add_highlight(&library, &imported.id, "First passage").unwrap();
+        let featured = crate::add_highlight(&library, &imported.id, "Featured passage").unwrap();
+        database.sync(library_path.clone()).unwrap();
+        let before = crate::scan_library(&library).unwrap();
+        let sidecar = library.highlights_path(&imported.id);
+
+        for (contents, expected_count) in [
+            (
+                format!(
+                    "> Edited passage\n<!-- hl {} -->\n\n> Featured passage\n<!-- hl {} -->\n",
+                    first.id, featured.id
+                ),
+                2,
+            ),
+            (
+                format!("> Featured passage\n<!-- hl {} -->\n", featured.id),
+                1,
+            ),
+        ] {
+            std::fs::write(&sidecar, contents).unwrap();
+            assert!(
+                crate::diff(&before, &crate::scan_library(&library).unwrap()).is_empty(),
+                "nonfeatured edits leave the disposable index projection unchanged"
+            );
+            assert_eq!(
+                database
+                    .sync_paths_if_precise(
+                        library_path.clone(),
+                        vec![sidecar.display().to_string()]
+                    )
+                    .unwrap(),
+                Some(1),
+                "a precise sidecar event must still refresh reader highlights"
+            );
+            let highlights = database
+                .list_highlights(library_path.clone(), imported.id.clone())
+                .unwrap();
+            assert_eq!(highlights.len(), expected_count);
+            if expected_count == 2 {
+                assert_eq!(highlights[0].text, "Edited passage");
+            }
+            assert_eq!(
+                database
+                    .get_reading_row(imported.id.clone())
+                    .unwrap()
+                    .unwrap()
+                    .featured_highlight_text
+                    .as_deref(),
+                Some("Featured passage")
+            );
+        }
     }
 
     #[test]

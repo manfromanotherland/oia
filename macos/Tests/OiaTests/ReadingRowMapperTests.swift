@@ -27,6 +27,7 @@ final class ReadingRowMapperTests: XCTestCase {
             "attachments":[]}
             """,
             productJson: nil,
+            featuredHighlightText: "A saved passage from the source.",
             dominantColor: FfiWeightedColor(red: 0.1, green: 0.2, blue: 0.3, weight: 0.6),
             mediaAspectRatio: 16.0 / 9.0,
             canonicalUrl: "https://example.com/article?canonical",
@@ -82,6 +83,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.dominantColor?.blue, ffi.dominantColor?.blue)
         XCTAssertEqual(row.dominantColor?.weight, ffi.dominantColor?.weight)
         XCTAssertEqual(row.mediaAspectRatio, ffi.mediaAspectRatio)
+        XCTAssertEqual(row.featuredHighlightText, ffi.featuredHighlightText)
     }
 
     func testOptionalFieldsPreserveNil() {
@@ -95,6 +97,7 @@ final class ReadingRowMapperTests: XCTestCase {
         ffi.themeColor = nil
         ffi.sourceProfileJson = nil
         ffi.productJson = nil
+        ffi.featuredHighlightText = nil
         ffi.dominantColor = nil
         ffi.mediaAspectRatio = nil
         ffi.author = nil
@@ -121,6 +124,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.themeColor)
         XCTAssertNil(row.sourceProfile)
         XCTAssertNil(row.product)
+        XCTAssertNil(row.featuredHighlight)
         XCTAssertNil(row.dominantColor)
         XCTAssertNil(row.mediaAspectRatio)
         XCTAssertTrue(row.tags.isEmpty)
@@ -131,6 +135,30 @@ final class ReadingRowMapperTests: XCTestCase {
         var ffi = sampleFfiRow()
         ffi.kind = .quote
         XCTAssertEqual(ReadingRow(ffi).kind, .quote)
+    }
+
+    func testFeaturedPassageUsesArticleIdentityAndIgnoresStaleNonArticleMetadata() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .article
+        let article = ReadingRow(ffi)
+        XCTAssertEqual(article.featuredHighlight, ffi.featuredHighlightText)
+        XCTAssertEqual(article.id, ffi.id)
+        XCTAssertEqual(article.boardGeometryKey, .highlight("A saved passage from the source."))
+
+        ffi.kind = .quote
+        XCTAssertNil(ReadingRow(ffi).featuredHighlight)
+    }
+
+    func testEmptyFeaturedPassageDoesNotOverrideArticleCard() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .article
+        ffi.sourceProfileJson = nil
+        ffi.featuredHighlightText = " \n\t "
+        let row = ReadingRow(ffi)
+        XCTAssertNil(row.featuredHighlight)
+        if case .highlight = row.boardGeometryKey {
+            XCTFail("Whitespace cannot become a highlighted passage card")
+        }
     }
 
     func testMapsProductPriceAndKeepsFullCaptureOutOfArticlePresentation() {

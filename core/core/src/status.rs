@@ -104,6 +104,10 @@ where
         modified_at,
         path: updated_path,
         has_note: crate::scanner::note_file_exists(library, &updated.metadata.id),
+        featured_highlight_text: crate::highlights::featured_highlight_text(
+            library,
+            &updated.metadata,
+        ),
         visual_asset,
         media_aspect_ratio,
         body: updated.body,
@@ -143,6 +147,7 @@ mod tests {
             author: None,
             site: None,
             product: None,
+            featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

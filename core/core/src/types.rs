@@ -141,6 +141,9 @@ pub struct Metadata {
     /// Snapshot of the main product advertised by this article or link.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub product: Option<ProductMetadata>,
+    /// Stable ID in highlights.md whose passage is featured on the board.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub featured_highlight_id: Option<String>,
     pub saved_at: String,
     /// UTC ISO-8601 timestamp (millisecond precision, `Z` suffix — same format
     /// as `saved_at`) of the most recent time the reading was marked read.

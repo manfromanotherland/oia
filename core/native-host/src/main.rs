@@ -5,14 +5,15 @@ mod install;
 mod protocol;
 mod save;
 mod save_link;
+mod save_selection;
 mod video_import;
 
 use std::io::{Read, Write};
 
 use anyhow::Result;
 use protocol::{
-    CheckRequest, SaveLinkRequest, SaveRequest, SaveResponse, VideoImportBeginRequest,
-    VideoImportChunkRequest, VideoImportEndRequest,
+    CheckRequest, SaveLinkRequest, SaveRequest, SaveResponse, SaveSelectionRequest,
+    VideoImportBeginRequest, VideoImportChunkRequest, VideoImportEndRequest,
 };
 use serde::Deserialize;
 use video_import::VideoImportSession;
@@ -146,6 +147,13 @@ impl NativeSession {
                 Ok(req) => match check::handle(req) {
                     Ok(resp) => resp,
                     Err(e) => SaveResponse::error("io_error", &e.to_string()),
+                },
+            },
+            "save_selection" => match serde_json::from_slice::<SaveSelectionRequest>(raw) {
+                Err(error) => SaveResponse::error("invalid_request", &error.to_string()),
+                Ok(request) => match save_selection::handle(request) {
+                    Ok(response) => response,
+                    Err(error) => SaveResponse::error("io_error", &error.to_string()),
                 },
             },
             "save_link" => match serde_json::from_slice::<SaveLinkRequest>(raw) {
@@ -891,11 +899,34 @@ mod integration_tests {
     }
 
     #[test]
+    fn protocol_four_selection_dispatch_returns_kind_and_persists_article_highlight() {
+        with_library(|dir| {
+            let url = "https://example.com/selection-dispatch";
+            let mut message: Value = serde_json::from_slice(&save_message(url)).unwrap();
+            message["action"] = serde_json::json!("save_selection");
+            message["selected_text"] = serde_json::json!("Some content here.");
+            let responses = run_framed_messages(&[message]);
+            assert_eq!(responses[0]["protocol_version"], 4);
+            assert_eq!(responses[0]["ok"], true);
+            assert_eq!(responses[0]["selection_kind"], "highlight");
+            let id = responses[0]["id"].as_str().unwrap();
+            let root = oia_core::LibraryRoot::new(dir.path()).unwrap();
+            let highlights = oia_core::list_highlights(&root, id).unwrap();
+            assert_eq!(highlights[0].text, "Some content here.");
+            assert_eq!(oia_core::scan_library(&root).unwrap().len(), 1);
+        });
+    }
+
+    #[test]
     fn success_response_shape() {
         with_library(|_dir| {
             let resp = dispatch(&save_message("https://example.com/resp-shape"));
             assert!(resp.ok);
             assert_eq!(resp.protocol_version, 4);
+            assert!(serde_json::to_value(&resp)
+                .unwrap()
+                .get("selection_kind")
+                .is_none());
 
             let id = resp
                 .id

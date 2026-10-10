@@ -147,7 +147,9 @@ struct OiaCardView: View {
 
     @ViewBuilder
     private func articleCard(in size: CGSize) -> some View {
-        if let profile = row.socialPostProfile {
+        if let highlight = row.featuredHighlight {
+            HighlightCard(text: highlight, cardSize: cardSize)
+        } else if let profile = row.socialPostProfile {
             SocialPostCard(
                 row: row,
                 profile: profile,
@@ -356,6 +358,11 @@ private extension OiaCardView {
     }
 
     private var accessibilityLabel: String {
+        if let highlight = row.featuredHighlight {
+            return ["Highlight", highlight, row.displayTitle, row.displaySite]
+                .compactMap(\.self)
+                .joined(separator: ", ")
+        }
         if let profile = row.socialPostProfile {
             var parts = [
                 "Social post",

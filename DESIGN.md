@@ -142,6 +142,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - **Quote:** selected text rendered in centered Georgia Italic, using the article description's
   secondary text color, with 20 pt padding all around and muted quotation marks. Its origin remains
   available in detail and the Inspector, but is omitted from the board card.
+- **Featured highlight:** an article card led by a saved passage in larger, left-aligned system
+  text, with yellow marker ink behind each wrapped line and no quotation marks or source footer.
+  The source article and all saved highlights remain available in detail. Saving another ordinary
+  selection from the same article changes its featured passage without creating another card.
 - **Article:** a local preview image when available, followed by a Palatino heading, saved or
   file-derived description, source, and estimated reading time. Text-only article cards fit their
   visible content with 20 pt padding; source and reading time are muted, and absent favicons leave
@@ -181,7 +185,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 ### Context menu and capture
 
 - Browser right-click uses one **"Save to Óia"** command for a page, image, video, or selected
-  text. Selection becomes a quote card; image bytes and video posters are copied locally when
+  text. A selection becomes an article highlight by default; matching enclosing quotation marks or
+  a selection wholly within a `<blockquote>`/`<q>` element instead creates a quote card.
+  Image bytes and video posters are copied locally when
   available.
 - The native card context menu provides tag editing, open origin, and permanent delete. Tag
   editing focuses the Inspector's inline Tag field.

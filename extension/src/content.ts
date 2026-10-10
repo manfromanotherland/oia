@@ -16,6 +16,7 @@ import {
   ScreenshotPageCaptureController,
 } from "./screenshot-page.js";
 import { importVideo, type VideoImportOptions, VideoImportError } from "./video-import.js";
+import { captureSelection, SelectionContextCache } from "./selection-capture.js";
 
 /** An optional action button on a toast. Clicking it messages the background
  *  worker (which alone can open extension pages) and dismisses the toast. */
@@ -91,7 +92,15 @@ interface CaptureQuoteMessage {
   pageUrl: string;
 }
 
+interface CaptureSelectionMessage {
+  action: "capture-selection";
+  text: string;
+  pageUrl: string;
+}
+
 const screenshotPageCapture = new ScreenshotPageCaptureController(document, window);
+const selectionContext = new SelectionContextCache(document);
+document.addEventListener("contextmenu", (event) => selectionContext.capture(event.target), true);
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (isScreenshotPageMessage(msg)) {
@@ -187,6 +196,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
       unresolved: [],
     };
     sendResponse(capture);
+  }
+
+  if (msg?.action === "capture-selection") {
+    const { text, pageUrl } = msg as CaptureSelectionMessage;
+    if (!text?.trim() || !pageUrl) {
+      sendResponse({ error: "The selected text could not be read." });
+      return;
+    }
+    const context = selectionContext.forText(text);
+    void captureSelection(document, pageUrl, text, context).then(sendResponse, () =>
+      sendResponse({ error: "The selected text couldn't be captured from this page." }),
+    );
+    return true;
   }
 
   if (msg?.action === "toast") {

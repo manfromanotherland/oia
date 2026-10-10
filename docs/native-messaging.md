@@ -16,9 +16,37 @@ little-endian unsigned integer specifying the message length in bytes.
 
 ---
 
+## Selection save request (extension → host)
+
+New context-menu text captures use additive protocol-v4 action `save_selection`, with the usual
+article metadata, Markdown, captured images, preview and favicon roles, plus:
+
+```json
+{
+  "selected_text": "The passage selected by the user.",
+  "selection_context": {
+    "version": 1,
+    "selected_text": "The passage selected by the user.",
+    "enclosing_element": "blockquote"
+  }
+}
+```
+
+`selection_context` and `enclosing_element` are optional. The extension snapshots quotation
+markup before the context menu opens and routes the capture to the clicked frame. Core accepts
+that evidence only when its text matches the saved selection. A passage entirely enclosed in
+matching quotation marks or selected within one `<blockquote>`/`<q>` becomes a quote; otherwise
+it is a highlight attached to the source article. Mixed or stale evidence defaults to highlight.
+Selected text and its context are each limited to 64 KiB UTF-8.
+
+For highlights, full captures create or upgrade the URL-derived article; an existing full article
+keeps its body, assets, saved date, and curation. Empty extraction retains a lightweight source
+link with the verbatim passage in `highlights.md`. Each successful selection response includes
+`selection_kind: "highlight" | "quote"` for presentation.
+
 ## Save request (extension → host)
 
-Sent when the user saves a full article, screenshot, right-clicked image, or selected-text quote.
+Sent when the user saves a full article, screenshot, right-clicked image, or legacy selected-text quote.
 Every right-clicked video uses the streaming import below. The request
 always describes the **origin page** in `metadata.url`/`canonical_url`; a media identity is
 additional metadata and never replaces that origin.
@@ -297,6 +325,7 @@ staging file. A later upload on a new or recovered connection starts again at se
 | `ok` | boolean | `true` on success |
 | `id` | string | The content-addressed id assigned to the reading (success only) |
 | `path` | string | Relative path from library root (success only) |
+| `selection_kind` | string | `highlight` or `quote` on successful `save_selection` responses only |
 | `error` | string | Machine-readable error code (failure only) |
 | `message` | string | Human-readable description (failure only) |
 | `saved` | boolean | Whether the URL is already saved (`check` responses only) |

@@ -35,7 +35,9 @@ struct OiaReadingOverlay: View {
                 onClose()
             }
             .onChange(of: appState.readings.first { $0.id == row.id }) { _, updated in
-                if let updated { row = updated }
+                if let updated {
+                    row = updated
+                }
             }
     }
 
@@ -47,18 +49,18 @@ struct OiaReadingOverlay: View {
                 onSearch: searchFromInspector,
                 onToggleTag: updateTag
             )
-                .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)
-                .background {
-                    Group {
-                        if reduceTransparency {
-                            OiaTheme.inspectorSidebarSurface
-                        } else {
-                            GalleryMaterial(material: .sidebar)
-                        }
+            .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)
+            .background {
+                Group {
+                    if reduceTransparency {
+                        OiaTheme.inspectorSidebarSurface
+                    } else {
+                        GalleryMaterial(material: .sidebar)
                     }
-                    .ignoresSafeArea(.container, edges: .top)
                 }
-                .toolbar(removing: .sidebarToggle)
+                .ignoresSafeArea(.container, edges: .top)
+            }
+            .toolbar(removing: .sidebarToggle)
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -158,7 +160,7 @@ struct OiaReadingOverlay: View {
     private var detail: some View {
         switch row.kind {
         case .article:
-            if let profile = row.socialPostProfile {
+            if row.featuredHighlight == nil, let profile = row.socialPostProfile {
                 SocialPostDetailView(row: row, profile: profile)
             } else {
                 ArticleDetailView(showsToolbar: false)
@@ -277,7 +279,7 @@ struct OiaReadingOverlay: View {
 private struct GalleryMaterial: NSViewRepresentable {
     let material: NSVisualEffectView.Material
 
-    func makeNSView(context: Context) -> NSVisualEffectView {
+    func makeNSView(context _: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
         view.blendingMode = .behindWindow
@@ -285,7 +287,7 @@ private struct GalleryMaterial: NSViewRepresentable {
         return view
     }
 
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+    func updateNSView(_ view: NSVisualEffectView, context _: Context) {
         view.material = material
     }
 }

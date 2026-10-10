@@ -127,6 +127,7 @@ describe("payment-required saves", () => {
         expect.objectContaining({
           action: kind === "article" ? "extract" : "capture-link",
         }),
+        { frameId: 0 },
       );
       expect(nativeRequests).toHaveLength(1);
       expect(sendMessage).not.toHaveBeenCalledWith(
@@ -134,6 +135,7 @@ describe("payment-required saves", () => {
         expect.objectContaining({
           title: "Payment required",
         }),
+        { frameId: 0 },
       );
       return;
     }
@@ -145,6 +147,7 @@ describe("payment-required saves", () => {
         status: "error",
         title: "Payment required",
       }),
+      { frameId: 0 },
     );
     expect(sendMessage.mock.calls).toHaveLength(1);
   });

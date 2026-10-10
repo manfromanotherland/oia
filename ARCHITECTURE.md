@@ -1,7 +1,7 @@
 # Architecture
 
 Óia is three apps that share one data format and one Rust core: a browser **extension**
-captures cleaned articles, standalone media, and selected-text quotes; a **native messaging host**
+captures cleaned articles, standalone media, and selected text; a **native messaging host**
 writes them into a plain-file library; and the **macOS app** (embedding the core) both accepts
 paste/drop saves and shows the library as a visual card board. Files are the source of truth; the
 index is a disposable, per-device cache.
@@ -31,7 +31,9 @@ index is a disposable, per-device cache.
 
 The extension toolbar can extract and clean the current article, save a lightweight link, or capture
 the full scrollable page as one long screenshot. The context menu also captures a right-clicked
-image, saves a right-clicked video as a local movie, or turns selected text into a quote. Ordinary
+image, saves a right-clicked video as a local movie, or saves selected text. Rust classifies new
+browser selections as article highlights by default and quotes only with enclosing quotation
+marks or matched quotation-element evidence. Ordinary
 captures hand Markdown, metadata, and image bytes to a small native host; every video uses the
 bounded stream below. The host writes both paths into the library folder.
 Article and link saves retain live Open Graph/Twitter metadata plus local social-preview and favicon

@@ -59,6 +59,20 @@ export interface SaveRequest {
   favicon_url?: string;
 }
 
+/** Serialized DOM facts captured for the exact context-menu text selection. */
+export interface SelectionContext {
+  version: 1;
+  selected_text: string;
+  enclosing_element?: "blockquote" | "q";
+}
+
+/** Save selected text; core decides whether it is a highlight or quotation. */
+export interface SaveSelectionRequest extends Omit<SaveRequest, "action"> {
+  action: "save_selection";
+  selected_text: string;
+  selection_context?: SelectionContext;
+}
+
 /**
  * Save an HTTP(S) URL without extracting cleaned article content. Live page
  * metadata and preview/favicon bytes may still be captured; the native host
@@ -124,6 +138,7 @@ export interface SaveResponseSuccess {
   ok: true;
   id: string;
   path: string;
+  selection_kind?: "highlight" | "quote";
 }
 
 export interface SaveResponseError {

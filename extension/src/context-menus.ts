@@ -11,7 +11,7 @@ export const CONTEXT_MENU: chrome.contextMenus.CreateProperties = {
 export type ContextCaptureTarget =
   | { kind: "article" }
   | { kind: "image" | "video"; mediaUrl?: string }
-  | { kind: "quote"; text: string };
+  | { kind: "selection"; text: string };
 
 /** Route one generic context-menu click to the selected thing. */
 export function contextCaptureTarget(
@@ -22,7 +22,7 @@ export function contextCaptureTarget(
   }
 
   const text = info.selectionText?.trim();
-  if (text) return { kind: "quote", text };
+  if (text) return { kind: "selection", text };
 
   return { kind: "article" };
 }

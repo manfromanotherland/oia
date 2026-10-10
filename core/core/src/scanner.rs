@@ -22,6 +22,8 @@ pub struct ScannedReading {
     pub metadata: Metadata,
     /// Whether the reading folder contains a regular personal-note sidecar.
     pub has_note: bool,
+    /// Text resolved from the file-backed featured ID in highlights.md.
+    pub featured_highlight_text: Option<String>,
     /// Safely opened preview bytes, identified by their raw SHA-256 hash.
     pub visual_asset: Option<VisualAsset>,
     /// Display width divided by display height for standalone local media.
@@ -139,16 +141,24 @@ pub(crate) fn scan_reading_ids(
     Ok(readings)
 }
 
-/// Preview hashes cannot describe every reader asset or posterless movie.
-/// Filesystem events invalidate those cached presentations without reading
-/// entire movie/image contents solely to manufacture an index-row change.
-pub(crate) fn changed_paths_include_assets(library: &LibraryRoot, paths: &[String]) -> bool {
+/// Index rows cannot describe every reader asset or nonfeatured highlight.
+/// Precise file events also invalidate reader presentations when their indexed
+/// preview is unchanged, without hashing entire media or sidecar contents.
+pub(crate) fn changed_paths_require_presentation_refresh(
+    library: &LibraryRoot,
+    paths: &[String],
+) -> bool {
     paths.iter().any(|path| {
         Path::new(path)
             .strip_prefix(library.articles_dir())
             .ok()
-            .and_then(|relative| relative.components().nth(2))
-            .is_some_and(|component| component.as_os_str() == "assets")
+            .is_some_and(|relative| {
+                let mut components = relative.components().skip(2);
+                components.next().is_some_and(|component| {
+                    component.as_os_str() == "assets"
+                        || (component.as_os_str() == "highlights.md" && components.next().is_none())
+                })
+            })
     })
 }
 
@@ -235,6 +245,10 @@ pub(crate) fn scan_reading_directory(
         modified_at,
         path,
         has_note: note_file_exists(library, &reading.metadata.id),
+        featured_highlight_text: crate::highlights::featured_highlight_text(
+            library,
+            &reading.metadata,
+        ),
         visual_asset,
         media_aspect_ratio,
         metadata: reading.metadata,
@@ -360,6 +374,7 @@ pub fn diff(old: &[ScannedReading], new: &[ScannedReading]) -> Vec<ScanDiff> {
                     || old_reading.body != reading.body
                     || old_reading.metadata != reading.metadata
                     || old_reading.has_note != reading.has_note
+                    || old_reading.featured_highlight_text != reading.featured_highlight_text
                     || old_reading.visual_asset != reading.visual_asset
                     || old_reading.media_aspect_ratio != reading.media_aspect_ratio =>
             {
@@ -419,6 +434,7 @@ mod tests {
             author: None,
             site: None,
             product: None,
+            featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,
