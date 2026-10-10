@@ -20,6 +20,8 @@ export interface SaveRequestMetadata {
   site?: string;
   /** First page-declared theme colour; core validates and normalizes it for storage. */
   theme_color?: string;
+  /** Raw live structured product evidence, bounded to 512 KiB; interpreted by core. */
+  product_html?: string;
   lang?: string;
   excerpt?: string;
   word_count?: number;

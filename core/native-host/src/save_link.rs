@@ -52,6 +52,17 @@ fn handle_in_library_with_source_resolver(
         &UrlSaveRequest,
     ) -> Result<Option<oia_core::SaveOutcome>, oia_core::SaveUrlError>,
 ) -> Result<SaveResponse> {
+    if request
+        .metadata
+        .product_html
+        .as_ref()
+        .is_some_and(|html| html.len() > oia_core::product::MAX_BROWSER_PRODUCT_HTML_BYTES)
+    {
+        return Ok(SaveResponse::error(
+            "invalid_request",
+            "product metadata evidence exceeded 512 KiB",
+        ));
+    }
     let special_request = UrlSaveRequest {
         url: request.metadata.url.clone(),
         title_hint: Some(request.metadata.title.clone()),
@@ -63,6 +74,15 @@ fn handle_in_library_with_source_resolver(
         Err(error) => return response_for_source_error(error),
     }
 
+    let product = (request.metadata.kind == oia_core::ReadingKind::Article)
+        .then(|| {
+            request
+                .metadata
+                .product_html
+                .as_deref()
+                .and_then(|html| oia_core::parse_product_metadata(html, &request.metadata.url))
+        })
+        .flatten();
     let images = decode_images(&request.images);
 
     let outcome = match save_link_capture(
@@ -78,6 +98,7 @@ fn handle_in_library_with_source_resolver(
             preview_url: request.preview_url,
             favicon_url: request.favicon_url,
             theme_color: request.metadata.theme_color,
+            product,
             excerpt: request.metadata.excerpt,
             lang: request.metadata.lang,
         },
@@ -122,6 +143,49 @@ mod tests {
 
         assert!(!response.ok);
         assert_eq!(response.error.as_deref(), Some("source_unavailable"));
+        assert!(!library.articles_dir().exists());
+    }
+    fn product_request(html: &str) -> SaveLinkRequest {
+        serde_json::from_value(serde_json::json!({"protocol_version":PROTOCOL_VERSION,"action":"save_link","metadata":{"kind":"article","url":"https://shop.example/lamp","canonical_url":"https://shop.example/lamp","title":"Lamp","saved_at":"2026-10-10T12:00:00.000Z","product_html":html},"images":[]})).unwrap()
+    }
+    #[test]
+    fn save_link_classifies_live_structured_product_and_enriches_existing_link() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(dir.path()).unwrap();
+        let existing = oia_core::import_link(&library, "https://shop.example/lamp").unwrap();
+        let original = oia_core::parse_reading(
+            &std::fs::read_to_string(library.article_path(&existing.id)).unwrap(),
+        )
+        .unwrap();
+        let request = product_request(
+            r#"<script type="application/ld+json">{"@type":"Product","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#,
+        );
+        let response =
+            handle_in_library_with_source_resolver(request, &library, |_, _| Ok(None)).unwrap();
+        assert!(response.ok);
+        let reading = oia_core::parse_reading(
+            &std::fs::read_to_string(library.article_path(&existing.id)).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("140")
+        );
+        assert_eq!(reading.body, original.body);
+        assert_eq!(reading.metadata.saved_at, original.metadata.saved_at);
+        assert!(reading.metadata.lightweight);
+    }
+    #[test]
+    fn rejects_oversized_live_evidence_before_any_source_retrieval() {
+        let dir = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(dir.path()).unwrap();
+        let request =
+            product_request(&"x".repeat(oia_core::product::MAX_BROWSER_PRODUCT_HTML_BYTES + 1));
+        let response = handle_in_library_with_source_resolver(request, &library, |_, _| {
+            panic!("must reject before retrieval")
+        })
+        .unwrap();
+        assert_eq!(response.error.as_deref(), Some("invalid_request"));
         assert!(!library.articles_dir().exists());
     }
 }

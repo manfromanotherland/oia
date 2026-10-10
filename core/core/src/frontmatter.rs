@@ -116,6 +116,7 @@ mod tests {
             title: "Test Article".to_string(),
             author: Some("Jane Doe".to_string()),
             site: Some("example.com".to_string()),
+            product: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: read.then(|| "2026-06-13T16:00:00.000Z".to_string()),

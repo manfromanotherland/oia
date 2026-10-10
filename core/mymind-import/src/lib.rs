@@ -4,6 +4,11 @@
 //! Óia' shared Rust import pipeline.
 
 mod link_metadata;
+mod product_migration;
+
+pub use product_migration::{
+    enrich_existing_products, EnrichExistingProductsOptions, EnrichExistingProductsReport,
+};
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -1490,6 +1495,7 @@ fn execute_enriched_link(
                 images,
                 preview_url,
                 favicon_url,
+                product,
             } = capture;
             let stats = LinkCaptureStats {
                 preview: preview_url.is_some(),
@@ -1500,6 +1506,7 @@ fn execute_enriched_link(
                     .is_some(),
             };
             let input = SaveLinkInput {
+                product,
                 url,
                 canonical_url,
                 title: captured_title.or(title).unwrap_or_default(),
@@ -1652,6 +1659,7 @@ fn execute_origin_quote(
     import_reading(
         library,
         SaveInput {
+            product: None,
             quote_identity_markdown: None,
             kind: ReadingKind::Quote,
             lightweight: false,
@@ -1959,6 +1967,13 @@ mod tests {
         let preview_url = "https://assets.example/social.png".to_string();
         let favicon_url = "https://assets.example/favicon.ico".to_string();
         LinkMetadataCapture {
+            product: url.contains("product").then(|| oia_core::ProductMetadata {
+                version: 1,
+                price: Some("229.00".into()),
+                currency: Some("EUR".into()),
+                price_is_from: false,
+                captured_at: Some("2026-10-10T10:00:00Z".into()),
+            }),
             canonical_url: url.to_string(),
             title: Some("Social title".to_string()),
             site: Some("Fixture Journal".to_string()),
@@ -2053,6 +2068,32 @@ mod tests {
         assert!(root.reading_dir(&reading.id).join(preview).is_file());
         assert!(root.reading_dir(&reading.id).join(favicon).is_file());
         assert_eq!(reading.metadata.theme_color.as_deref(), Some("#123456"));
+    }
+
+    #[test]
+    fn imported_product_links_keep_price_metadata_and_original_identity() {
+        let (export, library) = setup();
+        let url = "https://good.example/product";
+        fs::write(
+            export.path().join(CSV_FILENAME),
+            fixture_csv(&format!("product,WebPage,,{url},,,,2024-03-01T12:00:00Z\n")),
+        )
+        .unwrap();
+        let mut run_options = options(export.path(), library.path(), true);
+        run_options.enrich_links = true;
+        let report =
+            run_with_fetcher(run_options, Some(Arc::new(FixtureLinkMetadataFetcher))).unwrap();
+        assert_eq!(report.saved, 1);
+        let reading = scan_library(&LibraryRoot::new(library.path()).unwrap())
+            .unwrap()
+            .pop()
+            .unwrap();
+        assert_eq!(reading.metadata.id, url_id(url).unwrap());
+        assert!(reading.metadata.lightweight);
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("229")
+        );
     }
 
     #[test]

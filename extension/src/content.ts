@@ -148,6 +148,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           ...(page.author ? { author: page.author } : {}),
           ...(page.site ? { site: page.site } : {}),
           ...(page.themeColor ? { theme_color: page.themeColor } : {}),
+          ...(page.productHtml ? { product_html: page.productHtml } : {}),
           ...(page.lang ? { lang: page.lang } : {}),
           ...(page.excerpt ? { excerpt: page.excerpt } : {}),
         },

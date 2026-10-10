@@ -126,6 +126,7 @@ targets:
       - path: Sources/Oia/Features/Reader/Markdown/MarkdownTheme.swift
       - path: Sources/Oia/Bridge/Mappers/ReadingRow.swift
       - path: Sources/Oia/Bridge/Mappers/ReadingSourceProfile.swift
+      - path: Sources/Oia/Bridge/Mappers/ReadingProductMetadata.swift
       - path: Sources/Oia/Features/Oia/OiaTheme.swift
       - path: Sources/Oia/Features/Oia/OiaCardTextMetrics.swift
       - path: Sources/Oia/Features/Oia/FullArticleCardText.swift

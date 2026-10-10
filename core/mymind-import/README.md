@@ -2,8 +2,8 @@
 
 This migration adapter reads the folder produced by mymind's **Export my mind** action: a
 `cards.csv` file plus the media files beside it. It accepts either that folder directly or an
-outer folder containing exactly one immediate child with `cards.csv`. Planning is always offline,
-and the importer never writes a SQLite index.
+outer folder containing exactly one immediate child with `cards.csv`. Import planning is offline,
+and the importer never writes a SQLite index. Product migration previews fetch live metadata.
 
 From the repository root, preview the complete plan first:
 
@@ -29,7 +29,7 @@ Review the totals and warnings, then run the same command with `--write`:
 
 Writes enrich HTTP(S) link rows by default. The importer fetches live page metadata plus a bounded
 social preview and favicon, then gives the captured metadata and bytes to `oia-core`. This is
-the network adapter at the import boundary; the shared core itself remains network-free.
+the network adapter at the import boundary; ordinary library browsing remains offline.
 
 To prohibit network access and write URL-only lightweight links from the export data, add
 `--offline`:
@@ -86,6 +86,49 @@ tags, and note sidecar. During this explicit existing-library migration, links r
 the batch resembles a local or network-wide outage (no server was reached, or more than a quarter
 of a batch of at least 20 links was unreachable). Rejected, rate-limited, oversized, and non-HTML
 responses are reachable and remain in the library.
+
+### Identifying existing product links
+
+Product metadata is separate from the Reading kind: an imported product retains its lightweight
+article, original URL-derived ID, local preview assets, and body. Link imports capture the same
+structured product evidence during ordinary enrichment.
+
+To inspect existing lightweight links for product metadata, run:
+
+```bash
+./scripts/import-mymind.sh \
+  --library /path/to/Óia \
+  --enrich-existing-products
+```
+
+This preview fetches bounded public HTML and reports the eligible count, target digest, detected
+products, and prices. It includes links that already have previews; existing product metadata,
+social source profiles, media, quotes, and local identities are excluded. Detection uses the shared
+core parser for schema.org Product/ProductGroup JSON-LD, scoped microdata/RDFa, or explicit product
+Open Graph metadata. A price or product-looking URL alone is insufficient. A product without a
+valid price remains a product with no price badge.
+
+Apply with an empty backup folder outside the library:
+
+```bash
+./scripts/import-mymind.sh \
+  --library /path/to/Óia \
+  --enrich-existing-products \
+  --write \
+  --backup-dir /path/to/product-metadata-backup \
+  --expect-count 123 \
+  --expect-digest <sha256>
+```
+
+Only product frontmatter is updated. Prices are snapshots in their declared currency, with a UTC
+capture date; later browsing requires no network. Product fetches validate public DNS, use bounded
+redirects and response sizes, and cap each origin at two concurrent fetches. Fetch failures leave
+readings untouched. Files edited while a fetch runs are skipped after a locked fingerprint check.
+
+The backup contains each changed original as `<reading-id>.md` plus `report.txt`. To undo a change,
+restore that file to `articles/<first-two-id-characters>/<reading-id>/article.md` and let the app
+reconcile its disposable index. Save a current copy first if the reading has been edited since the
+migration. Product migration never deletes unavailable readings or rewrites their assets or notes.
 
 ## Mapping
 

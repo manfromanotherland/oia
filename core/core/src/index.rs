@@ -70,6 +70,15 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 11 {
         migrate_v11(conn)?;
     }
+    if version < 12 {
+        migrate_v12(conn)?;
+    }
+    Ok(())
+}
+
+/// v12: disposable projection of the file-backed product snapshot.
+fn migrate_v12(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN; ALTER TABLE readings ADD COLUMN product_json TEXT; PRAGMA user_version = 12; COMMIT;")?;
     Ok(())
 }
 
@@ -535,7 +544,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
 
         // readings table exists
         let count: i64 = conn
@@ -650,7 +659,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -815,7 +824,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
         assert_eq!(projected, None);
     }
 
@@ -923,7 +932,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -965,7 +974,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 11);
+        assert_eq!(version, 12);
 
         let values: (i64, i64, String) = conn
             .query_row(

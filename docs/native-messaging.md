@@ -77,6 +77,7 @@ additional metadata and never replaces that origin.
 | `metadata.author` | string | — | Extracted byline; omit if unknown |
 | `metadata.site` | string | — | Source-site label, usually the page's Open Graph site name or hostname; omit if unknown |
 | `metadata.theme_color` | string | — | First non-empty page `theme-color`/`theme_color` meta value; core validates and normalizes supported CSS colours before storing it |
+| `metadata.product_html` | string | — | Bounded raw live-DOM product evidence (JSON-LD, scoped microdata/RDFa, product meta tags, canonical identity). Rust validates/classifies article and link saves; standalone media and quotes omit it. Extension cap: 512 KiB UTF-8. Additive to protocol v4. |
 | `metadata.lang` | string | — | BCP-47 language tag |
 | `metadata.excerpt` | string | — | One-sentence summary |
 | `metadata.word_count` | integer | — | Word count of the cleaned body |
@@ -117,6 +118,12 @@ core constructs that link body and marks the reading `lightweight: true`, so a l
 capture upgrades the same URL-derived reading. Unlike a full `save`, `save_link` has no cleaned body
 to fall back to: failure to retrieve or validate a recognized source returns `source_unavailable`
 and does not write a misleading lightweight card.
+
+For ordinary product pages the extension includes `metadata.product_html`, using metadata already
+present in the live page. The host parses it with the shared Rust product parser and writes the
+optional versioned `product` frontmatter without changing the URL-derived reading ID. No extra
+host page request is necessary. Product recognition and pricing never depend on JavaScript
+duplicating the Rust rules; an absent or invalid product payload leaves an ordinary link.
 
 ```json
 {

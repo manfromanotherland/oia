@@ -226,6 +226,10 @@ The card metadata is additive and backwards compatible:
   app or browser toolbar. A later full browser capture
   replaces that placeholder at the same article id and clears the marker while preserving user
   state.
+- `product`: optional versioned product classification and offered-price snapshot. Products retain
+  `kind: article`, appear in Links, and use a price beside the card's source instead of reading time.
+  Rust derives the record from bounded structured page metadata; clients only format it. See
+  [product metadata](docs/product-metadata.md).
 - `tags`: user-authored or imported labels.
 - `machine_tags`: per-source (`image` or `text`) subject labels in records with `source`,
   `source_fingerprint`, `analyzer_version`, and `tags`; each source is replaced only after its

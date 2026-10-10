@@ -317,6 +317,12 @@ private extension OiaCardView {
 
             Text(row.displaySite ?? "Saved locally")
                 .lineLimit(1)
+
+            if row.isProduct {
+                Spacer(minLength: 4)
+                Text(row.productPriceLabel ?? "Product")
+                    .fixedSize()
+            }
         }
         .font(Font(OiaCardTextMetrics.sourceFont))
         .foregroundStyle(foreground)
@@ -374,6 +380,11 @@ private extension OiaCardView {
             ]
             .compactMap(\.self)
             .joined(separator: ", ")
+        }
+        if row.isProduct {
+            return ["Product", row.displayTitle, row.productPriceLabel, row.displaySite]
+                .compactMap(\.self)
+                .joined(separator: ", ")
         }
         return [row.isLink ? "Link" : row.kind.singularLabel, row.displayTitle, row.displaySite]
             .compactMap(\.self)

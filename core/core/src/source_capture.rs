@@ -214,7 +214,7 @@ pub fn save_url(
         return Ok(outcome);
     }
 
-    import_link_with_options(
+    let outcome = import_link_with_options(
         library,
         &request.url,
         ImportOptions {
@@ -222,8 +222,23 @@ pub fn save_url(
             saved_at: request.saved_at,
             ..ImportOptions::default()
         },
-    )
-    .map_err(Into::into)
+    )?;
+    // Retrieval is optional: saving a link remains usable offline and blocked
+    // or unstructured sites simply retain their lightweight representation.
+    if outcome.disposition != SaveDisposition::Duplicate {
+        if let Ok(bytes) = fs::read(library.article_path(&outcome.id)) {
+            let expected = crate::sha256_hex(&bytes);
+            if let Ok(Some(product)) = crate::fetch_product_metadata(&request.url) {
+                crate::update_product_metadata_if_unchanged(
+                    library,
+                    &outcome.id,
+                    product,
+                    &expected,
+                )?;
+            }
+        }
+    }
+    Ok(outcome)
 }
 
 /// Resolve and save a recognised provider URL. `None` means the URL is an
@@ -406,6 +421,7 @@ fn save_special_url_with_providers(
         preview_url: None,
         favicon_url: None,
         theme_color: None,
+        product: None,
         excerpt: Some(prepared.text.clone()),
         word_count: Some(prepared.text.split_whitespace().count() as u32),
         lang: None,
@@ -1605,6 +1621,7 @@ mod tests {
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: Some("Post text".into()),
             word_count: Some(2),
             lang: Some("en".into()),

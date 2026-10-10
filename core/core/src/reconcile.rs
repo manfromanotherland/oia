@@ -70,6 +70,13 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
     let tag_entries_json = serde_json::to_string(&tag_entries)?;
     let machine_tags_json = serde_json::to_string(&machine_tags)?;
     let tags_text = tags.join(" ");
+    let product_json = r
+        .metadata
+        .product
+        .as_ref()
+        .filter(|product| product.version == 1)
+        .map(serde_json::to_string)
+        .transpose()?;
     let source_profile_json = r
         .metadata
         .source_profile
@@ -99,8 +106,8 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
           favorite, rating, source_hash, excerpt, word_count, lang, tags_json, tags_text,
           body_text, visual_asset_path, visual_asset_hash, visual_analyzer_version,
           visual_terms, predominant_color, media_aspect_ratio, source_profile_json,
-          card_description, tag_entries_json, machine_tags_json)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35)",
+          card_description, tag_entries_json, machine_tags_json, product_json)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36)",
         params![
             r.metadata.id,
             r.metadata.kind.as_str(),
@@ -137,6 +144,7 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             card.description,
             tag_entries_json,
             machine_tags_json,
+            product_json,
         ],
     )?;
     Ok(())
@@ -160,6 +168,13 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
     let tag_entries_json = serde_json::to_string(&tag_entries)?;
     let machine_tags_json = serde_json::to_string(&machine_tags)?;
     let tags_text = tags.join(" ");
+    let product_json = r
+        .metadata
+        .product
+        .as_ref()
+        .filter(|product| product.version == 1)
+        .map(serde_json::to_string)
+        .transpose()?;
     let source_profile_json = r
         .metadata
         .source_profile
@@ -191,7 +206,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
          tags_text=?24, body_text=?25, visual_asset_path=?26, visual_asset_hash=?27,
          visual_analyzer_version=?28, visual_terms=?29, predominant_color=?30,
          media_aspect_ratio=?31, source_profile_json=?32, card_description=?33,
-         tag_entries_json=?34, machine_tags_json=?35
+         tag_entries_json=?34, machine_tags_json=?35, product_json=?36
          WHERE id=?1",
         params![
             r.metadata.id,
@@ -229,6 +244,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             card.description,
             tag_entries_json,
             machine_tags_json,
+            product_json,
         ],
     )?;
     Ok(())
@@ -268,6 +284,7 @@ mod tests {
             title: "Title".to_string(),
             author: None,
             site: None,
+            product: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

@@ -56,6 +56,21 @@ pub struct SourceProfile {
     pub attachments: Vec<SourceAttachment>,
 }
 
+/// File-backed product presentation and its explicitly advertised price snapshot.
+/// Decimal strings avoid binary floating point and preserve monetary precision.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ProductMetadata {
+    pub version: u8,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub price: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub currency: Option<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub price_is_from: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub captured_at: Option<String>,
+}
+
 /// One locally persisted attachment belonging to a [`SourceProfile`].
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SourceAttachment {
@@ -123,6 +138,9 @@ pub struct Metadata {
     /// Provider-neutral source metadata for special links such as social posts.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub source_profile: Option<SourceProfile>,
+    /// Snapshot of the main product advertised by this article or link.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product: Option<ProductMetadata>,
     pub saved_at: String,
     /// UTC ISO-8601 timestamp (millisecond precision, `Z` suffix — same format
     /// as `saved_at`) of the most recent time the reading was marked read.

@@ -91,6 +91,7 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var dominantColor: ReadingColor?
     var mediaAspectRatio: Double?
     var sourceProfile: ReadingSourceProfile?
+    var product: ReadingProductMetadata?
 }
 
 extension ReadingRow {
@@ -125,6 +126,7 @@ extension ReadingRow {
         dominantColor = row.dominantColor.map(ReadingColor.init)
         mediaAspectRatio = row.mediaAspectRatio
         sourceProfile = ReadingSourceProfile.decode(row.sourceProfileJson)
+        product = ReadingProductMetadata.decode(row.productJson)
     }
 }
 
@@ -175,7 +177,15 @@ extension ReadingRow {
     }
 
     var isFullArticle: Bool {
-        kind == .article && !lightweight && !isSocialPost
+        kind == .article && !lightweight && !isSocialPost && !isProduct
+    }
+
+    var isProduct: Bool {
+        kind == .article && product != nil && !isSocialPost
+    }
+
+    var productPriceLabel: String? {
+        isProduct ? product?.formattedPrice() : nil
     }
 
     var socialPostText: String {

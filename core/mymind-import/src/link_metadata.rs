@@ -13,7 +13,7 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use oia_core::ImageBytes;
+use oia_core::{parse_product_metadata, ImageBytes, ProductMetadata};
 use reqwest::{
     blocking::{Client, Response},
     header::{ACCEPT, CONTENT_TYPE, LOCATION, USER_AGENT},
@@ -31,6 +31,7 @@ const MAX_FAVICON_CANDIDATES: usize = 4;
 const USER_AGENT_VALUE: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Óia/0.1 LinkMetadataMigration";
 
 pub(crate) struct LinkMetadataCapture {
+    pub product: Option<ProductMetadata>,
     pub canonical_url: String,
     pub title: Option<String>,
     pub site: Option<String>,
@@ -257,6 +258,7 @@ impl LinkMetadataFetcher for HttpLinkMetadataFetcher {
             }
         }
         Ok(LinkMetadataCapture {
+            product: parse_product_metadata(&html, final_url.as_str()),
             canonical_url: extracted.canonical_url,
             title: extracted.title,
             site: extracted.site,
@@ -285,14 +287,14 @@ fn bounded_body(response: Response, maximum: u64) -> Result<Vec<u8>> {
     Ok(bytes)
 }
 
-struct HostLimiter {
+pub(crate) struct HostLimiter {
     maximum: usize,
     active: Mutex<HashMap<String, usize>>,
     available: Condvar,
 }
 
 impl HostLimiter {
-    fn new(maximum: usize) -> Self {
+    pub(crate) fn new(maximum: usize) -> Self {
         Self {
             maximum: maximum.max(1),
             active: Mutex::new(HashMap::new()),
@@ -300,7 +302,7 @@ impl HostLimiter {
         }
     }
 
-    fn acquire<'a>(&'a self, host: &str) -> HostPermit<'a> {
+    pub(crate) fn acquire<'a>(&'a self, host: &str) -> HostPermit<'a> {
         let mut active = self.active.lock().expect("host limiter lock poisoned");
         while active.get(host).copied().unwrap_or(0) >= self.maximum {
             active = self
@@ -316,7 +318,7 @@ impl HostLimiter {
     }
 }
 
-struct HostPermit<'a> {
+pub(crate) struct HostPermit<'a> {
     limiter: &'a HostLimiter,
     host: String,
 }

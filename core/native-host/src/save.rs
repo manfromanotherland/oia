@@ -53,6 +53,17 @@ fn handle_in_library_with_source_resolver(
         &UrlSaveRequest,
     ) -> Result<Option<oia_core::SaveOutcome>, SaveUrlError>,
 ) -> Result<SaveResponse> {
+    if req
+        .metadata
+        .product_html
+        .as_ref()
+        .is_some_and(|html| html.len() > oia_core::product::MAX_BROWSER_PRODUCT_HTML_BYTES)
+    {
+        return Ok(SaveResponse::error(
+            "invalid_request",
+            "product metadata evidence exceeded 512 KiB",
+        ));
+    }
     if req.metadata.kind == ReadingKind::Article {
         let special_request = UrlSaveRequest {
             url: req.metadata.url.clone(),
@@ -70,6 +81,14 @@ fn handle_in_library_with_source_resolver(
 
     // Decode the image bytes the extension captured. An image whose base64 won't
     // decode is skipped, so its URL stays in the Markdown as a placeholder.
+    let product = (req.metadata.kind == oia_core::ReadingKind::Article)
+        .then(|| {
+            req.metadata
+                .product_html
+                .as_deref()
+                .and_then(|html| oia_core::parse_product_metadata(html, &req.metadata.url))
+        })
+        .flatten();
     let images = decode_images(&req.images);
 
     let outcome = match save_capture(
@@ -90,6 +109,7 @@ fn handle_in_library_with_source_resolver(
             preview_url: req.preview_url,
             favicon_url: req.favicon_url,
             theme_color: req.metadata.theme_color,
+            product,
             excerpt: req.metadata.excerpt,
             word_count: req.metadata.word_count,
             lang: req.metadata.lang,

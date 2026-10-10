@@ -139,6 +139,8 @@ pub struct ReadingRow {
     pub theme_color: Option<String>,
     /// Opaque disposable projection of the typed frontmatter source profile.
     pub source_profile_json: Option<String>,
+    /// Disposable projection of the file-backed product presentation snapshot.
+    pub product_json: Option<String>,
     /// Representative exact sRGB cluster from the current derived visual
     /// analysis. A large extreme-neutral canvas may yield to a substantial
     /// secondary surface colour. This is presentation metadata only; the
@@ -178,9 +180,9 @@ pub(crate) fn view_clause(view: View) -> &'static str {
         View::Archive => "archived = 1",
         View::Favorites => "favorite = 1",
         View::Media => "kind IN ('image', 'video')",
-        View::Articles => "kind = 'article' AND lightweight = 0 AND json_extract(source_profile_json, '$.source_type') IS NOT 'social_post'",
+        View::Articles => "kind = 'article' AND lightweight = 0 AND product_json IS NULL AND json_extract(source_profile_json, '$.source_type') IS NOT 'social_post'",
         View::Notes => "has_note = 1",
-        View::Links => "kind = 'article' AND (lightweight = 1 OR json_extract(source_profile_json, '$.source_type') IS 'social_post')",
+        View::Links => "kind = 'article' AND (lightweight = 1 OR product_json IS NOT NULL OR json_extract(source_profile_json, '$.source_type') IS 'social_post')",
         View::Quotes => "kind = 'quote'",
     }
 }
@@ -754,7 +756,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json
+                source_profile_json, card_description, machine_tags_json, product_json
          FROM readings
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -791,10 +793,10 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                WHERE NOT (
                    (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
                    OR (readings.kind = 'article' AND requested_type.value = 'article'
-                       AND readings.lightweight = 0
+                       AND readings.lightweight = 0 AND readings.product_json IS NULL
                        AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (readings.kind = 'article' AND requested_type.value = 'link'
-                       AND (readings.lightweight = 1
+                       AND (readings.lightweight = 1 OR readings.product_json IS NOT NULL
                             OR json_extract(readings.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -900,10 +902,10 @@ fn phrase_exists_in_list_scope(
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
                    OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0
+                       AND r.lightweight = 0 AND r.product_json IS NULL
                        AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1
+                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL
                             OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -955,14 +957,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json,
+                source_profile_json, card_description, machine_tags_json, product_json,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(28)?;
+        let body: String = row.get(29)?;
         Ok((row_data, body))
     })?;
 
@@ -1028,7 +1030,7 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json, r.card_description, r.machine_tags_json
+                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -1065,10 +1067,10 @@ fn list_readings_search(
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
                    OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0
+                       AND r.lightweight = 0 AND r.product_json IS NULL
                        AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1
+                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL
                             OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -1130,8 +1132,11 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
     let kind = parse_kind(row.get::<_, String>(16)?.as_str())?;
     let lightweight = row.get::<_, i32>(21)? != 0;
     let source_profile_json: Option<String> = row.get(25)?;
+    let product_json: Option<String> = row.get(28)?;
     let is_link = kind == ReadingKind::Article
-        && (lightweight || is_social_post(source_profile_json.as_deref()));
+        && (lightweight
+            || product_json.is_some()
+            || is_social_post(source_profile_json.as_deref()));
     let dominant_color = palette_json
         .as_deref()
         .and_then(|json| serde_json::from_str::<Vec<WeightedColor>>(json).ok())
@@ -1149,6 +1154,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         favicon_asset: row.get(19)?,
         theme_color: row.get(20)?,
         source_profile_json,
+        product_json,
         dominant_color,
         media_aspect_ratio: row.get(23)?,
         canonical_url: row.get(3)?,
@@ -1230,6 +1236,7 @@ mod tests {
             title: title.to_string(),
             author: None,
             site: None,
+            product: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

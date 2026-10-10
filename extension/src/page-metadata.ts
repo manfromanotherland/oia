@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { captureProductHtml } from "./product-html.js";
+
 /** Metadata and durable image roles exposed by the current page's live DOM. */
 export interface PageMetadata {
   title?: string;
@@ -9,6 +11,8 @@ export interface PageMetadata {
   lang?: string;
   excerpt?: string;
   themeColor?: string;
+  /** Bounded live structured evidence interpreted by the Rust product parser. */
+  productHtml?: string;
   socialImageUrls: string[];
   faviconUrls: string[];
 }
@@ -49,6 +53,7 @@ export function extractPageMetadata(doc: Document, pageUrl: string): PageMetadat
       metaContent(doc, "meta[name='description']"),
     ),
     themeColor: themeColor(doc),
+    productHtml: captureProductHtml(doc),
     socialImageUrls: httpAssetUrls(
       [
         metaContent(doc, "meta[property='og:image:secure_url']"),

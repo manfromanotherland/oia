@@ -67,6 +67,8 @@ pub struct SaveInput {
     /// Website-provided CSS theme color. The core normalizes supported values
     /// to canonical lowercase `#rrggbb` before persisting them.
     pub theme_color: Option<String>,
+    /// Validated product snapshot from structured page metadata.
+    pub product: Option<crate::ProductMetadata>,
     pub excerpt: Option<String>,
     pub word_count: Option<u32>,
     pub lang: Option<String>,
@@ -211,6 +213,8 @@ pub struct SaveLinkInput {
     pub preview_url: Option<String>,
     pub favicon_url: Option<String>,
     pub theme_color: Option<String>,
+    /// Validated product snapshot from structured page metadata.
+    pub product: Option<crate::ProductMetadata>,
     pub excerpt: Option<String>,
     pub lang: Option<String>,
 }
@@ -254,13 +258,32 @@ impl From<std::io::Error> for SaveError {
 /// controlled by the user after import; captured page metadata and content are
 /// replaced by the richer browser result.
 pub fn save_capture(library: &LibraryRoot, input: SaveInput) -> Result<SaveOutcome, SaveError> {
-    save_with_imported_state(
+    let product = (input.kind == ReadingKind::Article)
+        .then(|| input.product.clone())
+        .flatten();
+    let mut outcome = save_with_imported_state(
         library,
         input,
         ImportedReadingState::default(),
         ImageWritePolicy::BestEffort,
         ExistingReadingPolicy::PreserveDuplicate,
-    )
+    )?;
+    if outcome.disposition == SaveDisposition::Duplicate {
+        if let Some(product) = product {
+            if let Ok(bytes) = fs::read(library.article_path(&outcome.id)) {
+                let expected = sha256_hex(&bytes);
+                if crate::update_product_metadata_if_unchanged(
+                    library,
+                    &outcome.id,
+                    product,
+                    &expected,
+                )? {
+                    outcome.disposition = SaveDisposition::Upgraded;
+                }
+            }
+        }
+    }
+    Ok(outcome)
 }
 
 /// Save a fully captured source article and its pre-staged required assets.
@@ -590,6 +613,7 @@ fn save_capture_under_lock_with_state(
         author: input.author,
         site: input.site,
         source_profile,
+        product: input.product.and_then(crate::product::validate_product),
         saved_at: input.saved_at,
         read_at: None,
         archived: false,
@@ -628,6 +652,9 @@ fn save_capture_under_lock_with_state(
         }
         if metadata.site.is_none() {
             metadata.site = previous.site;
+        }
+        if metadata.product.is_none() {
+            metadata.product = previous.product;
         }
         if metadata.source_profile.is_none() {
             metadata.source_profile = previous.source_profile;
@@ -712,6 +739,7 @@ pub fn save_link_capture(
             preview_url: input.preview_url,
             favicon_url: input.favicon_url,
             theme_color: input.theme_color,
+            product: input.product,
             excerpt: input.excerpt,
             word_count: None,
             lang: input.lang,
@@ -790,6 +818,7 @@ fn import_link_capture_with_snapshot(
             preview_url: input.preview_url,
             favicon_url: input.favicon_url,
             theme_color: input.theme_color,
+            product: input.product,
             excerpt: input.excerpt,
             word_count: None,
             lang: input.lang,
@@ -835,6 +864,7 @@ pub fn import_link_with_options(
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -913,6 +943,7 @@ pub fn import_text_with_options(
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: Some(truncate_chars(&identity_text, QUOTE_EXCERPT_CHARACTERS)),
             word_count: Some(identity_text.split_whitespace().count() as u32),
             lang: None,
@@ -985,6 +1016,7 @@ pub fn import_image_with_options(
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -1047,6 +1079,7 @@ pub fn import_image_from_origin_with_options(
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -1408,6 +1441,7 @@ fn save_staged_video(
         author,
         site,
         source_profile: None,
+        product: None,
         saved_at: imported_saved_at(saved_at),
         read_at: None,
         archived: false,
@@ -2300,6 +2334,7 @@ mod tests {
             preview_url: None,
             favicon_url: None,
             theme_color: None,
+            product: None,
             excerpt: Some("Full body.".to_string()),
             word_count: Some(2),
             lang: Some("en".to_string()),
@@ -2323,6 +2358,7 @@ mod tests {
             preview_url: Some(preview_url),
             favicon_url: None,
             theme_color: Some("#123456".to_string()),
+            product: None,
             excerpt: Some("Captured excerpt".to_string()),
             lang: Some("en".to_string()),
         }
@@ -2651,6 +2687,7 @@ mod tests {
             author: None,
             site: Some("x.com".into()),
             source_profile: Some(source_profile(vec![])),
+            product: None,
             saved_at: "2026-09-22T18:42:00.000Z".into(),
             read_at: None,
             archived: false,
@@ -2949,6 +2986,7 @@ mod tests {
                 preview_url: Some(preview_url),
                 favicon_url: Some(favicon_url),
                 theme_color: Some("#123456".to_string()),
+                product: None,
                 excerpt: None,
                 lang: None,
             },

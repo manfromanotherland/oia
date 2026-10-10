@@ -61,6 +61,9 @@ pub struct RequestMetadata {
     pub site: Option<String>,
     #[serde(default)]
     pub theme_color: Option<String>,
+    /// Bounded raw structured evidence from the live DOM; core interprets it.
+    #[serde(default)]
+    pub product_html: Option<String>,
     pub lang: Option<String>,
     pub excerpt: Option<String>,
     pub word_count: Option<u32>,

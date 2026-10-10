@@ -19,6 +19,7 @@ pub mod list;
 mod locking;
 mod media_dimensions;
 pub mod notes;
+pub mod product;
 pub mod rating;
 pub mod reconcile;
 pub mod scanner;
@@ -57,6 +58,9 @@ pub use list::{
     SidebarCounts, SortField, View, ViewCounts,
 };
 pub use notes::{get_note, set_note};
+pub use product::{
+    fetch_product_metadata, parse_product_metadata, update_product_metadata_if_unchanged,
+};
 pub use rating::{list_ratings, set_rating};
 pub use reconcile::{apply_diffs, rebuild};
 pub use scanner::{diff, scan_library, ScanDiff, ScannedReading};
@@ -66,7 +70,8 @@ pub use source_capture::{
 pub use status::{set_archived, set_favorite, set_read};
 pub use tags::{add_tag, list_tags, remove_tag, MAX_TAG_LEN};
 pub use types::{
-    LibraryRoot, MachineTagSource, Metadata, Reading, ReadingKind, SourceAttachment, SourceProfile,
+    LibraryRoot, MachineTagSource, Metadata, ProductMetadata, Reading, ReadingKind,
+    SourceAttachment, SourceProfile,
 };
 pub use url_norm::normalize_url;
 pub use visual_index::{

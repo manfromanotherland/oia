@@ -26,6 +26,7 @@ final class ReadingRowMapperTests: XCTestCase {
             "source_id":"1890000000000000000","author_handle":"@ada",\
             "attachments":[]}
             """,
+            productJson: nil,
             dominantColor: FfiWeightedColor(red: 0.1, green: 0.2, blue: 0.3, weight: 0.6),
             mediaAspectRatio: 16.0 / 9.0,
             canonicalUrl: "https://example.com/article?canonical",
@@ -93,6 +94,7 @@ final class ReadingRowMapperTests: XCTestCase {
         ffi.faviconAsset = nil
         ffi.themeColor = nil
         ffi.sourceProfileJson = nil
+        ffi.productJson = nil
         ffi.dominantColor = nil
         ffi.mediaAspectRatio = nil
         ffi.author = nil
@@ -118,6 +120,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.faviconAsset)
         XCTAssertNil(row.themeColor)
         XCTAssertNil(row.sourceProfile)
+        XCTAssertNil(row.product)
         XCTAssertNil(row.dominantColor)
         XCTAssertNil(row.mediaAspectRatio)
         XCTAssertTrue(row.tags.isEmpty)
@@ -128,6 +131,38 @@ final class ReadingRowMapperTests: XCTestCase {
         var ffi = sampleFfiRow()
         ffi.kind = .quote
         XCTAssertEqual(ReadingRow(ffi).kind, .quote)
+    }
+
+    func testMapsProductPriceAndKeepsFullCaptureOutOfArticlePresentation() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .article
+        ffi.lightweight = false
+        ffi.sourceProfileJson = nil
+        ffi.productJson = """
+        {"version":1,"price":"135.00","currency":"EUR","captured_at":"2026-10-10T12:00:00Z"}
+        """
+        let row = ReadingRow(ffi)
+        XCTAssertTrue(row.isProduct)
+        XCTAssertFalse(row.isFullArticle)
+        XCTAssertEqual(row.product?.price, "135.00")
+        XCTAssertEqual(row.product?.currency, "EUR")
+        XCTAssertEqual(row.product?.formattedPrice(locale: Locale(identifier: "en_IE")), "€135")
+    }
+
+    func testProductPriceHandlesFractionsFromPricesAndMissingPrices() {
+        let product = ReadingProductMetadata.decode("""
+        {"version":1,"price":"129.95","currency":"EUR","price_is_from":true}
+        """)
+        XCTAssertEqual(product?.formattedPrice(locale: Locale(identifier: "en_IE")), "From €129.95")
+        XCTAssertNotNil(ReadingProductMetadata.decode("""
+        {"version":1,"price_is_from":false}
+        """))
+        XCTAssertNil(ReadingProductMetadata.decode("""
+        {"version":1,"price_is_from":false}
+        """)?.formattedPrice())
+        XCTAssertNil(ReadingProductMetadata.decode("""
+        {"version":2,"price":"1","currency":"EUR","price_is_from":false}
+        """))
     }
 
     func testEqualityTracksFields() {

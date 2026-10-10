@@ -99,6 +99,7 @@ mod tests {
             title: "Test".to_string(),
             author: None,
             site: None,
+            product: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
             read_at: None,

@@ -13,6 +13,29 @@ function buildDoc(head: string, body: string, title = "Page title"): Document {
 }
 
 describe("extractStandaloneMedia", () => {
+  it("omits product evidence from standalone images, videos, and selected quotes", () => {
+    const doc = buildDoc(
+      '<script type="application/ld+json">{"@type":"Product","offers":{"price":"229.00","priceCurrency":"EUR"}}</script>',
+      '<img src="https://example.com/lamp.png"><video src="https://example.com/demo.mp4"></video>',
+    );
+    const image = extractStandaloneMedia(
+      doc,
+      "https://example.com/lamp",
+      "image",
+      "https://example.com/lamp.png",
+    );
+    const video = extractStandaloneMedia(
+      doc,
+      "https://example.com/lamp",
+      "video",
+      "https://example.com/demo.mp4",
+    );
+    const quote = extractQuote(doc, "https://example.com/lamp", "A selected thought.");
+    for (const result of [image, video, quote]) {
+      expect(result.metadata).not.toHaveProperty("product_html");
+    }
+  });
+
   it("builds a standalone image item with page metadata and capture bytes requested", () => {
     const imageUrl = "https://cdn.example.com/art/diagram.png";
     const doc = buildDoc(

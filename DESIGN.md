@@ -114,12 +114,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
   filters by that type or palette color; pressing Return turns complete type and hex terms into
   tokens, while remaining words stay broad free text. Only the last type term applies. Never infer
-  an exact tag merely because a tag has the same spelling. Article excludes lightweight links and
-  captured social posts; Link selects both.
+  an exact tag merely because a tag has the same spelling. Article excludes lightweight links,
+  captured social posts, and products; Link selects all three.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Images,
   Videos, Articles, Links, Quotes**. Images and Videos each show only their matching card kind;
   Articles includes longform X Articles but excludes lightweight link placeholders and captured
-  social posts. Links includes lightweight URL saves and captured social posts. Exact tag filtering
+  social posts and products. Links includes lightweight URL saves, captured social posts, and
+  products. Exact tag filtering
   comes from native suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
@@ -149,6 +150,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and the first local attachment or video poster. It appears in Links while retaining its full local
   article file and native post detail. Its source profile does not itself create a Tag; the saved
   post text and attachments can acquire subject Tags through the same analysis as other readings.
+- **Product:** a source-aware link card that keeps its local preview and displays the saved price
+  at the right of its source line, where article reading time appears. Minimum offer prices say
+  **From**; a recognised product without a usable price says **Product**. Product classification
+  is file-backed metadata, creates no Tag, and stays in Links, including full browser captures.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
   use a subtle cool-gray surface in light mode and a slightly lighter cool gray than the board in

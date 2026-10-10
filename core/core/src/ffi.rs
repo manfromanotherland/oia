@@ -51,6 +51,7 @@ pub struct FfiReadingRow {
     pub favicon_asset: Option<String>,
     pub theme_color: Option<String>,
     pub source_profile_json: Option<String>,
+    pub product_json: Option<String>,
     pub dominant_color: Option<FfiWeightedColor>,
     pub media_aspect_ratio: Option<f64>,
     pub canonical_url: String,
@@ -323,6 +324,7 @@ impl From<crate::list::ReadingRow> for FfiReadingRow {
             favicon_asset: r.favicon_asset,
             theme_color: r.theme_color,
             source_profile_json: r.source_profile_json,
+            product_json: r.product_json,
             dominant_color: r.dominant_color.map(|color| FfiWeightedColor {
                 red: color.red,
                 green: color.green,

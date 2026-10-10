@@ -74,6 +74,12 @@ favicon_asset: assets/91d0c4ab....ico      # optional locally captured page favi
 author: Jane Doe                           # optional; extracted byline
 site: Example                              # optional source-site label or hostname
 theme_color: "#123456"                     # optional normalized website colour for card presentation
+product:                                  # optional structured product classification / price snapshot
+  version: 1
+  price: "135.00"                          # optional decimal string, paired with currency
+  currency: EUR                            # optional validated currency code
+  price_is_from: false                      # true for a minimum aggregate offer price
+  captured_at: 2026-10-10T12:00:00Z         # optional snapshot time, not the save date
 source_profile:                            # optional versioned metadata for a recognized source
   version: 1
   source_type: social_post
@@ -119,8 +125,13 @@ source_hash: sha256:abc123...              # sha256 of the cleaned Markdown body
 
 #### Optional fields
 `kind`, `lightweight`, `media_url`, `preview_asset`, `favicon_asset`, `author`, `site`,
-`theme_color`, `source_profile`, `read_at`, `machine_tags`, `excluded_machine_tags`,
+`theme_color`, `source_profile`, `product`, `read_at`, `machine_tags`, `excluded_machine_tags`,
 `excerpt`, `word_count`, `lang`.
+
+`product.version: 1` is an additive format-v1 record. Products retain `kind: article` and the
+same URL-derived identity. Price and currency are present together or absent together; an absent
+price still permits a recognised Product card. `price_is_from` defaults to false. Clients ignore
+unsupported product record versions. Values are snapshots, not a live store-price subscription.
 
 `kind` is written for every new card but remains optional in the parser for backwards compatibility;
 an older file without it is an `article`. `lightweight` is omitted/false for ordinary captures and

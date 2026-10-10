@@ -43,6 +43,7 @@ export function extractPage(doc: Document, pageUrl: string): ExtractionResult | 
     ...(author ? { author } : {}),
     site,
     ...(page.themeColor ? { theme_color: page.themeColor } : {}),
+    ...(page.productHtml ? { product_html: page.productHtml } : {}),
     ...(lang ? { lang } : {}),
     ...(excerpt ? { excerpt } : {}),
     word_count: countWords(article.textContent ?? ""),
