@@ -22,6 +22,9 @@ extension OiaLibraryView {
                     attachmentAspectRatio: profile.primaryAttachment?.cardAspectRatio
                 )
             }
+            if row.isProduct {
+                return row.productCardHeight(for: width) ?? width
+            }
             if row.isFullArticle {
                 let textHeight = cardTextMetrics.fullArticleTextHeight(
                     for: row.displayTitle,

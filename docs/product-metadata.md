@@ -24,9 +24,10 @@ without making the native host fetch the page again. Ordinary URL-only saves, in
 Shortcut, can attempt a bounded public HTML fetch and remain normal lightweight links if offline,
 blocked, or missing reliable metadata.
 
-The card keeps its local preview and existing link layout. The saved price appears at the right
-of the source line, in the same position used for article reading time. Currency formatting belongs
-to the native presentation layer.
+The card fits its local preview inside a square or gently portrait canvas. The saved price appears
+in a theme-aware top-right badge, with a larger title over a dark gradient at the bottom of the
+image and no source footer. Products without previews use a neutral surface and semantic title
+color. Currency formatting belongs to the native presentation layer.
 
 ## Existing library
 

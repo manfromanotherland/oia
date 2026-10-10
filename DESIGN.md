@@ -150,10 +150,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and the first local attachment or video poster. It appears in Links while retaining its full local
   article file and native post detail. Its source profile does not itself create a Tag; the saved
   post text and attachments can acquire subject Tags through the same analysis as other readings.
-- **Product:** a source-aware link card that keeps its local preview and displays the saved price
-  at the right of its source line, where article reading time appears. Minimum offer prices say
-  **From**; a recognised product without a usable price says **Product**. Product classification
-  is file-backed metadata, creates no Tag, and stays in Links, including full browser captures.
+- **Product:** an image-led link card with the saved price in a top-right badge using semantic
+  light/dark colors. A larger title overlays the bottom of the local preview over a dark gradient;
+  there is no source footer. Previews fit without cropping inside a square or gently portrait
+  canvas. Products without previews use a neutral surface and semantic title color. Minimum offer
+  prices say **From**; a recognised product without a usable price says **Product**. Product
+  classification is file-backed metadata, creates no Tag, and stays in Links, including full
+  browser captures.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
   use a subtle cool-gray surface in light mode and a slightly lighter cool gray than the board in

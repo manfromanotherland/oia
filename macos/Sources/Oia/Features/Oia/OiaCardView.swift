@@ -161,6 +161,15 @@ struct OiaCardView: View {
                 reduceMotion: reduceMotion,
                 scenePhase: scenePhase
             )
+        } else if row.isProduct {
+            ProductCard(
+                row: row,
+                libraryURL: appState.libraryURL,
+                cardSize: size,
+                displayScale: displayScale,
+                isVisible: isInViewport,
+                scrollState: scrollState
+            )
         } else if row.isFullArticle {
             fullArticleCard(in: size)
         } else if row.previewAsset != nil {
@@ -317,12 +326,6 @@ private extension OiaCardView {
 
             Text(row.displaySite ?? "Saved locally")
                 .lineLimit(1)
-
-            if row.isProduct {
-                Spacer(minLength: 4)
-                Text(row.productPriceLabel ?? "Product")
-                    .fixedSize()
-            }
         }
         .font(Font(OiaCardTextMetrics.sourceFont))
         .foregroundStyle(foreground)

@@ -28,6 +28,17 @@ extension ReadingRow {
         height(for: width, aspectRatio: articlePreviewAspectRatio)
     }
 
+    /// Product previews use a square or gently portrait canvas so the overlaid
+    /// title and price have room even when the saved image is panoramic. The
+    /// image itself fits inside this canvas without cropping the product.
+    var productCardAspectRatio: CGFloat {
+        min(1, max(3 / 4, validMediaAspectRatio ?? 1))
+    }
+
+    func productCardHeight(for width: CGFloat) -> CGFloat? {
+        height(for: width, aspectRatio: productCardAspectRatio)
+    }
+
     func standaloneMediaHeight(for width: CGFloat) -> CGFloat? {
         height(for: width, aspectRatio: standaloneMediaAspectRatio)
     }

@@ -227,7 +227,7 @@ The card metadata is additive and backwards compatible:
   replaces that placeholder at the same article id and clears the marker while preserving user
   state.
 - `product`: optional versioned product classification and offered-price snapshot. Products retain
-  `kind: article`, appear in Links, and use a price beside the card's source instead of reading time.
+  `kind: article`, appear in Links, and show the saved price in a top-right card badge.
   Rust derives the record from bounded structured page metadata; clients only format it. See
   [product metadata](docs/product-metadata.md).
 - `tags`: user-authored or imported labels.
