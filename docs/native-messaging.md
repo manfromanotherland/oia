@@ -105,7 +105,7 @@ additional metadata and never replaces that origin.
 | `metadata.author` | string | — | Extracted byline; omit if unknown |
 | `metadata.site` | string | — | Source-site label, usually the page's Open Graph site name or hostname; omit if unknown |
 | `metadata.theme_color` | string | — | First non-empty page `theme-color`/`theme_color` meta value; core validates and normalizes supported CSS colours before storing it |
-| `metadata.product_html` | string | — | Bounded raw live-DOM product evidence (JSON-LD, scoped microdata/RDFa, product meta tags, canonical identity). Rust validates/classifies article and link saves; standalone media and quotes omit it. Extension cap: 512 KiB UTF-8. Additive to protocol v4. |
+| `metadata.product_html` | string | — | Bounded raw live-DOM structured evidence (JSON-LD, scoped microdata/RDFa, product/book/music/video Open Graph tags, artwork, canonical identity). The field name remains compatible with older v4 hosts. Rust identifies the main product/book/music/movie on article and link saves; standalone media and quotes omit it. Extension cap: 512 KiB UTF-8. |
 | `metadata.lang` | string | — | BCP-47 language tag |
 | `metadata.excerpt` | string | — | One-sentence summary |
 | `metadata.word_count` | integer | — | Word count of the cleaned body |
@@ -137,6 +137,31 @@ can coexist from one origin page.
 
 ---
 
+## Inspect page metadata (extension → host)
+
+This additive protocol-v4 request interprets live structured evidence before artwork capture.
+It does not open a library or perform network retrieval:
+
+```json
+{
+  "protocol_version": 4,
+  "action": "inspect_page_metadata",
+  "url": "https://example.com/book",
+  "product_html": "<script type=\"application/ld+json\">…</script>"
+}
+```
+
+The URL must be HTTP(S), without credentials, and at most 8 KiB; `product_html` is at most
+512 KiB UTF-8. Success returns `{ "protocol_version": 4, "ok": true, "preview_candidates": [] }`,
+with the selected main entity's artwork URL when available. The extension accepts at most four
+public HTTP(S) candidates and prioritizes them in its existing image-byte capture pipeline. The
+current parser returns at most one. Ordinary responses omit `preview_candidates`.
+
+Invalid input uses the normal `invalid_request` response. Inspection is optional: transport errors,
+older hosts, malformed responses, or a two-second timeout preserve ordinary preview capture.
+Final save requests independently interpret the evidence and promote typed artwork only when its
+exact URL has captured bytes. A category alone never makes a remote asset a local preview.
+
 ## Save link request (extension → host)
 
 `save_link` first passes the URL through the shared Rust URL-save facade. A recognized public source
@@ -151,7 +176,11 @@ For ordinary product pages the extension includes `metadata.product_html`, using
 present in the live page. The host parses it with the shared Rust product parser and writes the
 optional versioned `product` frontmatter without changing the URL-derived reading ID. No extra
 host page request is necessary. Product recognition and pricing never depend on JavaScript
-duplicating the Rust rules; an absent or invalid product payload leaves an ordinary link.
+classification. The same raw evidence identifies the main Book, Music, or Movie and writes the
+optional `link_category`; a more specific category retains any Product price snapshot. Typed
+artwork takes priority only when its exact URL has decoded captured bytes. Excessively deep or
+large structured graphs are rejected as unknown, preserving all negative page context. Evidence
+that cannot identify a main entity leaves an ordinary link.
 
 ```json
 {

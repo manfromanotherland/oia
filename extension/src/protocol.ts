@@ -20,7 +20,8 @@ export interface SaveRequestMetadata {
   site?: string;
   /** First page-declared theme colour; core validates and normalizes it for storage. */
   theme_color?: string;
-  /** Raw live structured product evidence, bounded to 512 KiB; interpreted by core. */
+  /** Raw live structured page evidence, bounded to 512 KiB; interpreted by core.
+   * The existing field name stays compatible with protocol-v4 hosts. */
   product_html?: string;
   lang?: string;
   excerpt?: string;
@@ -149,6 +150,18 @@ export interface SaveResponseError {
 }
 
 export type SaveResponse = SaveResponseSuccess | SaveResponseError;
+
+/** Pure local inspection; the host does not fetch URLs or access the library. */
+export interface InspectPageMetadataRequest {
+  protocol_version: typeof PROTOCOL_VERSION;
+  action: "inspect_page_metadata";
+  url: string;
+  product_html: string;
+}
+
+export type InspectPageMetadataResponse =
+  | { protocol_version: typeof PROTOCOL_VERSION; ok: true; preview_candidates?: string[] }
+  | SaveResponseError;
 
 /** Begin/chunk/abort acknowledge without a saved-reading path. Finish returns
  * the existing SaveResponse success shape. */

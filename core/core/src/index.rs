@@ -76,6 +76,15 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 13 {
         migrate_v13(conn)?;
     }
+    if version < 14 {
+        migrate_v14(conn)?;
+    }
+    Ok(())
+}
+
+/// v14: rebuildable cultural link category from article frontmatter.
+fn migrate_v14(conn: &Connection) -> Result<()> {
+    conn.execute_batch("BEGIN; ALTER TABLE readings ADD COLUMN link_category TEXT; PRAGMA user_version = 14; COMMIT;")?;
     Ok(())
 }
 
@@ -553,7 +562,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
 
         // readings table exists
         let count: i64 = conn
@@ -668,7 +677,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -833,7 +842,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
         assert_eq!(projected, None);
     }
 
@@ -941,7 +950,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -983,7 +992,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 13);
+        assert_eq!(version, 14);
 
         let values: (i64, i64, String) = conn
             .query_row(

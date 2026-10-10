@@ -184,7 +184,8 @@ struct BoardSearchInput: Hashable, Sendable {
             if BoardSearchSuggestions.itemTypes.contains(lower) {
                 inferred.append(BoardSearchToken(kind: .itemType, value: lower))
             } else if word.count == 7, word.first == "#",
-                      UInt64(word.dropFirst(), radix: 16) != nil {
+                      UInt64(word.dropFirst(), radix: 16) != nil
+            {
                 inferred.append(BoardSearchToken(kind: .color, value: word))
             } else {
                 remaining.append(word)
@@ -254,7 +255,7 @@ struct BoardSearchTagCandidate: Equatable, Sendable {
 /// Bounded native-search completions for the user's current unfinished text.
 struct BoardSearchSuggestions: Equatable, Sendable {
     static let maximumTagCount = 8
-    static let itemTypes = ["image", "video", "article", "link", "quote"]
+    static let itemTypes = ["image", "video", "article", "link", "quote", "book", "music", "movie", "product"]
 
     let itemTypeTokens: [BoardSearchToken]
     let colorToken: BoardSearchToken?

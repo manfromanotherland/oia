@@ -23,6 +23,10 @@ use url::Url;
 
 pub const MAX_PRODUCT_HTML_BYTES: usize = 2 * 1024 * 1024;
 pub const MAX_BROWSER_PRODUCT_HTML_BYTES: usize = 512 * 1024;
+pub(crate) const MAX_STRUCTURED_NODES: usize = 1024;
+const MAX_DOM_SCOPES: usize = 256;
+const MAX_DOM_SCOPE_DEPTH: usize = 32;
+const MAX_DOM_ANCESTRY: usize = 128;
 const FETCH_DEADLINE: Duration = Duration::from_secs(8);
 
 /// Identify the main product using JSON-LD, scoped schema.org markup, or explicit
@@ -37,23 +41,18 @@ pub fn parse_product_metadata(html: &str, page_url: &str) -> Option<ProductMetad
         return None;
     }
     let document = Html::parse_document(html);
-    let scripts = Selector::parse("script[type]").ok()?;
-    let roots: Vec<Value> = document
-        .select(&scripts)
-        .filter(|element| {
-            element.value().attr("type").is_some_and(|mime| {
-                mime.split(';')
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .eq_ignore_ascii_case("application/ld+json")
-            })
-        })
-        .filter_map(|element| serde_json::from_str(&element.inner_html()).ok())
-        .collect();
+    let scoped = structured_dom_products(&document)?;
+    let roots = structured_json_roots(&document)?;
     let mut nodes = Vec::new();
     for root in &roots {
         collect_nodes(root, true, &mut nodes);
+    }
+    let mut dom_nodes = Vec::new();
+    for root in &scoped {
+        collect_nodes(root, true, &mut dom_nodes);
+    }
+    if nodes.len().saturating_add(dom_nodes.len()) > MAX_STRUCTURED_NODES {
+        return None;
     }
     let ids: HashMap<&str, &Value> = nodes
         .iter()
@@ -66,11 +65,6 @@ pub fn parse_product_metadata(html: &str, page_url: &str) -> Option<ProductMetad
         .collect();
     if let Some(product) = choose_product(&nodes, &ids, &page) {
         return Some(with_og_price(metadata_for(product, &ids, &page), &document));
-    }
-    let scoped = structured_dom_products(&document);
-    let mut dom_nodes = Vec::new();
-    for root in &scoped {
-        collect_nodes(root, true, &mut dom_nodes);
     }
     if negative_page_context(&nodes) {
         return None;
@@ -95,6 +89,37 @@ fn with_og_price(mut product: ProductMetadata, document: &Html) -> ProductMetada
     product
 }
 
+/// Recursion or script-count overflow rejects all evidence atomically. Other
+/// malformed publisher JSON is ignored while valid peer graphs remain usable.
+pub(crate) fn structured_json_roots(document: &Html) -> Option<Vec<Value>> {
+    let scripts = Selector::parse("script[type]").ok()?;
+    let scripts: Vec<_> = document
+        .select(&scripts)
+        .filter(|element| {
+            element.value().attr("type").is_some_and(|mime| {
+                mime.split(';')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .eq_ignore_ascii_case("application/ld+json")
+            })
+        })
+        .take(129)
+        .collect();
+    if scripts.len() > 128 {
+        return None;
+    }
+    let mut roots = Vec::new();
+    for element in scripts {
+        match serde_json::from_str(&element.inner_html()) {
+            Ok(value) => roots.push(value),
+            Err(error) if error.to_string().contains("recursion limit exceeded") => return None,
+            Err(_) => {}
+        }
+    }
+    Some(roots)
+}
+
 fn schema_name(value: &str) -> &str {
     if value.contains("://")
         && !value.starts_with("https://schema.org/")
@@ -104,7 +129,7 @@ fn schema_name(value: &str) -> &str {
     }
     value.rsplit(['/', '#', ':']).next().unwrap_or(value)
 }
-fn has_type(value: &Value, kind: &str) -> bool {
+pub(crate) fn has_type(value: &Value, kind: &str) -> bool {
     value.get("@type").is_some_and(|value| match value {
         Value::String(name) => schema_name(name) == kind,
         Value::Array(names) => names
@@ -116,7 +141,11 @@ fn has_type(value: &Value, kind: &str) -> bool {
 fn is_product(value: &Value) -> bool {
     has_type(value, "Product") || has_type(value, "ProductGroup")
 }
-fn collect_nodes<'a>(value: &'a Value, eligible: bool, nodes: &mut Vec<(&'a Value, bool)>) {
+pub(crate) fn collect_nodes<'a>(
+    value: &'a Value,
+    eligible: bool,
+    nodes: &mut Vec<(&'a Value, bool)>,
+) {
     match value {
         Value::Array(values) => {
             for value in values {
@@ -146,7 +175,7 @@ fn collect_nodes<'a>(value: &'a Value, eligible: bool, nodes: &mut Vec<(&'a Valu
         _ => {}
     }
 }
-fn resolved<'a>(value: &'a Value, ids: &HashMap<&str, &'a Value>) -> &'a Value {
+pub(crate) fn resolved<'a>(value: &'a Value, ids: &HashMap<&str, &'a Value>) -> &'a Value {
     if value.as_object().is_some_and(|o| o.len() == 1) {
         if let Some(node) = value
             .get("@id")
@@ -158,7 +187,7 @@ fn resolved<'a>(value: &'a Value, ids: &HashMap<&str, &'a Value>) -> &'a Value {
     }
     value
 }
-fn url_score(value: &Value, page: &Url) -> u8 {
+pub(crate) fn url_score(value: &Value, page: &Url) -> u8 {
     let mut score = 0;
     for key in ["url", "@id", "mainEntityOfPage"] {
         let raw = value
@@ -184,7 +213,7 @@ fn url_score(value: &Value, page: &Url) -> u8 {
     }
     score
 }
-fn negative_page_context(nodes: &[(&Value, bool)]) -> bool {
+pub(crate) fn negative_page_context(nodes: &[(&Value, bool)]) -> bool {
     nodes.iter().any(|(node, allowed)| {
         *allowed
             && (has_type(node, "ItemList")
@@ -194,22 +223,24 @@ fn negative_page_context(nodes: &[(&Value, bool)]) -> bool {
                 || has_type(node, "CollectionPage"))
     })
 }
-fn choose_product<'a>(
+pub(crate) fn choose_main_entity<'a>(
     nodes: &[(&'a Value, bool)],
     ids: &HashMap<&str, &'a Value>,
     page: &Url,
+    accepts: impl Fn(&Value) -> bool,
 ) -> Option<&'a Value> {
     let explicit = nodes
         .iter()
         .filter(|(node, allowed)| {
             *allowed
                 && has_type(node, "WebPage")
+                && !negative_page_context(&[(*node, true)])
                 && (url_score(node, page) > 0
                     || (node.get("url").is_none() && node.get("@id").is_none()))
         })
         .filter_map(|(node, _)| node.get("mainEntity"))
         .map(|node| resolved(node, ids))
-        .find(|node| is_product(node));
+        .find(|node| accepts(node));
     if explicit.is_some() {
         return explicit;
     }
@@ -226,9 +257,22 @@ fn choose_product<'a>(
         .filter_map(|(node, _)| node.get("mainEntity"))
         .map(|node| resolved(node, ids))
         .collect();
+    let blocked_ids: std::collections::HashSet<_> = nodes
+        .iter()
+        .filter(|(_, eligible)| !eligible)
+        .filter_map(|(node, _)| node.get("@id").and_then(Value::as_str))
+        .collect();
     let products: Vec<_> = nodes
         .iter()
-        .filter(|(node, allowed)| *allowed && is_product(node) && !foreign_entities.contains(node))
+        .filter(|(node, allowed)| {
+            *allowed
+                && accepts(node)
+                && !foreign_entities.contains(node)
+                && !node
+                    .get("@id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| blocked_ids.contains(id))
+        })
         .map(|(node, _)| *node)
         .collect();
     let best = products
@@ -251,17 +295,36 @@ fn choose_product<'a>(
         .iter()
         .filter(|candidate| {
             !products.iter().any(|parent| {
-                parent.get("hasVariant").is_some_and(|variants| {
-                    array_values(variants)
-                        .iter()
-                        .any(|variant| contains_node(resolved(variant, ids), candidate))
-                })
+                contains_descendant(parent, candidate)
+                    || parent.get("hasVariant").is_some_and(|variants| {
+                        array_values(variants)
+                            .iter()
+                            .any(|variant| contains_node(resolved(variant, ids), candidate))
+                    })
             })
         })
         .copied()
         .collect();
     (roots.len() == 1 && (roots[0].get("url").is_none() || url_score(roots[0], page) > 0))
         .then(|| roots[0])
+}
+fn choose_product<'a>(
+    nodes: &[(&'a Value, bool)],
+    ids: &HashMap<&str, &'a Value>,
+    page: &Url,
+) -> Option<&'a Value> {
+    choose_main_entity(nodes, ids, page, is_product)
+}
+fn contains_descendant(parent: &Value, node: &Value) -> bool {
+    match parent {
+        Value::Object(object) => object
+            .values()
+            .any(|child| std::ptr::eq(child, node) || contains_descendant(child, node)),
+        Value::Array(array) => array
+            .iter()
+            .any(|child| std::ptr::eq(child, node) || contains_descendant(child, node)),
+        _ => false,
+    }
 }
 fn contains_node(parent: &Value, node: &Value) -> bool {
     parent == node
@@ -485,9 +548,12 @@ fn dom_value(element: ElementRef<'_>) -> String {
         .map(str::to_owned)
         .unwrap_or_else(|| element.text().collect::<String>().trim().to_string())
 }
-fn dom_node(element: ElementRef<'_>) -> Value {
+fn dom_node(element: ElementRef<'_>, remaining_bytes: &mut usize) -> Option<Value> {
     let mut object = serde_json::Map::new();
     let kinds = type_tokens(element);
+    if kinds.len() > 8 {
+        return None;
+    }
     if !kinds.is_empty() {
         object.insert("@type".into(), json!(kinds));
     }
@@ -498,6 +564,7 @@ fn dom_node(element: ElementRef<'_>) -> Value {
     {
         object.insert("@id".into(), json!(id));
     }
+    *remaining_bytes = remaining_bytes.checked_sub(serde_json::to_vec(&object).ok()?.len())?;
     for child in element
         .descendants()
         .filter_map(ElementRef::wrap)
@@ -506,6 +573,9 @@ fn dom_node(element: ElementRef<'_>) -> Value {
         let props = property_tokens(child);
         if props.is_empty() {
             continue;
+        }
+        if props.len() > 8 {
+            return None;
         }
         let nearest = child
             .ancestors()
@@ -517,8 +587,13 @@ fn dom_node(element: ElementRef<'_>) -> Value {
         let value = if type_tokens(child).is_empty() {
             json!(dom_value(child))
         } else {
-            dom_node(child)
+            dom_node(child, remaining_bytes)?
         };
+        let expanded_bytes = serde_json::to_vec(&value)
+            .ok()?
+            .len()
+            .checked_mul(props.len())?;
+        *remaining_bytes = remaining_bytes.checked_sub(expanded_bytes)?;
         for property in props {
             match object.get_mut(property) {
                 None => {
@@ -531,19 +606,50 @@ fn dom_node(element: ElementRef<'_>) -> Value {
             }
         }
     }
-    Value::Object(object)
+    Some(Value::Object(object))
 }
-fn structured_dom_products(document: &Html) -> Vec<Value> {
-    let scopes = Selector::parse("[itemtype], [typeof]").expect("static selector");
-    document
-        .select(&scopes)
+/// Reject the entire evidence family before recursive conversion. Bounds cover
+/// both scope recursion and ancestry work, plus property expansion into JSON.
+pub(crate) fn structured_dom_products(document: &Html) -> Option<Vec<Value>> {
+    let selector = Selector::parse("[itemtype], [typeof]").expect("static selector");
+    let scopes: Vec<_> = document
+        .select(&selector)
+        .take(MAX_DOM_SCOPES + 1)
+        .collect();
+    if scopes.len() > MAX_DOM_SCOPES {
+        return None;
+    }
+    let properties = Selector::parse("[itemprop], [property]").expect("static selector");
+    let annotated: Vec<_> = document
+        .select(&properties)
+        .take(MAX_STRUCTURED_NODES + 1)
+        .collect();
+    if annotated.len() > MAX_STRUCTURED_NODES {
+        return None;
+    }
+    for element in scopes.iter().chain(&annotated) {
+        if element.ancestors().take(MAX_DOM_ANCESTRY + 1).count() > MAX_DOM_ANCESTRY
+            || element
+                .ancestors()
+                .filter_map(ElementRef::wrap)
+                .filter(|ancestor| !type_tokens(*ancestor).is_empty())
+                .take(MAX_DOM_SCOPE_DEPTH + 1)
+                .count()
+                > MAX_DOM_SCOPE_DEPTH
+        {
+            return None;
+        }
+    }
+    let mut remaining_bytes = MAX_PRODUCT_HTML_BYTES;
+    scopes
+        .into_iter()
         .filter(|element| {
             !element
                 .ancestors()
                 .filter_map(ElementRef::wrap)
                 .any(|ancestor| !type_tokens(ancestor).is_empty())
         })
-        .map(dom_node)
+        .map(|element| dom_node(element, &mut remaining_bytes))
         .collect()
 }
 fn open_graph_product(document: &Html) -> Option<ProductMetadata> {
@@ -646,13 +752,61 @@ fn approved_addresses(url: &Url) -> Result<Vec<std::net::SocketAddr>> {
 /// checked again and DNS is pinned to approved public addresses. Failures must
 /// remain best effort at callers so offline link saves continue to work.
 pub fn fetch_product_metadata(url: &str) -> Result<Option<ProductMetadata>> {
-    let deadline = Instant::now() + FETCH_DEADLINE;
+    let (bytes, content_type, final_url) =
+        fetch_public_bytes(url, MAX_PRODUCT_HTML_BYTES, FETCH_DEADLINE)?;
+    if !is_html_content_type(content_type.as_deref()) {
+        return Ok(None);
+    }
+    Ok(parse_product_metadata(
+        &String::from_utf8_lossy(&bytes),
+        &final_url,
+    ))
+}
+
+pub(crate) fn is_html_content_type(content_type: Option<&str>) -> bool {
+    content_type.is_some_and(|value| {
+        let mime = value.split(';').next().unwrap_or("").trim();
+        mime.eq_ignore_ascii_case("text/html") || mime.eq_ignore_ascii_case("application/xhtml+xml")
+    })
+}
+
+/// Pure syntactic artwork guard; network retrieval also validates and pins DNS.
+pub(crate) fn is_public_metadata_url(url: &Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || !matches!(url.port_or_known_default(), Some(80 | 443))
+    {
+        return false;
+    }
+    match url.host() {
+        Some(url::Host::Ipv4(ip)) => public_ip(IpAddr::V4(ip)),
+        Some(url::Host::Ipv6(ip)) => public_ip(IpAddr::V6(ip)),
+        Some(url::Host::Domain(host)) => {
+            host.contains('.')
+                && host != "localhost"
+                && !host.ends_with(".localhost")
+                && !host.ends_with(".local")
+                && !host.ends_with(".internal")
+        }
+        None => false,
+    }
+}
+
+/// Shared bounded public retrieval for metadata and optional artwork. Redirects
+/// are revalidated and resolved addresses pinned; no ambient proxy is used.
+pub(crate) fn fetch_public_bytes(
+    url: &str,
+    max_bytes: usize,
+    timeout: Duration,
+) -> Result<(Vec<u8>, Option<String>, String)> {
+    let deadline = Instant::now() + timeout;
     let mut current = Url::parse(url)?;
     for hop in 0..=3 {
         let addresses = approved_addresses(&current)?;
         let remaining = deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            bail!("product metadata deadline exceeded");
+            bail!("metadata deadline exceeded");
         }
         let client = Client::builder()
             .no_proxy()
@@ -663,50 +817,46 @@ pub fn fetch_product_metadata(url: &str) -> Result<Option<ProductMetadata>> {
             .build()?;
         let mut response = client
             .get(current.clone())
-            .header(ACCEPT, "text/html,application/xhtml+xml")
-            .header("User-Agent", "Mozilla/5.0 Óia/0.1 ProductMetadata")
+            .header(ACCEPT, "text/html,application/xhtml+xml,image/*")
+            .header("User-Agent", "Mozilla/5.0 Oia/0.1 LinkMetadata")
             .send()?;
         if response.status().is_redirection() {
             if hop == 3 {
-                bail!("too many product metadata redirects");
+                bail!("too many metadata redirects");
             }
             let location = response
                 .headers()
                 .get(LOCATION)
                 .and_then(|v| v.to_str().ok())
-                .ok_or_else(|| anyhow!("missing product redirect"))?;
+                .ok_or_else(|| anyhow!("missing metadata redirect"))?;
             current = current.join(location)?;
             continue;
         }
         if !response.status().is_success() {
-            bail!("product metadata HTTP {}", response.status());
-        }
-        if !response
-            .headers()
-            .get(CONTENT_TYPE)
-            .and_then(|v| v.to_str().ok())
-            .is_some_and(|v| v.starts_with("text/html") || v.starts_with("application/xhtml+xml"))
-        {
-            return Ok(None);
+            bail!("metadata HTTP {}", response.status());
         }
         if response
             .content_length()
-            .is_some_and(|n| n > MAX_PRODUCT_HTML_BYTES as u64)
+            .is_some_and(|n| n > max_bytes as u64)
         {
-            bail!("product HTML exceeded size limit");
+            bail!("metadata exceeded size limit");
         }
+        let content_type = response
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
         let mut bytes = Vec::new();
         response
             .by_ref()
-            .take((MAX_PRODUCT_HTML_BYTES + 1) as u64)
+            .take(max_bytes.saturating_add(1) as u64)
             .read_to_end(&mut bytes)?;
-        if bytes.len() > MAX_PRODUCT_HTML_BYTES {
-            bail!("product HTML exceeded size limit");
+        if bytes.len() > max_bytes {
+            bail!("metadata exceeded size limit");
         }
-        let html = String::from_utf8_lossy(&bytes);
-        return Ok(parse_product_metadata(&html, current.as_str()));
+        return Ok((bytes, content_type, current.to_string()));
     }
-    Ok(None)
+    bail!("metadata redirect failed")
 }
 
 /// Add a product snapshot to an unchanged reading without replacing content,
@@ -1009,6 +1159,7 @@ mod tests {
             favicon_url: None,
             theme_color: None,
             product: Some(product.clone()),
+            link_category: None,
             excerpt: None,
             lang: None,
         };
@@ -1036,6 +1187,7 @@ mod tests {
                 favicon_url: None,
                 theme_color: None,
                 product: None,
+                link_category: None,
                 excerpt: None,
                 word_count: None,
                 lang: None,

@@ -141,6 +141,7 @@ pub struct ReadingRow {
     pub source_profile_json: Option<String>,
     /// Disposable projection of the file-backed product presentation snapshot.
     pub product_json: Option<String>,
+    pub link_category: Option<String>,
     /// Featured passage derived from article.md and highlights.md.
     pub featured_highlight_text: Option<String>,
     /// Representative exact sRGB cluster from the current derived visual
@@ -182,9 +183,9 @@ pub(crate) fn view_clause(view: View) -> &'static str {
         View::Archive => "archived = 1",
         View::Favorites => "favorite = 1",
         View::Media => "kind IN ('image', 'video')",
-        View::Articles => "kind = 'article' AND lightweight = 0 AND product_json IS NULL AND json_extract(source_profile_json, '$.source_type') IS NOT 'social_post'",
+        View::Articles => "kind = 'article' AND lightweight = 0 AND product_json IS NULL AND link_category IS NULL AND json_extract(source_profile_json, '$.source_type') IS NOT 'social_post'",
         View::Notes => "has_note = 1",
-        View::Links => "kind = 'article' AND (lightweight = 1 OR product_json IS NOT NULL OR json_extract(source_profile_json, '$.source_type') IS 'social_post')",
+        View::Links => "kind = 'article' AND (lightweight = 1 OR product_json IS NOT NULL OR link_category IS NOT NULL OR json_extract(source_profile_json, '$.source_type') IS 'social_post')",
         View::Quotes => "kind = 'quote'",
     }
 }
@@ -758,7 +759,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category
          FROM readings
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -794,11 +795,17 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                SELECT 1 FROM json_each(?13) requested_type
                WHERE NOT (
                    (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (readings.kind = 'article' AND readings.link_category IS requested_type.value
+                       AND requested_type.value IN ('book', 'music', 'movie')
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (readings.kind = 'article' AND requested_type.value = 'product'
+                       AND readings.product_json IS NOT NULL AND readings.link_category IS NULL
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (readings.kind = 'article' AND requested_type.value = 'article'
-                       AND readings.lightweight = 0 AND readings.product_json IS NULL
+                       AND readings.lightweight = 0 AND readings.product_json IS NULL AND readings.link_category IS NULL
                        AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (readings.kind = 'article' AND requested_type.value = 'link'
-                       AND (readings.lightweight = 1 OR readings.product_json IS NOT NULL
+                       AND (readings.lightweight = 1 OR readings.product_json IS NOT NULL OR readings.link_category IS NOT NULL
                             OR json_extract(readings.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -903,11 +910,17 @@ fn phrase_exists_in_list_scope(
                SELECT 1 FROM json_each(?12) requested_type
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (r.kind = 'article' AND r.link_category IS requested_type.value
+                       AND requested_type.value IN ('book', 'music', 'movie')
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (r.kind = 'article' AND requested_type.value = 'product'
+                       AND r.product_json IS NOT NULL AND r.link_category IS NULL
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0 AND r.product_json IS NULL
+                       AND r.lightweight = 0 AND r.product_json IS NULL AND r.link_category IS NULL
                        AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL
+                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL OR r.link_category IS NOT NULL
                             OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -959,14 +972,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text,
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(30)?;
+        let body: String = row.get(31)?;
         Ok((row_data, body))
     })?;
 
@@ -1032,7 +1045,7 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json, r.featured_highlight_text
+                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json, r.featured_highlight_text, r.link_category
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -1068,11 +1081,17 @@ fn list_readings_search(
                SELECT 1 FROM json_each(?15) requested_type
                WHERE NOT (
                    (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (r.kind = 'article' AND r.link_category IS requested_type.value
+                       AND requested_type.value IN ('book', 'music', 'movie')
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (r.kind = 'article' AND requested_type.value = 'product'
+                       AND r.product_json IS NOT NULL AND r.link_category IS NULL
+                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0 AND r.product_json IS NULL
+                       AND r.lightweight = 0 AND r.product_json IS NULL AND r.link_category IS NULL
                        AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
                    OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL
+                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL OR r.link_category IS NOT NULL
                             OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
                )
            )
@@ -1135,8 +1154,10 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
     let lightweight = row.get::<_, i32>(21)? != 0;
     let source_profile_json: Option<String> = row.get(25)?;
     let product_json: Option<String> = row.get(28)?;
+    let link_category: Option<String> = row.get(30)?;
     let is_link = kind == ReadingKind::Article
         && (lightweight
+            || link_category.is_some()
             || product_json.is_some()
             || is_social_post(source_profile_json.as_deref()));
     let dominant_color = palette_json
@@ -1157,6 +1178,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         theme_color: row.get(20)?,
         source_profile_json,
         product_json,
+        link_category,
         featured_highlight_text: row.get(29)?,
         dominant_color,
         media_aspect_ratio: row.get(23)?,
@@ -1240,6 +1262,7 @@ mod tests {
             author: None,
             site: None,
             product: None,
+            link_category: None,
             featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
@@ -3040,5 +3063,154 @@ mod tests {
             .all,
             1
         );
+    }
+
+    #[test]
+    fn cultural_categories_search_and_views_rebuild_with_presentation_priority() {
+        let (directory, conn) = setup();
+        let library = make_library(&directory);
+        let product = crate::parse_product_metadata(
+            "<meta property='og:type' content='product'>",
+            "https://example.com/work",
+        )
+        .unwrap();
+        let mut expected = std::collections::HashMap::new();
+        for (name, category, has_product, social, lightweight) in [
+            ("Book", Some("book"), true, false, false),
+            ("Music", Some("music"), false, false, true),
+            ("Movie", Some("movie"), false, false, false),
+            ("Product", None, true, false, false),
+            ("UnknownProduct", Some("future"), true, false, false),
+            ("UnknownArticle", Some("future"), false, false, false),
+            ("Article", None, false, false, false),
+            ("Social", Some("book"), true, true, false),
+        ] {
+            let id = new_id();
+            let mut metadata = meta(
+                &id,
+                &format!("https://example.com/{name}"),
+                &format!("Red {name}"),
+            );
+            metadata.link_category = category.map(str::to_owned);
+            metadata.product = has_product.then(|| product.clone());
+            metadata.lightweight = lightweight;
+            if social {
+                metadata.source_profile = Some(SourceProfile {
+                    version: 1,
+                    source_type: "social_post".into(),
+                    provider: "x".into(),
+                    source_id: "42".into(),
+                    author_handle: "example".into(),
+                    published_at: None,
+                    avatar_asset: None,
+                    attachments: vec![],
+                });
+            }
+            write_reading(&library, metadata, "red captured body".into()).unwrap();
+            expected.insert(name, id);
+        }
+        rebuild(&conn, &library).unwrap();
+        for query in [None, Some("red")] {
+            for (term, names) in [
+                ("book", vec!["Book"]),
+                ("music", vec!["Music"]),
+                ("movie", vec!["Movie"]),
+                ("product", vec!["Product", "UnknownProduct"]),
+                ("article", vec!["Article", "UnknownArticle"]),
+                (
+                    "link",
+                    vec![
+                        "Book",
+                        "Music",
+                        "Movie",
+                        "Product",
+                        "UnknownProduct",
+                        "Social",
+                    ],
+                ),
+            ] {
+                let rows = list_readings(
+                    &conn,
+                    &ListOptions {
+                        query: query.map(str::to_owned),
+                        item_type_terms: vec![term.into()],
+                        ..Default::default()
+                    },
+                )
+                .unwrap();
+                let ids: std::collections::HashSet<_> =
+                    rows.into_iter().map(|row| row.id).collect();
+                assert_eq!(
+                    ids,
+                    names
+                        .into_iter()
+                        .map(|name| expected[name].clone())
+                        .collect(),
+                    "{query:?} {term}"
+                );
+            }
+        }
+        let counts = view_counts(&conn, &CountScope::default()).unwrap();
+        assert_eq!(counts.all, 8);
+        assert_eq!(
+            list_readings(
+                &conn,
+                &ListOptions {
+                    view: View::Articles,
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .len(),
+            2
+        );
+        assert_eq!(
+            list_readings(
+                &conn,
+                &ListOptions {
+                    view: View::Links,
+                    ..Default::default()
+                }
+            )
+            .unwrap()
+            .len(),
+            6
+        );
+        for name in ["Book", "Movie"] {
+            let (row, body) = get_reading(&conn, &expected[name]).unwrap().unwrap();
+            assert!(row.is_link);
+            assert!(!row.lightweight);
+            assert_eq!(body, "red captured body\n");
+            assert_eq!(
+                crate::ffi::FfiReadingRow::from(row)
+                    .link_category
+                    .as_deref(),
+                Some(if name == "Book" { "book" } else { "movie" })
+            );
+        }
+        let row = get_reading(&conn, &expected["UnknownProduct"])
+            .unwrap()
+            .unwrap()
+            .0;
+        assert!(row.link_category.is_none());
+        assert!(row.product_json.is_some());
+        let file = fs::read_to_string(library.article_path(&expected["UnknownProduct"])).unwrap();
+        assert_eq!(
+            crate::parse_reading(&file)
+                .unwrap()
+                .metadata
+                .link_category
+                .as_deref(),
+            Some("future")
+        );
+        assert!(list_readings(
+            &conn,
+            &ListOptions {
+                item_type_terms: vec!["book".into(), "product".into()],
+                ..Default::default()
+            }
+        )
+        .unwrap()
+        .is_empty());
     }
 }

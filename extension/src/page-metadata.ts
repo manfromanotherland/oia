@@ -11,7 +11,7 @@ export interface PageMetadata {
   lang?: string;
   excerpt?: string;
   themeColor?: string;
-  /** Bounded live structured evidence interpreted by the Rust product parser. */
+  /** Bounded live structured evidence interpreted by the Rust link metadata parser. */
   productHtml?: string;
   socialImageUrls: string[];
   faviconUrls: string[];

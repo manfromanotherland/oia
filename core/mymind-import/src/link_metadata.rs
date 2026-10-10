@@ -13,7 +13,9 @@ use std::{
 };
 
 use anyhow::{anyhow, Result};
-use oia_core::{parse_product_metadata, ImageBytes, ProductMetadata};
+use oia_core::{
+    parse_link_metadata, parse_product_metadata, ImageBytes, LinkCategory, ProductMetadata,
+};
 use reqwest::{
     blocking::{Client, Response},
     header::{ACCEPT, CONTENT_TYPE, LOCATION, USER_AGENT},
@@ -31,6 +33,7 @@ const MAX_FAVICON_CANDIDATES: usize = 4;
 const USER_AGENT_VALUE: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Óia/0.1 LinkMetadataMigration";
 
 pub(crate) struct LinkMetadataCapture {
+    pub link_category: Option<LinkCategory>,
     pub product: Option<ProductMetadata>,
     pub canonical_url: String,
     pub title: Option<String>,
@@ -258,6 +261,8 @@ impl LinkMetadataFetcher for HttpLinkMetadataFetcher {
             }
         }
         Ok(LinkMetadataCapture {
+            link_category: parse_link_metadata(&html, final_url.as_str())
+                .map(|metadata| metadata.category),
             product: parse_product_metadata(&html, final_url.as_str()),
             canonical_url: extracted.canonical_url,
             title: extracted.title,

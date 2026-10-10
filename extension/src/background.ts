@@ -11,6 +11,8 @@ import type {
   CheckRequest,
   CheckResponse,
   ImageData,
+  InspectPageMetadataRequest,
+  InspectPageMetadataResponse,
   SaveKind,
   SaveLinkRequest,
   SaveRequest,
@@ -52,6 +54,7 @@ import {
 } from "./toolbar.js";
 import type { SelectionCapture } from "./selection-capture.js";
 import { buildSaveSelectionRequest } from "./selection-request.js";
+import { inspectCaptureArtwork } from "./structured-artwork.js";
 
 const NOTIF_HOST_MISSING = "host-missing";
 
@@ -652,7 +655,10 @@ async function saveCapture(
  * semantic page assets first so a large article cannot crowd its social image
  * or favicon out of the native-message byte budget.
  */
-async function completeCaptureImages(capture: PageCapture): Promise<ImageData[]> {
+export async function completeCaptureImages(capture: PageCapture): Promise<ImageData[]> {
+  await inspectCaptureArtwork(capture, (request) =>
+    sendNativeMessage<InspectPageMetadataRequest, InspectPageMetadataResponse>(request),
+  );
   const fallback = await fetchImages(capture.unresolved);
   const merged = deduplicateImages([...capture.images, ...fallback.images]);
   const previewCandidates = capture.preview_candidates ?? [];

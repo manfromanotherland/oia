@@ -6,9 +6,13 @@
 mod link_metadata;
 mod product_migration;
 
+pub use category_migration::{
+    enrich_existing_categories, EnrichExistingCategoriesOptions, EnrichExistingCategoriesReport,
+};
 pub use product_migration::{
     enrich_existing_products, EnrichExistingProductsOptions, EnrichExistingProductsReport,
 };
+mod category_migration;
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -1496,6 +1500,7 @@ fn execute_enriched_link(
                 preview_url,
                 favicon_url,
                 product,
+                link_category,
             } = capture;
             let stats = LinkCaptureStats {
                 preview: preview_url.is_some(),
@@ -1507,6 +1512,7 @@ fn execute_enriched_link(
             };
             let input = SaveLinkInput {
                 product,
+                link_category,
                 url,
                 canonical_url,
                 title: captured_title.or(title).unwrap_or_default(),
@@ -1659,6 +1665,7 @@ fn execute_origin_quote(
     import_reading(
         library,
         SaveInput {
+            link_category: None,
             product: None,
             quote_identity_markdown: None,
             kind: ReadingKind::Quote,
@@ -1967,6 +1974,7 @@ mod tests {
         let preview_url = "https://assets.example/social.png".to_string();
         let favicon_url = "https://assets.example/favicon.ico".to_string();
         LinkMetadataCapture {
+            link_category: None,
             product: url.contains("product").then(|| oia_core::ProductMetadata {
                 version: 1,
                 price: Some("229.00".into()),

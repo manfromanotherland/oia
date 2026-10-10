@@ -30,6 +30,9 @@ extension OiaLibraryView {
             if row.isProduct {
                 return row.productCardHeight(for: width) ?? width
             }
+            if let ratio = row.culturalCardAspectRatio {
+                return width / ratio
+            }
             if row.isFullArticle {
                 let textHeight = cardTextMetrics.fullArticleTextHeight(
                     for: row.displayTitle,

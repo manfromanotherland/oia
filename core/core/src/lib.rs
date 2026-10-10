@@ -3,6 +3,7 @@
 uniffi::setup_scaffolding!();
 
 mod card_description;
+mod category_update;
 mod color_search;
 mod delete;
 pub mod ffi;
@@ -15,6 +16,7 @@ pub mod index;
 mod ingest;
 pub mod inspector;
 pub mod instagram;
+pub mod link_metadata;
 pub mod list;
 mod locking;
 mod media_dimensions;
@@ -35,6 +37,9 @@ pub mod visual_index;
 mod writer;
 pub mod x_source;
 
+pub use category_update::{
+    fetch_category_artwork, update_link_category_if_unchanged, CategoryUpdateOutcome,
+};
 pub use delete::{delete_reading, delete_unenriched_link_files_if_unchanged};
 pub use frontmatter::{parse_reading, read_metadata, render_reading};
 pub use highlights::{
@@ -53,6 +58,10 @@ pub use ingest::{
     BrowserVideoImport, BrowserVideoImportInput, ExpectedArticleState, ImportOptions,
     ImportedReadingState, SaveDisposition, SaveError, SaveInput, SaveLinkInput, SaveOutcome,
     SourceCaptureInput, StagedSourceAsset, MAX_BROWSER_VIDEO_BYTES,
+};
+pub use link_metadata::{
+    fetch_link_metadata, fetch_page_metadata, normalize_isbn, parse_link_metadata,
+    DetectedLinkMetadata, DetectedPageMetadata, LinkCategory,
 };
 pub use list::{
     get_reading, list_readings, sidebar_counts, view_counts, CountScope, ListOptions, ReadingRow,

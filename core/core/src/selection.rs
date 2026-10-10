@@ -159,6 +159,7 @@ pub fn save_selection(
                 .unwrap_or(u32::MAX),
         );
         capture.product = None;
+        capture.link_category = None;
         return crate::save_capture(library, capture);
     }
     capture.kind = ReadingKind::Article;
@@ -202,6 +203,7 @@ mod tests {
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: None,
             word_count: None,
             lang: None,

@@ -4,8 +4,9 @@ use std::{path::PathBuf, process::ExitCode};
 
 use clap::{ArgGroup, Parser};
 use oia_import_mymind::{
-    enrich_existing_links, enrich_existing_products, run, EnrichExistingOptions,
-    EnrichExistingProductsOptions, RunOptions,
+    enrich_existing_categories, enrich_existing_links, enrich_existing_products, run,
+    EnrichExistingCategoriesOptions, EnrichExistingOptions, EnrichExistingProductsOptions,
+    RunOptions,
 };
 
 /// Import a mymind export folder into a Óia library.
@@ -14,13 +15,13 @@ use oia_import_mymind::{
 /// planned cards and warnings.
 #[derive(Debug, Parser)]
 #[command(version, about, verbatim_doc_comment)]
-#[command(group(ArgGroup::new("migration").args(["enrich_existing_links", "enrich_existing_products"]).multiple(false)))]
+#[command(group(ArgGroup::new("migration").args(["enrich_existing_links", "enrich_existing_products", "enrich_existing_categories"]).multiple(false)))]
 struct Arguments {
     /// Folder created by mymind's "Export my mind" action.
     #[arg(
         long,
         value_name = "FOLDER",
-        required_unless_present_any = ["enrich_existing_links", "enrich_existing_products"],
+        required_unless_present_any = ["enrich_existing_links", "enrich_existing_products", "enrich_existing_categories"],
         conflicts_with = "migration"
     )]
     export: Option<PathBuf>,
@@ -45,8 +46,16 @@ struct Arguments {
     #[arg(long, conflicts_with = "offline")]
     enrich_existing_products: bool,
 
+    /// Identify books, music, and movies among existing lightweight links.
+    #[arg(long, conflicts_with = "offline")]
+    enrich_existing_categories: bool,
+
+    /// Categorize only reviewed reading IDs, one 64-character hexadecimal ID per line.
+    #[arg(long, requires = "enrich_existing_categories", conflicts_with_all = ["enrich_existing_products", "enrich_existing_links", "export", "offline"], value_name = "FILE")]
+    only_ids_file: Option<PathBuf>,
+
     /// Empty folder outside the library for original files and a migration report.
-    #[arg(long, requires = "enrich_existing_products", value_name = "FOLDER")]
+    #[arg(long, requires = "migration", value_name = "FOLDER")]
     backup_dir: Option<PathBuf>,
 
     /// Keep imported links URL-only; do not fetch website metadata or assets.
@@ -68,7 +77,45 @@ struct Arguments {
 
 fn main() -> ExitCode {
     let arguments = Arguments::parse();
-    if arguments.enrich_existing_products {
+    if arguments.enrich_existing_categories {
+        let reading_ids = match arguments
+            .only_ids_file
+            .as_ref()
+            .map(std::fs::read_to_string)
+            .transpose()
+        {
+            Ok(contents) => contents.map(|text| text.lines().map(str::to_owned).collect()),
+            Err(_) => {
+                eprintln!(
+                    "link category migration failed: could not read the category ID selection file"
+                );
+                return ExitCode::FAILURE;
+            }
+        };
+        match enrich_existing_categories(EnrichExistingCategoriesOptions {
+            library: arguments.library,
+            write: arguments.write,
+            verbose: arguments.verbose,
+            workers: arguments.workers,
+            expected_count: arguments.expect_count,
+            expected_digest: arguments.expect_digest,
+            backup_dir: arguments.backup_dir,
+            reading_ids,
+        }) {
+            Ok(report) => {
+                print!("{}", report.render());
+                if report.errors == 0 {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                }
+            }
+            Err(error) => {
+                eprintln!("link category migration failed: {error:#}");
+                ExitCode::FAILURE
+            }
+        }
+    } else if arguments.enrich_existing_products {
         match enrich_existing_products(EnrichExistingProductsOptions {
             library: arguments.library,
             write: arguments.write,
@@ -183,5 +230,61 @@ mod tests {
             "/tmp/export",
         ])
         .is_err());
+    }
+
+    #[test]
+    fn category_migration_accepts_snapshot_guards_and_backup_without_export() {
+        let arguments = Arguments::try_parse_from([
+            "oia-import-mymind",
+            "--library",
+            "/tmp/library",
+            "--enrich-existing-categories",
+            "--write",
+            "--backup-dir",
+            "/tmp/backup",
+            "--expect-count",
+            "12",
+        ])
+        .unwrap();
+        assert!(arguments.enrich_existing_categories);
+        assert!(arguments.write);
+        assert_eq!(arguments.expect_count, Some(12));
+        assert!(arguments.export.is_none());
+        let scoped = Arguments::try_parse_from([
+            "oia-import-mymind",
+            "--library",
+            "/tmp/library",
+            "--enrich-existing-categories",
+            "--only-ids-file",
+            "/tmp/reviewed-ids.txt",
+        ])
+        .unwrap();
+        assert_eq!(
+            scoped.only_ids_file.as_deref(),
+            Some(std::path::Path::new("/tmp/reviewed-ids.txt"))
+        );
+        assert!(Arguments::try_parse_from([
+            "oia-import-mymind",
+            "--library",
+            "/tmp/library",
+            "--enrich-existing-products",
+            "--only-ids-file",
+            "/tmp/reviewed-ids.txt"
+        ])
+        .is_err());
+        for extra in [
+            "--enrich-existing-products",
+            "--enrich-existing-links",
+            "--offline",
+        ] {
+            assert!(Arguments::try_parse_from([
+                "oia-import-mymind",
+                "--library",
+                "/tmp/library",
+                "--enrich-existing-categories",
+                extra
+            ])
+            .is_err());
+        }
     }
 }

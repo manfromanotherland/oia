@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-/** Raw structured page evidence; interpretation and price validation live in Rust. */
+/** Raw structured page evidence; category and price interpretation live in Rust. */
 export const MAX_PRODUCT_HTML_BYTES = 512 * 1024;
+const MAX_STRUCTURED_DOM_DEPTH = 128;
+const MAX_STRUCTURED_DOM_NODES = 16_384;
+const STRUCTURED_DOM_LIMIT = Symbol("structured DOM limit");
 
 const STRUCTURED_ATTRIBUTES = [
   "id",
@@ -41,6 +44,7 @@ export function captureProductHtml(doc: Document): string | undefined {
     return true;
   };
 
+  const metadata: string[] = [];
   for (const meta of Array.from(
     doc.querySelectorAll("meta[property], meta[name], meta[itemprop]"),
   )) {
@@ -52,14 +56,29 @@ export function captureProductHtml(doc: Document): string | undefined {
     ).toLowerCase();
     if (
       name.startsWith("product:") ||
+      name.startsWith("book:") ||
+      name.startsWith("music:") ||
+      name.startsWith("video:") ||
+      name.startsWith("og:image") ||
       name.startsWith("og:price:") ||
-      ["og:type", "og:url", "price", "pricecurrency"].includes(name)
+      [
+        "og:type",
+        "og:url",
+        "og:title",
+        "og:site_name",
+        "og:description",
+        "name",
+        "title",
+        "price",
+        "pricecurrency",
+      ].includes(name)
     ) {
-      append(meta.outerHTML);
+      metadata.push(meta.outerHTML);
     }
   }
   const canonical = doc.querySelector("link[rel~='canonical']");
-  if (canonical) append(canonical.outerHTML);
+  if (canonical) metadata.push(canonical.outerHTML);
+  if (!append(metadata.join("\n"))) return undefined;
 
   // Include every graph, including WebPage.mainEntity and ItemList context.
   const graphs = Array.from(doc.querySelectorAll("script[type]"))
@@ -73,9 +92,13 @@ export function captureProductHtml(doc: Document): string | undefined {
   if (!append(graphs)) return undefined;
 
   const roots = new Set<Element>();
-  for (const candidate of Array.from(doc.querySelectorAll("[itemtype], [typeof]"))) {
+  const candidates = Array.from(doc.querySelectorAll("[itemtype], [typeof]"));
+  if (candidates.length > MAX_STRUCTURED_DOM_NODES) return undefined;
+  for (const candidate of candidates) {
     let root = candidate;
+    let depth = 0;
     for (let parent = candidate.parentElement; parent; parent = parent.parentElement) {
+      if (++depth > MAX_STRUCTURED_DOM_DEPTH) return undefined;
       if (parent.matches("[itemscope], [typeof], [vocab], [prefix]")) root = parent;
     }
     roots.add(root);
@@ -83,16 +106,31 @@ export function captureProductHtml(doc: Document): string | undefined {
   // Keep every structured root and enclosing scope so a sibling article,
   // recommendation, review, or collection remains distinguishable from a
   // page's main product. Omit unrelated DOM/assets.
-  const scopes = Array.from(roots)
-    .map((root) => cloneStructuredElement(root)?.outerHTML)
-    .filter((html): html is string => Boolean(html))
-    .join("\n");
+  let scopes: string;
+  try {
+    const budget = { nodes: 0 };
+    scopes = Array.from(roots)
+      .map((root) => cloneStructuredElement(root, budget)?.outerHTML)
+      .filter((html): html is string => Boolean(html))
+      .join("\n");
+  } catch (error) {
+    if (error === STRUCTURED_DOM_LIMIT) return undefined;
+    throw error;
+  }
   if (!append(scopes)) return undefined;
 
   return blocks.length ? blocks.join("\n") : undefined;
 }
 
-function cloneStructuredElement(element: Element, parentText = false): Element | undefined {
+function cloneStructuredElement(
+  element: Element,
+  budget: { nodes: number },
+  parentText = false,
+  depth = 0,
+): Element | undefined {
+  if (++budget.nodes > MAX_STRUCTURED_DOM_NODES || depth > MAX_STRUCTURED_DOM_DEPTH) {
+    throw STRUCTURED_DOM_LIMIT;
+  }
   if (["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "IFRAME", "CANVAS"].includes(element.tagName)) {
     return undefined;
   }
@@ -113,7 +151,7 @@ function cloneStructuredElement(element: Element, parentText = false): Element |
     if (child.nodeType === Node.TEXT_NODE && captureText) {
       clone.appendChild(child.cloneNode());
     } else if (child.nodeType === Node.ELEMENT_NODE) {
-      const nested = cloneStructuredElement(child as Element, captureText);
+      const nested = cloneStructuredElement(child as Element, budget, captureText, depth + 1);
       if (nested) clone.appendChild(nested);
     }
   }

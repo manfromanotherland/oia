@@ -110,17 +110,19 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   *"Search Óia"*. Native token suggestions can narrow the board to exact tags or an item type;
   completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
-- The empty suggestion menu offers Image, Video, Article, Link, and Quote. Selecting a completion
+- The empty suggestion menu offers Image, Video, Article, Link, Quote, Book, Music, Movie, and
+  Product. Selecting a completion
   creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
   filters by that type or palette color; pressing Return turns complete type and hex terms into
   tokens, while remaining words stay broad free text. Only the last type term applies. Never infer
   an exact tag merely because a tag has the same spelling. Article excludes lightweight links,
-  captured social posts, and products; Link selects all three.
+  captured social posts, and categorized links; Link selects all three. Book, Music, Movie, and
+  Product select their corresponding link categories without creating subject Tags.
 - Use one native labeled segmented picker for the board scope, in this order: **All, Images,
   Videos, Articles, Links, Quotes**. Images and Videos each show only their matching card kind;
   Articles includes longform X Articles but excludes lightweight link placeholders and captured
-  social posts and products. Links includes lightweight URL saves, captured social posts, and
-  products. Exact tag filtering
+  social posts and categorized links. Links includes lightweight URL saves, captured social posts,
+  and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
@@ -161,6 +163,12 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   prices say **From**; a recognised product without a usable price says **Product**. Product
   classification is file-backed metadata, creates no Tag, and stays in Links, including full
   browser captures.
+- **Book:** a portrait cover with a subtle shaded spine, using the local artwork's proportions
+  when suitable. **Music:** a square album cover with a vinyl record peeking above it.
+  **Movie:** a portrait poster with transparent filmstrip perforations down each side. These
+  artwork cards have no source footer or title overlay. Without artwork they show a semantic
+  category symbol and a readable title. Their category stays in file-backed metadata and Links;
+  a more specific Book/Music/Movie category takes precedence over Product styling.
 - Textual cards (articles, lightweight links, quotes, and social posts other than 𝕏 posts) use a
   neutral surface that reads slightly lighter than the board in both appearances. 𝕏 post cards
   use a subtle cool-gray surface in light mode and a slightly lighter cool gray than the board in

@@ -12,6 +12,43 @@ function buildDoc(head: string, body = ""): Document {
 }
 
 describe("structured product evidence", () => {
+  it("preserves cultural OG metadata, artwork alternatives and names as raw facts", () => {
+    const doc = buildDoc(`<meta property="og:type" content="book">
+      <meta property="og:title" content="The book">
+      <meta property="og:image" content="https://example.com/cover.jpg">
+      <meta property="og:image:secure_url" content="https://example.com/cover-secure.jpg">
+      <meta property="book:isbn" content="9780143131144">
+      <meta property="music:musician" content="https://example.com/artist">
+      <meta property="video:director" content="https://example.com/director">
+      <meta name="title" content="The browser title">
+      <meta itemprop="name" content="The declared name">`);
+    const evidence = captureProductHtml(doc)!;
+    for (const meta of Array.from(
+      doc.querySelectorAll("meta[property], meta[name], meta[itemprop]"),
+    )) {
+      expect(evidence).toContain(meta.outerHTML);
+    }
+  });
+
+  it("keeps a non-OG cover on the structured main Book without extracting its category", () => {
+    const doc = buildDoc(
+      "",
+      `<main itemscope itemtype="https://schema.org/WebPage">
+      <div itemprop="mainEntity" itemscope itemtype="https://schema.org/Book">
+        <span itemprop="name">A book</span><img itemprop="image" src="/cover.jpg">
+      </div></main>`,
+    );
+    const evidence = captureProductHtml(doc)!;
+    expect(evidence).toContain('itemprop="mainEntity"');
+    expect(evidence).toContain('itemprop="image" src="/cover.jpg"');
+  });
+
+  it("omits an oversized metadata group atomically instead of dropping negative type context", () => {
+    const doc = buildDoc(`<meta property="og:type" content="article">
+      <meta property="og:description" content="${"x".repeat(MAX_PRODUCT_HTML_BYTES)}">
+      <meta property="book:isbn" content="9780143131144">`);
+    expect(captureProductHtml(doc)).toBeUndefined();
+  });
   it("preserves separate live JSON-LD graphs and page identity without interpreting them", () => {
     const doc = buildDoc(`
       <link rel="canonical" href="/lamp">
@@ -104,6 +141,23 @@ describe("structured product evidence", () => {
       buildDoc(`<meta property="og:type" content="product">${small}${large}`),
     );
     expect(evidence).toBeUndefined();
+  });
+
+  it("omits deeply nested live scopes atomically before recursive serialization", () => {
+    const doc = buildDoc(
+      '<meta property="og:type" content="book">',
+      `${'<div itemscope itemtype="https://schema.org/Book" itemprop="workExample">'.repeat(160)}<meta itemprop="name" content="Nested book">${"</div>".repeat(160)}`,
+    );
+    expect(captureProductHtml(doc)).toBeUndefined();
+  });
+
+  it("omits excessive DOM traversal without retaining an isolated recommended work", () => {
+    const doc = buildDoc(
+      '<meta property="og:type" content="book">',
+      `<article itemscope itemtype="https://schema.org/Article">${"<span></span>".repeat(16_384)}</article>
+       <aside itemscope itemtype="https://schema.org/Book"><span itemprop="name">Recommended book</span></aside>`,
+    );
+    expect(captureProductHtml(doc)).toBeUndefined();
   });
 
   it("does not invent product evidence from a visible price or a product-like URL", () => {

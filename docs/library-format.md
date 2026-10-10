@@ -80,6 +80,7 @@ product:                                  # optional structured product classifi
   currency: EUR                            # optional validated currency code
   price_is_from: false                      # true for a minimum aggregate offer price
   captured_at: 2026-10-10T12:00:00Z         # optional snapshot time, not the save date
+link_category: book                       # optional main link entity: book | music | movie
 source_profile:                            # optional versioned metadata for a recognized source
   version: 1
   source_type: social_post
@@ -125,13 +126,20 @@ source_hash: sha256:abc123...              # sha256 of the cleaned Markdown body
 
 #### Optional fields
 `kind`, `lightweight`, `media_url`, `preview_asset`, `favicon_asset`, `author`, `site`,
-`theme_color`, `source_profile`, `product`, `read_at`, `machine_tags`, `excluded_machine_tags`,
+`theme_color`, `source_profile`, `product`, `link_category`, `read_at`, `machine_tags`, `excluded_machine_tags`,
 `excerpt`, `word_count`, `lang`.
 
 `product.version: 1` is an additive format-v1 record. Products retain `kind: article` and the
 same URL-derived identity. Price and currency are present together or absent together; an absent
 price still permits a recognised Product card. `price_is_from` defaults to false. Clients ignore
 unsupported product record versions. Values are snapshots, not a live store-price subscription.
+
+`link_category` is an additive optional format-v1 string. Known values are `book`, `music`, and
+`movie`; readers preserve unknown strings and use ordinary presentation when unsupported. These
+categories retain `kind: article`, the URL-derived ID, body, state, and Tags. They belong in Links
+even after a full browser capture. A known category takes precedence over Product presentation
+without deleting a stored `product` price snapshot. Category filters do not generate machine Tags.
+See [link categories](link-categories.md) for detection, artwork capture, and recoverable backfill.
 
 `kind` is written for every new card but remains optional in the parser for backwards compatibility;
 an older file without it is an `article`. `lightweight` is omitted/false for ordinary captures and

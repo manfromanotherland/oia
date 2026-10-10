@@ -11,6 +11,7 @@ enum BoardCardGeometryKey: Hashable {
     case highlight(String)
     case social(String, Double?)
     case product(Double)
+    case culturalLink(ReadingLinkCategory, Double)
     case fullArticle(String, String?, Double?)
     case previewArticle(String, Double)
     case textArticle(String, String?)
@@ -28,6 +29,8 @@ extension ReadingRow {
                 .highlight(highlight)
             } else if let profile = socialPostProfile {
                 .social(socialPostText, profile.primaryAttachment.map { Double($0.cardAspectRatio) })
+            } else if let category = culturalLinkCategory {
+                .culturalLink(category, Double(culturalCardAspectRatio ?? 2 / 3))
             } else if isProduct {
                 .product(Double(productCardAspectRatio))
             } else if isFullArticle {

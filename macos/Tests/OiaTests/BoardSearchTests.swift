@@ -168,12 +168,30 @@ final class BoardSearchTests: XCTestCase {
 
     func testItemTypesAreDefaultSuggestionsAndSelectedTypeIsExcluded() {
         let initial = BoardSearchSuggestions(text: "", tagCandidates: [], selectedTokens: [])
-        XCTAssertEqual(initial.itemTypeTokens.map(\.value), ["image", "video", "article", "link", "quote"])
+        XCTAssertEqual(initial.itemTypeTokens.map(\.value), [
+            "image", "video", "article", "link", "quote", "book", "music", "movie", "product"
+        ])
         let selected = BoardSearchSuggestions(
             text: "im", tagCandidates: [],
             selectedTokens: [BoardSearchToken(kind: .itemType, value: "image")]
         )
         XCTAssertTrue(selected.itemTypeTokens.isEmpty)
+    }
+
+    func testLinkCategoriesComposeWithFreeTextAndTagTokens() {
+        for category in ["book", "music", "movie", "product"] {
+            let input = BoardSearchInput(
+                text: "\(category) modern",
+                tokens: [BoardSearchToken(kind: .tag, value: "inspiration")]
+            )
+            XCTAssertEqual(input.criteria.itemTypeTerms, [category])
+            XCTAssertEqual(input.criteria.tagTerms, ["inspiration"])
+            XCTAssertEqual(input.text, "modern")
+            let completion = BoardSearchTermCompletion(text: "\(category) modern", tokens: [])
+            XCTAssertTrue(completion.didComplete)
+            XCTAssertEqual(completion.text, "modern")
+            XCTAssertEqual(completion.tokens, [BoardSearchToken(kind: .itemType, value: category)])
+        }
     }
 
     func testCompleteHexIsSuggestedAsAColorToken() {

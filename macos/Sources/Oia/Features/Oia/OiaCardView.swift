@@ -81,7 +81,9 @@ struct OiaCardView: View {
         cardContent(in: size)
             .frame(width: size.width, height: size.height, alignment: .topLeading)
             .background {
-                if row.socialPostProfile?.isXProvider == true {
+                if showsCulturalArtwork {
+                    Color.clear
+                } else if row.socialPostProfile?.isXProvider == true {
                     cardShape.fill(OiaTheme.xPostCardSurface)
                 } else if row.kind == .article || row.kind == .quote {
                     cardShape.fill(OiaTheme.textCardSurface)
@@ -92,7 +94,7 @@ struct OiaCardView: View {
                 }
             }
             .clipShape(cardShape)
-            .overlay(cardShape.stroke(OiaTheme.border, lineWidth: 1))
+            .overlay(cardShape.stroke(showsCulturalArtwork ? Color.clear : OiaTheme.border, lineWidth: 1))
             .overlay { selectionRing }
     }
 
@@ -162,6 +164,16 @@ struct OiaCardView: View {
                 autoplayEnabled: autoplayEnabled,
                 reduceMotion: reduceMotion,
                 scenePhase: scenePhase
+            )
+        } else if let category = row.culturalLinkCategory {
+            CulturalLinkCard(
+                row: row,
+                category: category,
+                libraryURL: appState.libraryURL,
+                cardSize: size,
+                displayScale: displayScale,
+                isVisible: isInViewport,
+                scrollState: scrollState
             )
         } else if row.isProduct {
             ProductCard(
@@ -396,6 +408,11 @@ private extension OiaCardView {
                 .compactMap(\.self)
                 .joined(separator: ", ")
         }
+        if let category = row.culturalLinkCategory {
+            return [category.label, row.displayTitle, row.author, row.displaySite]
+                .compactMap(\.self)
+                .joined(separator: ", ")
+        }
         return [row.isLink ? "Link" : row.kind.singularLabel, row.displayTitle, row.displaySite]
             .compactMap(\.self)
             .joined(separator: ", ")
@@ -403,5 +420,9 @@ private extension OiaCardView {
 
     private var cardShape: RoundedRectangle {
         OiaTheme.cardShape
+    }
+
+    private var showsCulturalArtwork: Bool {
+        row.featuredHighlight == nil && row.culturalLinkCategory != nil && row.previewAsset != nil
     }
 }

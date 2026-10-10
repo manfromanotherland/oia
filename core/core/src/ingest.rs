@@ -69,6 +69,7 @@ pub struct SaveInput {
     pub theme_color: Option<String>,
     /// Validated product snapshot from structured page metadata.
     pub product: Option<crate::ProductMetadata>,
+    pub link_category: Option<crate::LinkCategory>,
     pub excerpt: Option<String>,
     pub word_count: Option<u32>,
     pub lang: Option<String>,
@@ -215,6 +216,7 @@ pub struct SaveLinkInput {
     pub theme_color: Option<String>,
     /// Validated product snapshot from structured page metadata.
     pub product: Option<crate::ProductMetadata>,
+    pub link_category: Option<crate::LinkCategory>,
     pub excerpt: Option<String>,
     pub lang: Option<String>,
 }
@@ -258,6 +260,22 @@ impl From<std::io::Error> for SaveError {
 /// controlled by the user after import; captured page metadata and content are
 /// replaced by the richer browser result.
 pub fn save_capture(library: &LibraryRoot, input: SaveInput) -> Result<SaveOutcome, SaveError> {
+    let category = input
+        .link_category
+        .filter(|_| input.kind == ReadingKind::Article);
+    let category_artwork = category
+        .and_then(|_| {
+            input
+                .preview_url
+                .as_ref()
+                .and_then(|url| input.images.iter().find(|image| &image.url == url))
+        })
+        .filter(|image| crate::category_update::category_artwork_is_supported(&image.bytes))
+        .map(|image| ImageBytes {
+            url: image.url.clone(),
+            content_type: image.content_type.clone(),
+            bytes: image.bytes.clone(),
+        });
     let product = (input.kind == ReadingKind::Article)
         .then(|| input.product.clone())
         .flatten();
@@ -280,6 +298,24 @@ pub fn save_capture(library: &LibraryRoot, input: SaveInput) -> Result<SaveOutco
                 )? {
                     outcome.disposition = SaveDisposition::Upgraded;
                 }
+            }
+        }
+    }
+    if let Some(category) = category {
+        // Duplicate enrichment retains the complete original capture. Re-read
+        // the fingerprint after product enrichment before the second patch.
+        if let Ok(bytes) = fs::read(library.article_path(&outcome.id)) {
+            if crate::update_link_category_if_unchanged(
+                library,
+                &outcome.id,
+                category,
+                &sha256_hex(&bytes),
+                category_artwork,
+            )?
+            .changed
+                && outcome.disposition == SaveDisposition::Duplicate
+            {
+                outcome.disposition = SaveDisposition::Upgraded;
             }
         }
     }
@@ -614,6 +650,13 @@ fn save_capture_under_lock_with_state(
         site: input.site,
         source_profile,
         product: input.product.and_then(crate::product::validate_product),
+        link_category: (input.kind == ReadingKind::Article)
+            .then(|| {
+                input
+                    .link_category
+                    .map(|category| category.as_str().to_string())
+            })
+            .flatten(),
         featured_highlight_id: None,
         saved_at: input.saved_at,
         read_at: None,
@@ -654,6 +697,9 @@ fn save_capture_under_lock_with_state(
         }
         if metadata.site.is_none() {
             metadata.site = previous.site;
+        }
+        if metadata.link_category.is_none() {
+            metadata.link_category = previous.link_category;
         }
         if metadata.product.is_none() {
             metadata.product = previous.product;
@@ -742,6 +788,7 @@ pub fn save_link_capture(
             favicon_url: input.favicon_url,
             theme_color: input.theme_color,
             product: input.product,
+            link_category: input.link_category,
             excerpt: input.excerpt,
             word_count: None,
             lang: input.lang,
@@ -821,6 +868,7 @@ fn import_link_capture_with_snapshot(
             favicon_url: input.favicon_url,
             theme_color: input.theme_color,
             product: input.product,
+            link_category: input.link_category,
             excerpt: input.excerpt,
             word_count: None,
             lang: input.lang,
@@ -867,6 +915,7 @@ pub fn import_link_with_options(
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -946,6 +995,7 @@ pub fn import_text_with_options(
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: Some(truncate_chars(&identity_text, QUOTE_EXCERPT_CHARACTERS)),
             word_count: Some(identity_text.split_whitespace().count() as u32),
             lang: None,
@@ -1019,6 +1069,7 @@ pub fn import_image_with_options(
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -1082,6 +1133,7 @@ pub fn import_image_from_origin_with_options(
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: None,
             word_count: None,
             lang: None,
@@ -1444,6 +1496,7 @@ fn save_staged_video(
         site,
         source_profile: None,
         product: None,
+        link_category: None,
         featured_highlight_id: None,
         saved_at: imported_saved_at(saved_at),
         read_at: None,
@@ -2320,6 +2373,77 @@ mod tests {
         (dir, library)
     }
 
+    #[test]
+    fn duplicate_full_capture_enriches_category_without_replacing_original() {
+        let (_directory, library) = library();
+        let url = "https://example.com/a-book";
+        let saved = save_capture(&library, full_capture(url)).unwrap();
+        let index_directory = tempfile::TempDir::new().unwrap();
+        crate::add_tag(
+            &library,
+            &crate::open_index(&index_directory.path().join("test.db")).unwrap(),
+            &saved.id,
+            "Keep tag",
+        )
+        .unwrap();
+        let original = fs::read_to_string(library.article_path(&saved.id)).unwrap();
+        let original_reading = parse_reading(&original).unwrap();
+        let mut contradictory = full_capture(url);
+        contradictory.markdown = "Replacement must never be saved".into();
+        contradictory.title = "Replacement title".into();
+        contradictory.link_category = Some(crate::LinkCategory::Book);
+        contradictory.preview_url = Some("https://example.com/unsupported.svg".into());
+        contradictory.images.push(ImageBytes {
+            url: "https://example.com/unsupported.svg".into(),
+            content_type: "image/svg+xml".into(),
+            bytes: b"<svg xmlns='http://www.w3.org/2000/svg'/ >".to_vec(),
+        });
+        let enriched = save_capture(&library, contradictory).unwrap();
+        assert_eq!(enriched.disposition, SaveDisposition::Upgraded);
+        let after = fs::read_to_string(library.article_path(&saved.id)).unwrap();
+        assert_eq!(
+            original.split_once("\n---\n").unwrap().1,
+            after.split_once("\n---\n").unwrap().1
+        );
+        let mut expected = original_reading.metadata;
+        expected.link_category = Some("book".into());
+        assert_eq!(parse_reading(&after).unwrap().metadata, expected);
+        let mut repeated = full_capture(url);
+        repeated.link_category = Some(crate::LinkCategory::Book);
+        assert_eq!(
+            save_capture(&library, repeated).unwrap().disposition,
+            SaveDisposition::Duplicate
+        );
+        assert_eq!(
+            fs::read_to_string(library.article_path(&saved.id)).unwrap(),
+            after
+        );
+    }
+
+    #[test]
+    fn lightweight_category_and_product_snapshot_survive_browser_upgrade() {
+        let (_directory, library) = library();
+        let url = "https://example.com/book-upgrade";
+        let mut input = link_metadata_capture(url);
+        input.link_category = Some(crate::LinkCategory::Book);
+        input.product = crate::parse_product_metadata("<meta property='og:type' content='product'><meta property='product:price:amount' content='24'><meta property='product:price:currency' content='USD'>", url);
+        let saved = save_link_capture(&library, input).unwrap();
+        assert_eq!(
+            save_capture(&library, full_capture(url))
+                .unwrap()
+                .disposition,
+            SaveDisposition::Upgraded
+        );
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert!(!reading.metadata.lightweight);
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("24")
+        );
+    }
+
     fn full_capture(url: &str) -> SaveInput {
         SaveInput {
             quote_identity_markdown: None,
@@ -2338,6 +2462,7 @@ mod tests {
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: Some("Full body.".to_string()),
             word_count: Some(2),
             lang: Some("en".to_string()),
@@ -2362,6 +2487,7 @@ mod tests {
             favicon_url: None,
             theme_color: Some("#123456".to_string()),
             product: None,
+            link_category: None,
             excerpt: Some("Captured excerpt".to_string()),
             lang: Some("en".to_string()),
         }
@@ -2691,6 +2817,7 @@ mod tests {
             site: Some("x.com".into()),
             source_profile: Some(source_profile(vec![])),
             product: None,
+            link_category: None,
             featured_highlight_id: None,
             saved_at: "2026-09-22T18:42:00.000Z".into(),
             read_at: None,
@@ -2991,6 +3118,7 @@ mod tests {
                 favicon_url: Some(favicon_url),
                 theme_color: Some("#123456".to_string()),
                 product: None,
+                link_category: None,
                 excerpt: None,
                 lang: None,
             },

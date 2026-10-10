@@ -8,7 +8,7 @@ use oia_core::{
 
 use crate::{
     protocol::{SaveResponse, SaveSelectionRequest, PROTOCOL_VERSION},
-    save::{decode_images, find_library_path, response_for_outcome},
+    save::{decode_images, detected_preview_url, find_library_path, response_for_outcome},
 };
 
 const MAX_SELECTED_TEXT_BYTES: usize = oia_core::MAX_SELECTION_TEXT_BYTES;
@@ -80,6 +80,12 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
         .product_html
         .as_deref()
         .and_then(|html| oia_core::parse_product_metadata(html, &capture.metadata.url));
+    let detected = oia_core::parse_link_metadata(
+        capture.metadata.product_html.as_deref().unwrap_or(""),
+        &capture.metadata.url,
+    );
+    let images = decode_images(&capture.images);
+    let preview_url = detected_preview_url(detected.as_ref(), &images, capture.preview_url);
     let input = SelectionSaveInput {
         selected_text: request.selected_text,
         context: request.selection_context,
@@ -90,16 +96,20 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
             url: capture.metadata.url,
             media_url: capture.metadata.media_url,
             canonical_url: capture.metadata.canonical_url,
-            title: capture.metadata.title,
+            title: detected
+                .as_ref()
+                .and_then(|value| value.title.clone())
+                .unwrap_or(capture.metadata.title),
             author: capture.metadata.author,
             site: capture.metadata.site,
             saved_at: capture.metadata.saved_at,
             markdown: capture.markdown,
-            images: decode_images(&capture.images),
-            preview_url: capture.preview_url,
+            images,
+            preview_url,
             favicon_url: capture.favicon_url,
             theme_color: capture.metadata.theme_color,
             product,
+            link_category: detected.map(|value| value.category),
             excerpt: capture.metadata.excerpt,
             word_count: capture.metadata.word_count,
             lang: capture.metadata.lang,
@@ -127,6 +137,63 @@ mod tests {
     use serde_json::{json, Value};
     use std::fs;
     use tempfile::TempDir;
+
+    #[test]
+    fn selection_capture_attaches_cultural_metadata_and_cover_to_its_article() {
+        let temporary = TempDir::new().unwrap();
+        let library = LibraryRoot::new(temporary.path()).unwrap();
+        let mut value = message(
+            "https://example.com/book",
+            "Selected ordinary passage.",
+            None,
+        );
+        value["metadata"]["product_html"] = json!(
+            r#"<script type="application/ld+json">{"@type":"Book","name":"Selected book","image":"https://example.com/cover.png"}</script>"#
+        );
+        value["images"] = json!([{"url":"https://example.com/cover.png","content_type":"image/png","data_base64":"Y292ZXI="}]);
+        let response = handle_in_library(request(value), &library).unwrap();
+        assert!(response.ok);
+        assert_eq!(
+            response.selection_kind,
+            Some(oia_core::SelectionKind::Highlight)
+        );
+        let id = response.id.unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&id)).unwrap()).unwrap();
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(reading.metadata.title, "Selected book");
+        assert_eq!(
+            fs::read(
+                library
+                    .reading_dir(&id)
+                    .join(reading.metadata.preview_asset.unwrap())
+            )
+            .unwrap(),
+            b"cover"
+        );
+        assert_eq!(
+            list_highlights(&library, &id).unwrap()[0].text,
+            "Selected ordinary passage."
+        );
+    }
+
+    #[test]
+    fn quoted_selection_does_not_inherit_cultural_category() {
+        let temporary = TempDir::new().unwrap();
+        let library = LibraryRoot::new(temporary.path()).unwrap();
+        let mut value = message("https://example.com/book", "“A selected quotation.”", None);
+        value["metadata"]["product_html"] = json!(
+            r#"<script type="application/ld+json">{"@type":"Book","name":"Selected book"}</script>"#
+        );
+        let response = handle_in_library(request(value), &library).unwrap();
+        assert!(response.ok);
+        let reading = parse_reading(
+            &fs::read_to_string(library.article_path(&response.id.unwrap())).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(reading.metadata.kind, ReadingKind::Quote);
+        assert!(reading.metadata.link_category.is_none());
+    }
 
     fn message(url: &str, selected_text: &str, context: Option<Value>) -> Value {
         json!({

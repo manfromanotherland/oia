@@ -328,14 +328,17 @@ fn target_digest(targets: &[ProductTarget]) -> String {
     sha256_hex(joined.as_bytes())
 }
 
-fn prepare_backup_directory(library: &Path, requested: Option<&Path>) -> Result<PathBuf> {
+pub(crate) fn prepare_backup_directory(
+    library: &Path,
+    requested: Option<&Path>,
+) -> Result<PathBuf> {
     let library = library.canonicalize()?;
-    let requested = requested.context("--backup-dir is required when writing product metadata")?;
+    let requested = requested.context("--backup-dir is required when writing metadata")?;
     if requested
         .components()
         .any(|component| matches!(component, std::path::Component::ParentDir))
     {
-        bail!("product backup path must not contain parent-directory components");
+        bail!("backup path must not contain parent-directory components");
     }
     let absolute = if requested.is_absolute() {
         requested.to_path_buf()
@@ -361,11 +364,11 @@ fn prepare_backup_directory(library: &Path, requested: Option<&Path>) -> Result<
         backup.push(component);
     }
     if backup.starts_with(&library) || library.starts_with(&backup) {
-        bail!("product backups must be outside the library folder and must not contain it");
+        bail!("backups must be outside the library folder and must not contain it");
     }
-    fs::create_dir_all(&backup).context("could not create the product backup directory")?;
+    fs::create_dir_all(&backup).context("could not create the backup directory")?;
     if fs::read_dir(&backup)?.next().is_some() {
-        bail!("product backup directory must be empty");
+        bail!("backup directory must be empty");
     }
     Ok(backup)
 }

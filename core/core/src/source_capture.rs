@@ -214,7 +214,71 @@ pub fn save_url(
         return Ok(outcome);
     }
 
-    let outcome = import_link_with_options(
+    save_ordinary_url_with(
+        library,
+        request,
+        crate::fetch_page_metadata,
+        crate::fetch_category_artwork,
+    )
+}
+
+fn save_ordinary_url_with(
+    library: &LibraryRoot,
+    request: UrlSaveRequest,
+    fetch: impl FnOnce(&str) -> anyhow::Result<crate::DetectedPageMetadata>,
+    fetch_artwork: impl FnOnce(&str) -> anyhow::Result<crate::ImageBytes>,
+) -> Result<SaveOutcome, SaveUrlError> {
+    if let Some(id) = find_by_url(library, &request.url)? {
+        if crate::scanner::read_reading_for_id(library, &id)?.is_some_and(|reading| {
+            reading
+                .metadata
+                .link_category
+                .as_deref()
+                .and_then(crate::LinkCategory::parse)
+                .is_some()
+        }) {
+            return Ok(duplicate_outcome(library, id));
+        }
+    }
+    // One optional HTML retrieval feeds both classifiers. Narrow provider
+    // routes retain their category even when HTTP is unavailable.
+    let detected = fetch(&request.url).unwrap_or_else(|_| crate::DetectedPageMetadata {
+        link: crate::parse_link_metadata("", &request.url),
+        product: None,
+    });
+    if detected.link.is_some() || detected.product.is_some() {
+        let artwork = detected
+            .link
+            .as_ref()
+            .and_then(|link| link.image_url.as_deref())
+            .and_then(|url| fetch_artwork(url).ok());
+        let preview_url = artwork.as_ref().map(|image| image.url.clone());
+        return Ok(crate::save_link_capture(
+            library,
+            crate::SaveLinkInput {
+                url: request.url.clone(),
+                canonical_url: request.url.clone(),
+                title: detected
+                    .link
+                    .as_ref()
+                    .and_then(|link| link.title.clone())
+                    .or(request.title_hint)
+                    .unwrap_or_else(|| request.url.clone()),
+                author: None,
+                site: None,
+                saved_at: request.saved_at.unwrap_or_else(crate::time::now_utc_iso),
+                images: artwork.into_iter().collect(),
+                preview_url,
+                favicon_url: None,
+                theme_color: None,
+                product: detected.product,
+                link_category: detected.link.map(|link| link.category),
+                excerpt: None,
+                lang: None,
+            },
+        )?);
+    }
+    Ok(import_link_with_options(
         library,
         &request.url,
         ImportOptions {
@@ -222,23 +286,7 @@ pub fn save_url(
             saved_at: request.saved_at,
             ..ImportOptions::default()
         },
-    )?;
-    // Retrieval is optional: saving a link remains usable offline and blocked
-    // or unstructured sites simply retain their lightweight representation.
-    if outcome.disposition != SaveDisposition::Duplicate {
-        if let Ok(bytes) = fs::read(library.article_path(&outcome.id)) {
-            let expected = crate::sha256_hex(&bytes);
-            if let Ok(Some(product)) = crate::fetch_product_metadata(&request.url) {
-                crate::update_product_metadata_if_unchanged(
-                    library,
-                    &outcome.id,
-                    product,
-                    &expected,
-                )?;
-            }
-        }
-    }
-    Ok(outcome)
+    )?)
 }
 
 /// Resolve and save a recognised provider URL. `None` means the URL is an
@@ -422,6 +470,7 @@ fn save_special_url_with_providers(
         favicon_url: None,
         theme_color: None,
         product: None,
+        link_category: None,
         excerpt: Some(prepared.text.clone()),
         word_count: Some(prepared.text.split_whitespace().count() as u32),
         lang: None,
@@ -1622,10 +1671,91 @@ mod tests {
             favicon_url: None,
             theme_color: None,
             product: None,
+            link_category: None,
             excerpt: Some("Post text".into()),
             word_count: Some(2),
             lang: Some("en".into()),
         }
+    }
+
+    #[test]
+    fn categorized_url_resave_returns_duplicate_without_metadata_or_artwork_fetch() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://example.com/book";
+        let mut capture = full_article(url);
+        capture.link_category = Some(crate::LinkCategory::Book);
+        let saved = crate::save_capture(&library, capture).unwrap();
+        let before = fs::read(library.article_path(&saved.id)).unwrap();
+        let duplicate = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| panic!("categorized duplicates must not fetch page metadata"),
+            |_| panic!("categorized duplicates must not fetch artwork"),
+        )
+        .unwrap();
+        assert_eq!(duplicate.disposition, SaveDisposition::Duplicate);
+        assert_eq!(duplicate.id, saved.id);
+        assert_eq!(fs::read(library.article_path(&saved.id)).unwrap(), before);
+    }
+
+    #[test]
+    fn optional_metadata_and_artwork_failures_preserve_offline_route_category() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://www.waterstones.com/book/title/author/9781840919356";
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| anyhow::bail!("offline"),
+            |_| anyhow::bail!("cover unavailable"),
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert!(reading.metadata.lightweight);
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert!(reading.metadata.preview_asset.is_none());
+        assert!(reading.body.contains("Open link"));
+    }
+
+    #[test]
+    fn one_page_snapshot_persists_category_product_price_and_local_artwork() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://example.com/book";
+        let html = "<script type='application/ld+json'>{\"@type\":[\"Product\",\"Book\"],\"name\":\"Book name\",\"image\":\"/cover.png\",\"offers\":{\"price\":24,\"priceCurrency\":\"USD\"}}</script>";
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| {
+                Ok(crate::DetectedPageMetadata {
+                    link: crate::parse_link_metadata(html, url),
+                    product: crate::parse_product_metadata(html, url),
+                })
+            },
+            |url| {
+                Ok(crate::ImageBytes {
+                    url: url.into(),
+                    content_type: "image/png".into(),
+                    bytes: b"captured cover".to_vec(),
+                })
+            },
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert_eq!(reading.metadata.title, "Book name");
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("24")
+        );
+        let preview = reading.metadata.preview_asset.unwrap();
+        assert_eq!(
+            fs::read(library.reading_dir(&saved.id).join(preview)).unwrap(),
+            b"captured cover"
+        );
     }
 
     #[test]

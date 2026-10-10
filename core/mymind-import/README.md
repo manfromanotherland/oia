@@ -130,6 +130,58 @@ restore that file to `articles/<first-two-id-characters>/<reading-id>/article.md
 reconcile its disposable index. Save a current copy first if the reading has been edited since the
 migration. Product migration never deletes unavailable readings or rewrites their assets or notes.
 
+### Categorizing existing books, music, and movies
+
+Preview cultural categories for every eligible lightweight article, including products:
+
+```bash
+./scripts/import-mymind.sh \
+  --library /path/to/Óia \
+  --enrich-existing-categories \
+  --workers 24
+```
+
+The core checks the page's main structured Book, MusicAlbum, MusicRecording, MusicPlaylist, or
+Movie entity, exact Open Graph types, and validated ISBN evidence. Narrow provider routes can
+establish a category even when their HTML is unavailable. Reviews, collections, recommendation
+lists, and generic price or title text do not establish a cultural category. Existing categories,
+social source profiles, full articles, media, quotes, and local identities are skipped.
+
+Apply the preview's count and digest with a new empty backup directory outside the library:
+
+```bash
+./scripts/import-mymind.sh \
+  --library /path/to/Óia \
+  --enrich-existing-categories \
+  --write \
+  --backup-dir /path/to/category-metadata-backup \
+  --expect-count 123 \
+  --expect-digest <sha256>
+```
+
+The migration adds `link_category` while preserving product prices, every other frontmatter
+field, raw Markdown, IDs, tags, notes, and user state. A full-file snapshot is checked under the
+reading's lock and again before committing. Concurrent changes are skipped, and unavailable
+pages are retained. A repeated migration skips previously categorized cards.
+
+To apply only cards recognized in a reviewed preview, add `--only-ids-file /path/to/ids.txt`.
+The file must contain one lowercase 64-character reading ID per line. Empty selections, malformed
+or duplicate IDs, and IDs that are now missing or ineligible abort before any fetch or backup.
+Count and digest guards apply to the selected subset, with IDs sorted and separated by newlines
+including a final newline. The default still inspects all eligible links.
+
+Artwork is downloaded only during a write, when the reading has no usable regular local preview.
+Bounded public requests reject private addresses, unsafe redirects, unsupported images, and
+oversized responses. The artwork gets a new immutable `assets/category-artwork-<sha256>.<format>`
+file; existing assets are never replaced. Missing artwork does not prevent categorization.
+
+Original files are saved as `<reading-id>.md`. An atomically updated `report.txt` records each
+new asset's relative path and hash. If a concurrent writer changes the article after artwork is
+installed, the new asset is retained and reported, since that writer might already reference it.
+To undo a category, restore its backed-up article after preserving any newer user edits. Remove
+new artwork only after checking that no current article refers to it. The app rebuilds its index
+from the restored files.
+
 ## Mapping
 
 The observed mymind CSV columns are

@@ -141,6 +141,9 @@ pub struct Metadata {
     /// Snapshot of the main product advertised by this article or link.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub product: Option<ProductMetadata>,
+    /// Optional presentation category. Unknown values survive file round trips.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_category: Option<String>,
     /// Stable ID in highlights.md whose passage is featured on the board.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub featured_highlight_id: Option<String>,

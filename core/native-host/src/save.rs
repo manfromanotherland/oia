@@ -89,7 +89,16 @@ fn handle_in_library_with_source_resolver(
                 .and_then(|html| oia_core::parse_product_metadata(html, &req.metadata.url))
         })
         .flatten();
+    let detected = (req.metadata.kind == ReadingKind::Article)
+        .then(|| {
+            oia_core::parse_link_metadata(
+                req.metadata.product_html.as_deref().unwrap_or(""),
+                &req.metadata.url,
+            )
+        })
+        .flatten();
     let images = decode_images(&req.images);
+    let preview_url = detected_preview_url(detected.as_ref(), &images, req.preview_url);
 
     let outcome = match save_capture(
         library,
@@ -100,16 +109,20 @@ fn handle_in_library_with_source_resolver(
             url: req.metadata.url,
             media_url: req.metadata.media_url,
             canonical_url: req.metadata.canonical_url,
-            title: req.metadata.title,
+            title: detected
+                .as_ref()
+                .and_then(|value| value.title.clone())
+                .unwrap_or(req.metadata.title),
             author: req.metadata.author,
             site: req.metadata.site,
             saved_at: req.metadata.saved_at,
             markdown: req.markdown,
             images,
-            preview_url: req.preview_url,
+            preview_url,
             favicon_url: req.favicon_url,
             theme_color: req.metadata.theme_color,
             product,
+            link_category: detected.map(|value| value.category),
             excerpt: req.metadata.excerpt,
             word_count: req.metadata.word_count,
             lang: req.metadata.lang,
@@ -165,6 +178,19 @@ pub(crate) fn decode_images(images: &[crate::protocol::RequestImage]) -> Vec<Ima
         .collect()
 }
 
+/// The exact main entity image can replace the social preview only when captured.
+pub(crate) fn detected_preview_url(
+    detected: Option<&oia_core::DetectedLinkMetadata>,
+    images: &[ImageBytes],
+    fallback: Option<String>,
+) -> Option<String> {
+    detected
+        .and_then(|value| value.image_url.as_ref())
+        .filter(|url| images.iter().any(|image| &image.url == *url))
+        .cloned()
+        .or(fallback)
+}
+
 /// Classify an anyhow error into a protocol error code + message.
 pub fn classify_error(e: &anyhow::Error) -> (&'static str, String) {
     ("io_error", e.to_string())
@@ -191,6 +217,94 @@ pub(crate) fn find_library_path() -> Result<PathBuf> {
 mod tests {
     use super::*;
     use oia_core::SaveUrlError;
+
+    #[test]
+    fn full_capture_persists_cultural_category_and_exact_captured_cover() {
+        for (entity_type, category) in [
+            ("Book", "book"),
+            ("MusicAlbum", "music"),
+            ("Movie", "movie"),
+        ] {
+            let temporary = tempfile::tempdir().unwrap();
+            let library = LibraryRoot::new(temporary.path()).unwrap();
+            let mut request = captured_article_request("https://example.com/work");
+            request.metadata.product_html = Some(format!(
+                r#"<script type="application/ld+json">{{"@type":"{entity_type}","name":"Exact work","url":"https://example.com/work","image":"https://example.com/cover.png"}}</script>"#
+            ));
+            request.preview_url = Some("https://example.com/social.png".into());
+            request.images = serde_json::from_value(serde_json::json!([
+                {"url":"https://example.com/social.png","content_type":"image/png","data_base64":"c29jaWFs"},
+                {"url":"https://example.com/cover.png","content_type":"image/png","data_base64":"Y292ZXI="},
+            ])).unwrap();
+            let response =
+                handle_in_library_with_source_resolver(request, &library, |_, _| Ok(None)).unwrap();
+            assert!(response.ok);
+            let id = response.id.unwrap();
+            let reading = oia_core::parse_reading(
+                &std::fs::read_to_string(library.article_path(&id)).unwrap(),
+            )
+            .unwrap();
+            assert_eq!(reading.metadata.link_category.as_deref(), Some(category));
+            assert_eq!(reading.metadata.title, "Exact work");
+            assert_eq!(
+                std::fs::read(
+                    library
+                        .reading_dir(&id)
+                        .join(reading.metadata.preview_asset.unwrap())
+                )
+                .unwrap(),
+                b"cover"
+            );
+        }
+    }
+
+    #[test]
+    fn unavailable_typed_artwork_retains_captured_social_preview() {
+        let detected = oia_core::parse_link_metadata(
+            r#"<meta property="og:type" content="book"><meta property="og:image" content="https://example.com/cover.png">"#,
+            "https://example.com/book",
+        );
+        let images = [ImageBytes {
+            url: "https://example.com/social.png".into(),
+            content_type: "image/png".into(),
+            bytes: b"social".to_vec(),
+        }];
+        assert_eq!(
+            detected_preview_url(
+                detected.as_ref(),
+                &images,
+                Some("https://example.com/social.png".into())
+            )
+            .as_deref(),
+            Some("https://example.com/social.png")
+        );
+    }
+
+    #[test]
+    fn standalone_quote_does_not_inherit_source_book_category_or_title() {
+        let temporary = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(temporary.path()).unwrap();
+        let mut request = captured_article_request("https://example.com/book");
+        request.metadata.kind = ReadingKind::Quote;
+        request.metadata.product_html = Some(
+            r#"<script type="application/ld+json">{"@type":"Book","name":"Book source"}</script>"#
+                .into(),
+        );
+        request.metadata.title = "Selected quotation".into();
+        request.markdown = "A selected quotation.".into();
+        let response = handle_in_library_with_source_resolver(request, &library, |_, _| {
+            panic!("standalone capture must not retrieve a source")
+        })
+        .unwrap();
+        assert!(response.ok);
+        let reading = oia_core::parse_reading(
+            &std::fs::read_to_string(library.article_path(&response.id.unwrap())).unwrap(),
+        )
+        .unwrap();
+        assert!(reading.metadata.link_category.is_none());
+        assert!(reading.metadata.product.is_none());
+        assert_eq!(reading.metadata.title, "Selected quotation");
+    }
 
     fn captured_article_request(url: &str) -> SaveRequest {
         serde_json::from_value(serde_json::json!({

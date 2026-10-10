@@ -87,6 +87,15 @@ pub struct CheckRequest {
     pub url: String,
 }
 
+/// Pure inspection of the browser's bounded structured DOM snapshot.
+#[derive(Debug, Deserialize)]
+pub struct InspectPageMetadataRequest {
+    pub protocol_version: u32,
+    pub action: String,
+    pub url: String,
+    pub product_html: String,
+}
+
 /// Start one connection-scoped browser video upload.
 #[derive(Debug, Deserialize)]
 pub struct VideoImportBeginRequest {
@@ -136,6 +145,9 @@ pub struct SaveResponse {
     /// Present only after a successful `save_selection` action.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub selection_kind: Option<SelectionKind>,
+    /// Present only in a pure `inspect_page_metadata` response.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub preview_candidates: Option<Box<[String]>>,
 }
 
 impl SaveResponse {
@@ -149,6 +161,7 @@ impl SaveResponse {
             message: None,
             saved: None,
             selection_kind: None,
+            preview_candidates: None,
         }
     }
 
@@ -162,6 +175,7 @@ impl SaveResponse {
             message: None,
             saved: None,
             selection_kind: None,
+            preview_candidates: None,
         }
     }
 
@@ -175,6 +189,7 @@ impl SaveResponse {
             message: Some(msg.to_string()),
             saved: None,
             selection_kind: None,
+            preview_candidates: None,
         }
     }
 
@@ -184,6 +199,7 @@ impl SaveResponse {
             ok: true,
             saved: Some(is_saved),
             selection_kind: None,
+            preview_candidates: None,
             id,
             path: None,
             error: None,

@@ -27,6 +27,7 @@ final class ReadingRowMapperTests: XCTestCase {
             "attachments":[]}
             """,
             productJson: nil,
+            linkCategory: nil,
             featuredHighlightText: "A saved passage from the source.",
             dominantColor: FfiWeightedColor(red: 0.1, green: 0.2, blue: 0.3, weight: 0.6),
             mediaAspectRatio: 16.0 / 9.0,
@@ -124,6 +125,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.themeColor)
         XCTAssertNil(row.sourceProfile)
         XCTAssertNil(row.product)
+        XCTAssertNil(row.linkCategory)
         XCTAssertNil(row.featuredHighlight)
         XCTAssertNil(row.dominantColor)
         XCTAssertNil(row.mediaAspectRatio)
@@ -175,6 +177,43 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.product?.price, "135.00")
         XCTAssertEqual(row.product?.currency, "EUR")
         XCTAssertEqual(row.product?.formattedPrice(locale: Locale(identifier: "en_IE")), "€135")
+    }
+
+    func testBookCategoryTakesPrecedenceOverProductAndPreservesPriceSnapshot() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .article
+        ffi.lightweight = false
+        ffi.sourceProfileJson = nil
+        ffi.featuredHighlightText = nil
+        ffi.linkCategory = "book"
+        ffi.productJson = "{\"version\":1,\"price\":\"18.99\",\"currency\":\"GBP\"}"
+        let row = ReadingRow(ffi)
+        XCTAssertEqual(row.culturalLinkCategory, .book)
+        XCTAssertFalse(row.isProduct)
+        XCTAssertFalse(row.isFullArticle)
+        XCTAssertEqual(row.product?.price, "18.99")
+        XCTAssertEqual(row.boardGeometryKey, .culturalLink(.book, 2 / 3))
+    }
+
+    func testMusicUsesSquareCoverWithSpaceForRecordAndHighlightKeepsPriority() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .article
+        ffi.sourceProfileJson = nil
+        ffi.linkCategory = "music"
+        let row = ReadingRow(ffi)
+        XCTAssertEqual(row.culturalCardAspectRatio, 1 / 1.18)
+        XCTAssertEqual(row.boardGeometryKey, .highlight("A saved passage from the source."))
+        ffi.featuredHighlightText = nil
+        XCTAssertEqual(ReadingRow(ffi).boardGeometryKey, .culturalLink(.music, Double(1 / 1.18)))
+    }
+
+    func testUnknownCategoriesAndNonArticleMetadataUseOrdinaryPresentation() {
+        var ffi = sampleFfiRow()
+        ffi.linkCategory = "book"
+        XCTAssertNil(ReadingRow(ffi).culturalLinkCategory)
+        ffi.kind = .article
+        ffi.linkCategory = "future-category"
+        XCTAssertNil(ReadingRow(ffi).linkCategory)
     }
 
     func testProductPriceHandlesFractionsFromPricesAndMissingPrices() {

@@ -30,6 +30,30 @@ enum ReadingKind: String, CaseIterable, Sendable {
     }
 }
 
+/// A core-recognized link entity. The durable string remains open to newer
+/// categories; unknown values use ordinary link presentation on this client.
+enum ReadingLinkCategory: String, CaseIterable, Sendable {
+    case book
+    case music
+    case movie
+
+    var label: String {
+        switch self {
+        case .book: "Book"
+        case .music: "Music"
+        case .movie: "Movie"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .book: "book.closed"
+        case .music: "opticaldisc"
+        case .movie: "film"
+        }
+    }
+}
+
 /// The highest-coverage exact sRGB cluster from derived visual analysis.
 /// It is cached per device and never becomes part of the Markdown contract.
 struct ReadingColor: Equatable, Sendable {
@@ -92,6 +116,7 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var mediaAspectRatio: Double?
     var sourceProfile: ReadingSourceProfile?
     var product: ReadingProductMetadata?
+    var linkCategory: ReadingLinkCategory?
     /// Verbatim passage resolved by core from the article's featured highlight.
     var featuredHighlightText: String?
 }
@@ -129,6 +154,7 @@ extension ReadingRow {
         mediaAspectRatio = row.mediaAspectRatio
         sourceProfile = ReadingSourceProfile.decode(row.sourceProfileJson)
         product = ReadingProductMetadata.decode(row.productJson)
+        linkCategory = row.linkCategory.flatMap(ReadingLinkCategory.init(rawValue:))
         featuredHighlightText = row.featuredHighlightText
     }
 }
@@ -188,11 +214,29 @@ extension ReadingRow {
     }
 
     var isFullArticle: Bool {
-        kind == .article && !lightweight && !isSocialPost && !isProduct
+        kind == .article && !lightweight && !isSocialPost && !isProduct && culturalLinkCategory == nil
     }
 
     var isProduct: Bool {
-        kind == .article && product != nil && !isSocialPost
+        kind == .article && product != nil && !isSocialPost && culturalLinkCategory == nil
+    }
+
+    var culturalLinkCategory: ReadingLinkCategory? {
+        kind == .article && !isSocialPost ? linkCategory : nil
+    }
+
+    /// Shared canvas dimensions for rendering and the board's geometry cache.
+    var culturalCardAspectRatio: CGFloat? {
+        guard let category = culturalLinkCategory else { return nil }
+        switch category {
+        case .music:
+            return 1 / 1.18
+        case .book, .movie:
+            if let ratio = mediaAspectRatio, ratio.isFinite, ratio >= 0.5, ratio <= 0.85 {
+                return CGFloat(ratio)
+            }
+            return 2 / 3
+        }
     }
 
     var productPriceLabel: String? {

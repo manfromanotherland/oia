@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 mod check;
+mod inspect_page_metadata;
 mod install;
 mod protocol;
 mod save;
@@ -12,8 +13,8 @@ use std::io::{Read, Write};
 
 use anyhow::Result;
 use protocol::{
-    CheckRequest, SaveLinkRequest, SaveRequest, SaveResponse, SaveSelectionRequest,
-    VideoImportBeginRequest, VideoImportChunkRequest, VideoImportEndRequest,
+    CheckRequest, InspectPageMetadataRequest, SaveLinkRequest, SaveRequest, SaveResponse,
+    SaveSelectionRequest, VideoImportBeginRequest, VideoImportChunkRequest, VideoImportEndRequest,
 };
 use serde::Deserialize;
 use video_import::VideoImportSession;
@@ -114,6 +115,12 @@ impl NativeSession {
         }
 
         match action.as_str() {
+            "inspect_page_metadata" => {
+                match serde_json::from_slice::<InspectPageMetadataRequest>(raw) {
+                    Ok(request) => inspect_page_metadata::handle(request),
+                    Err(error) => SaveResponse::error("invalid_request", &error.to_string()),
+                }
+            }
             "video_import_begin" => match serde_json::from_slice::<VideoImportBeginRequest>(raw) {
                 Ok(request) => self.video_import.begin(request),
                 Err(error) => {
@@ -207,6 +214,21 @@ fn is_eof_error(e: &anyhow::Error) -> bool {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn pure_metadata_inspection_dispatches_without_save_fields_or_library() {
+        let response = dispatch(&serde_json::to_vec(&serde_json::json!({
+            "protocol_version":4,"action":"inspect_page_metadata","url":"https://example.com/book",
+            "product_html":"<meta property=\"og:type\" content=\"book\"><meta property=\"og:image\" content=\"https://example.com/cover.png\">",
+        })).unwrap());
+        assert!(response.ok);
+        assert_eq!(
+            response.preview_candidates,
+            Some(vec!["https://example.com/cover.png".into()].into_boxed_slice())
+        );
+        assert!(response.id.is_none());
+        assert!(response.path.is_none());
+    }
 
     fn framed(json: &str) -> Vec<u8> {
         let bytes = json.as_bytes();

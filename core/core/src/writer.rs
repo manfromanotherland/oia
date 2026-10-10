@@ -156,6 +156,7 @@ mod tests {
             author: None,
             site: Some("example.com".to_string()),
             product: None,
+            link_category: None,
             featured_highlight_id: None,
             source_profile: None,
             saved_at: "2026-06-13T15:00:00Z".to_string(),
