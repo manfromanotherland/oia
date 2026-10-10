@@ -170,6 +170,9 @@ or duplicate IDs, and IDs that are now missing or ineligible abort before any fe
 Count and digest guards apply to the selected subset, with IDs sorted and separated by newlines
 including a final newline. The default still inspects all eligible links.
 
+With `--verbose`, unavailable readings include a short root error reason, such as a connection
+timeout or an HTTP status. Requested URLs and the surrounding request context are omitted.
+
 Artwork is downloaded only during a write, when the reading has no usable regular local preview.
 Bounded public requests reject private addresses, unsafe redirects, unsupported images, and
 oversized responses. The artwork gets a new immutable `assets/category-artwork-<sha256>.<format>`

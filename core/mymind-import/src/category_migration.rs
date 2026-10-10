@@ -312,9 +312,16 @@ fn enrich_existing_categories_with_fetcher(
                     report.fetched += 1;
                     report.unchanged += 1;
                 }
-                Err(_) => {
+                Err(error) => {
                     report.fetch_failures += 1;
                     report.unchanged += 1;
+                    if options.verbose {
+                        report.lines.push(format!(
+                            "UNAVAILABLE reading {}: {}",
+                            target.id,
+                            sanitized_root_cause(&error)
+                        ));
+                    }
                 }
             }
             let processed = index + 1;
@@ -329,6 +336,45 @@ fn enrich_existing_categories_with_fetcher(
         save_report(backup, &report)?;
     }
     Ok(report)
+}
+
+fn sanitized_root_cause(error: &anyhow::Error) -> String {
+    // Reqwest's outer message contains the requested URL. The deepest cause
+    // gives useful timeout/TLS/connection detail without that request context.
+    let root = error.root_cause().to_string();
+    let flattened = root
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                ' '
+            } else {
+                character
+            }
+        })
+        .collect::<String>();
+    let reason = flattened
+        .split_whitespace()
+        .map(|word| {
+            if word.contains("://") {
+                "[URL omitted]"
+            } else {
+                word
+            }
+        })
+        .collect::<Vec<_>>()
+        .join(" ");
+    if reason.is_empty() {
+        return "request failed".into();
+    }
+    if reason.chars().count() > 320 {
+        reason
+            .chars()
+            .take(319)
+            .chain(std::iter::once('…'))
+            .collect()
+    } else {
+        reason
+    }
 }
 
 fn save_report(backup: &Path, report: &EnrichExistingCategoriesReport) -> Result<()> {
@@ -776,5 +822,72 @@ mod tests {
         }
         assert_eq!(fetcher.calls.load(Ordering::Relaxed), 0);
         assert_eq!(fs::read_dir(backup.path()).unwrap().count(), 0);
+    }
+
+    struct FailureFetcher;
+    impl CategoryFetcher for FailureFetcher {
+        fn fetch(&self, _: &str) -> Result<Option<DetectedLinkMetadata>> {
+            Err(anyhow::anyhow!("metadata HTTP 403 Forbidden")
+                .context("request URL https://private.example/secret and page context"))
+        }
+        fn artwork(&self, _: &str) -> Result<ImageBytes> {
+            unreachable!()
+        }
+    }
+
+    #[test]
+    fn verbose_fetch_failures_report_only_the_root_reason_and_keep_failure_counts() {
+        let dir = TempDir::new().unwrap();
+        let library = LibraryRoot::new(dir.path()).unwrap();
+        let saved = import_link(&library, "https://example.com/book").unwrap();
+        let original = fs::read(library.article_path(&saved.id)).unwrap();
+        let report = enrich_existing_categories_with_fetcher(
+            options(dir.path(), None, false),
+            Arc::new(FailureFetcher),
+        )
+        .unwrap();
+        assert_eq!(
+            (
+                report.planned,
+                report.fetched,
+                report.fetch_failures,
+                report.unchanged,
+                report.errors
+            ),
+            (1, 0, 1, 1, 0)
+        );
+        let output = report.render();
+        assert!(output.contains(&format!(
+            "UNAVAILABLE reading {}: metadata HTTP 403 Forbidden\n",
+            saved.id
+        )));
+        assert!(!output.contains("private.example"));
+        assert!(!output.contains("page context"));
+        assert_eq!(fs::read(library.article_path(&saved.id)).unwrap(), original);
+        let mut arguments = options(dir.path(), None, false);
+        arguments.verbose = false;
+        let report =
+            enrich_existing_categories_with_fetcher(arguments, Arc::new(FailureFetcher)).unwrap();
+        assert!(!report.render().contains("UNAVAILABLE reading"));
+        assert!(!report.render().contains("Forbidden"));
+        assert_eq!(report.fetch_failures, 1);
+    }
+
+    #[test]
+    fn root_reason_redacts_urls_flattens_controls_and_caps_unicode_safely() {
+        let error = anyhow::anyhow!("connect\n\tdeadline\0 https://private.example/secret?token=hidden ftp://files.example/private elapsed")
+            .context("outer capture title and content must not appear");
+        assert_eq!(
+            sanitized_root_cause(&error),
+            "connect deadline [URL omitted] [URL omitted] elapsed"
+        );
+        let error = anyhow::anyhow!("λ".repeat(500));
+        let reason = sanitized_root_cause(&error);
+        assert_eq!(reason.chars().count(), 320);
+        assert!(reason.ends_with('…'));
+        assert_eq!(
+            sanitized_root_cause(&anyhow::anyhow!("\n\0\t")),
+            "request failed"
+        );
     }
 }
