@@ -60,22 +60,31 @@ pub struct DetectedPageMetadata {
 /// image never establishes identity. Empty evidence permits only known exact
 /// provider routes, so URL-only ingress can still classify those offline.
 pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMetadata> {
+    inspect_link_metadata(html, page_url).ok().flatten()
+}
+
+// Rejected evidence differs from a page without an entity: an optional owner
+// catalog lookup must never erase a TV, article, review, or boundedness veto.
+fn inspect_link_metadata(
+    html: &str,
+    page_url: &str,
+) -> std::result::Result<Option<DetectedLinkMetadata>, ()> {
     if html.len() > MAX_PRODUCT_HTML_BYTES {
-        return None;
+        return Err(());
     }
-    let page = Url::parse(page_url).ok()?;
+    let page = Url::parse(page_url).map_err(|_| ())?;
     if !is_public_metadata_url(&page) {
-        return None;
+        return Err(());
     }
     let document = Html::parse_document(html);
-    let mut roots = structured_json_roots(&document)?;
-    roots.extend(structured_dom_products(&document)?);
+    let mut roots = structured_json_roots(&document).ok_or(())?;
+    roots.extend(structured_dom_products(&document).ok_or(())?);
     let mut nodes = Vec::new();
     for root in &roots {
         collect_nodes(root, true, &mut nodes);
     }
     if nodes.len() > crate::product::MAX_STRUCTURED_NODES {
-        return None;
+        return Err(());
     }
     let ids: HashMap<_, _> = nodes
         .iter()
@@ -91,7 +100,7 @@ pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMet
             && (crate::product::url_score(node, &page) > 0
                 || (node.get("url").is_none() && node.get("@id").is_none()))
     }) {
-        return None;
+        return Err(());
     }
     let main = choose_main_entity(&nodes, &ids, &page, |node| {
         entity_category(node).is_some() || is_television(node)
@@ -112,18 +121,18 @@ pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMet
                     *eligible && is_television(node) && node.get("url").is_none()
                 }))
         {
-            return None;
+            return Err(());
         }
-        let category = entity_category(entity)?;
+        let category = entity_category(entity).ok_or(())?;
         let isbn = entity_isbn(entity);
-        return Some(DetectedLinkMetadata {
+        return Ok(Some(DetectedLinkMetadata {
             category,
             title: text(entity.get("name")).or_else(|| text(og.get("og:title"))),
             image_url: image_url(entity.get("image"), &ids, &page)
                 .or_else(|| og_image_url(&og, &page))
                 .or_else(|| isbn_cover(category, isbn.as_deref())),
             isbn,
-        });
+        }));
     }
     // Unscoped competing TV/movie works are ambiguous. A selected Movie with
     // a separate recommended TVSeries is handled above and remains a movie.
@@ -131,7 +140,7 @@ pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMet
         .iter()
         .any(|(node, eligible)| *eligible && is_television(node))
     {
-        return None;
+        return Err(());
     }
     if negative_page_context(&nodes)
         || text(og.get("og:type")).is_some_and(|kind| {
@@ -146,7 +155,7 @@ pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMet
             )
         })
     {
-        return None;
+        return Err(());
     }
     let (route_category, route_isbn) = route_category(&page)
         .map(|(category, isbn)| (Some(category), isbn))
@@ -158,21 +167,25 @@ pub fn parse_link_metadata(html: &str, page_url: &str) -> Option<DetectedLinkMet
             "video.movie" => Some(LinkCategory::Movie),
             _ => None,
         })
-        .or(route_category)?;
-    // A conflicting explicit main work prevents route/OG fallback from
-    // classifying an unrelated recommended entity.
-    if nodes.iter().any(|(node, eligible)| {
-        *eligible && entity_category(node).is_some() && node.get("url").is_some()
-    }) {
-        return None;
+        .or(route_category);
+    // Conflicting or ambiguous declared works prevent route/OG or catalog
+    // fallback from classifying an unrelated recommended entity.
+    if nodes
+        .iter()
+        .any(|(node, eligible)| *eligible && entity_category(node).is_some())
+    {
+        return Err(());
     }
+    let Some(category) = category else {
+        return Ok(None);
+    };
     let isbn = isbn(og.get("book:isbn")).or(route_isbn);
-    Some(DetectedLinkMetadata {
+    Ok(Some(DetectedLinkMetadata {
         category,
         title: text(og.get("og:title")),
         image_url: og_image_url(&og, &page).or_else(|| isbn_cover(category, isbn.as_deref())),
         isbn,
-    })
+    }))
 }
 
 fn isbn_cover(category: LinkCategory, isbn: Option<&str>) -> Option<String> {
@@ -390,33 +403,69 @@ fn route_category(page: &Url) -> Option<(LinkCategory, Option<String>)> {
 /// Fetch one HTML snapshot for both cultural and product metadata. Unavailable
 /// HTTP preserves exact known-route classification and never prevents saving.
 pub fn fetch_page_metadata(url: &str) -> Result<DetectedPageMetadata> {
-    let fallback = parse_link_metadata("", url);
-    match crate::product::fetch_public_bytes(url, MAX_PRODUCT_HTML_BYTES, Duration::from_secs(8)) {
-        Ok((bytes, content_type, final_url))
-            if crate::product::is_html_content_type(content_type.as_deref()) =>
-        {
-            let html = String::from_utf8_lossy(&bytes);
-            Ok(parse_fetched_page(&html, url, &final_url))
-        }
-        Ok(_) => Ok(DetectedPageMetadata {
-            link: fallback,
-            product: None,
-        }),
-        // Evidence truncated by the retrieval cap cannot safely discard a
-        // conflicting page context and then classify from its route alone.
-        Err(error) if error.to_string().contains("exceeded size limit") => {
-            Ok(DetectedPageMetadata::default())
-        }
-        Err(error) if fallback.is_none() => Err(error),
-        Err(_) => Ok(DetectedPageMetadata {
-            link: fallback,
-            product: None,
-        }),
-    }
+    fetch_page_metadata_with(url, crate::product::fetch_public_bytes)
 }
 
-fn parse_fetched_page(html: &str, requested_url: &str, final_url: &str) -> DetectedPageMetadata {
-    let link = parse_link_metadata(html, final_url).or_else(|| {
+type PublicResponse = (Vec<u8>, Option<String>, String);
+
+fn fetch_page_metadata_with(
+    url: &str,
+    mut fetch: impl FnMut(&str, usize, Duration) -> Result<PublicResponse>,
+) -> Result<DetectedPageMetadata> {
+    let fallback = parse_link_metadata("", url);
+    let title_id = imdb_title_id(url);
+    let (mut metadata, catalog_allowed) =
+        match fetch(url, MAX_PRODUCT_HTML_BYTES, Duration::from_secs(8)) {
+            Ok((bytes, content_type, final_url))
+                if crate::product::is_html_content_type(content_type.as_deref()) =>
+            {
+                let html = String::from_utf8_lossy(&bytes);
+                inspect_fetched_page(&html, url, &final_url)
+            }
+            Ok(_) => (
+                DetectedPageMetadata {
+                    link: fallback,
+                    product: None,
+                },
+                true,
+            ),
+            // Evidence truncated by the retrieval cap cannot safely discard a
+            // conflicting page context and then classify from its route alone.
+            Err(error) if error.to_string().contains("exceeded size limit") => {
+                return Ok(DetectedPageMetadata::default());
+            }
+            Err(error) if fallback.is_none() && title_id.is_none() => return Err(error),
+            Err(_) => (
+                DetectedPageMetadata {
+                    link: fallback,
+                    product: None,
+                },
+                true,
+            ),
+        };
+    if catalog_allowed && metadata.link.is_none() && metadata.product.is_none() {
+        if let Some(title_id) = title_id.as_deref() {
+            let endpoint = imdb_catalog_url(title_id);
+            metadata.link = fetch(&endpoint, MAX_IMDB_CATALOG_BYTES, IMDB_CATALOG_DEADLINE)
+                .ok()
+                .and_then(|(bytes, content_type, final_url)| {
+                    (final_url == endpoint && json_content_type(content_type.as_deref()))
+                        .then(|| parse_imdb_catalog(&bytes, title_id))
+                        .flatten()
+                });
+        }
+    }
+    Ok(metadata)
+}
+
+fn inspect_fetched_page(
+    html: &str,
+    requested_url: &str,
+    final_url: &str,
+) -> (DetectedPageMetadata, bool) {
+    let inspection = inspect_link_metadata(html, final_url);
+    let catalog_allowed = inspection.is_ok();
+    let link = inspection.ok().flatten().or_else(|| {
         // Same-provider login/challenge redirects may expose no work metadata.
         // Retain only the original exact-route evidence, never the challenge's
         // title or logo. Explicit negative page context still prevents fallback.
@@ -428,10 +477,98 @@ fn parse_fetched_page(html: &str, requested_url: &str, final_url: &str) -> Detec
         .then(|| parse_link_metadata("", requested_url))
         .flatten()
     });
-    DetectedPageMetadata {
-        link,
-        product: crate::parse_product_metadata(html, final_url),
+    (
+        DetectedPageMetadata {
+            link,
+            product: crate::parse_product_metadata(html, final_url),
+        },
+        catalog_allowed,
+    )
+}
+
+#[cfg(test)]
+fn parse_fetched_page(html: &str, requested_url: &str, final_url: &str) -> DetectedPageMetadata {
+    inspect_fetched_page(html, requested_url, final_url).0
+}
+
+const MAX_IMDB_CATALOG_BYTES: usize = 128 * 1024;
+const IMDB_CATALOG_DEADLINE: Duration = Duration::from_secs(4);
+
+fn imdb_title_id(raw: &str) -> Option<String> {
+    let page = Url::parse(raw).ok()?;
+    if !is_public_metadata_url(&page)
+        || !matches!(page.host_str()?, "imdb.com" | "www.imdb.com")
+        || page.fragment().is_some()
+        || page.query_pairs().any(|(key, _)| {
+            !matches!(key.as_ref(), "ref" | "ref_")
+                && !key.starts_with("utm_")
+                && !key.starts_with("pf_rd_")
+        })
+    {
+        return None;
     }
+    let path = page.path().strip_prefix("/title/")?;
+    let id = path.strip_suffix('/').unwrap_or(path);
+    let digits = id.strip_prefix("tt")?;
+    if !(7..=12).contains(&digits.len()) || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    Some(id.to_string())
+}
+
+fn imdb_catalog_url(title_id: &str) -> String {
+    format!("https://v3.sg.media-imdb.com/suggestion/t/{title_id}.json")
+}
+
+fn json_content_type(content_type: Option<&str>) -> bool {
+    content_type.is_some_and(|value| {
+        value
+            .split(';')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .eq_ignore_ascii_case("application/json")
+    })
+}
+
+// This is an observed public IMDb-owned catalog response, not a guaranteed
+// interface. Missing or changed records remain ordinary links. No credentials,
+// HTML challenge handling, or authentication bypass is involved.
+fn parse_imdb_catalog(bytes: &[u8], title_id: &str) -> Option<DetectedLinkMetadata> {
+    if bytes.len() > MAX_IMDB_CATALOG_BYTES {
+        return None;
+    }
+    let response: Value = serde_json::from_slice(bytes).ok()?;
+    let entries = response.get("d")?.as_array()?;
+    if entries.len() > 32 {
+        return None;
+    }
+    let mut matching = entries
+        .iter()
+        .filter(|entry| entry.get("id").and_then(Value::as_str) == Some(title_id));
+    let entry = matching.next()?;
+    if matching.next().is_some() || entry.get("qid").and_then(Value::as_str) != Some("movie") {
+        return None;
+    }
+    let title = entry.get("l")?.as_str()?.trim();
+    if title.is_empty() || title.len() > 2048 || title.chars().count() > 512 {
+        return None;
+    }
+    let image_url = entry
+        .get("i")
+        .and_then(|image| image.get("imageUrl"))
+        .and_then(Value::as_str)
+        .filter(|raw| raw.len() <= 8192)
+        .and_then(|raw| Url::parse(raw.trim()).ok())
+        .filter(|url| url.as_str().len() <= 8192)
+        .filter(is_public_metadata_url)
+        .map(|url| url.to_string());
+    Some(DetectedLinkMetadata {
+        category: LinkCategory::Movie,
+        title: Some(title.to_string()),
+        image_url,
+        isbn: None,
+    })
 }
 
 pub fn fetch_link_metadata(url: &str) -> Result<Option<DetectedLinkMetadata>> {
@@ -787,5 +924,244 @@ mod tests {
             );
         }
         assert!(parse(r#"{"@type":"Book"}"#).is_some());
+    }
+
+    fn movie_catalog(id: &str) -> Vec<u8> {
+        serde_json::to_vec(&serde_json::json!({"d":[{
+            "id":id,"qid":"movie","q":"feature","l":" Catalog movie ",
+            "i":{"imageUrl":"https://m.media-amazon.com/images/poster.jpg"}
+        }]}))
+        .unwrap()
+    }
+
+    #[test]
+    fn imdb_catalog_requires_one_exact_movie_record() {
+        let id = "tt0098554";
+        let bytes = serde_json::to_vec(&serde_json::json!({"d":[
+            {"id":"tt0944947","qid":"tvSeries","l":"Other title"},
+            {"id":id,"qid":"movie","l":" Exact movie ","i":{"imageUrl":"https://m.media-amazon.com/images/poster.jpg"}}
+        ]})).unwrap();
+        let metadata = parse_imdb_catalog(&bytes, id).unwrap();
+        assert_eq!(metadata.category, LinkCategory::Movie);
+        assert_eq!(metadata.title.as_deref(), Some("Exact movie"));
+        assert_eq!(
+            metadata.image_url.as_deref(),
+            Some("https://m.media-amazon.com/images/poster.jpg")
+        );
+        for response in [
+            serde_json::json!({"d":[{"id":id,"qid":"tvSeries","q":"feature","l":"TV"}]}),
+            serde_json::json!({"d":[{"id":id,"qid":"tvEpisode","l":"Episode"}]}),
+            serde_json::json!({"d":[{"id":id,"q":"feature","l":"Unspecified"}]}),
+            serde_json::json!({"d":[{"id":"tt9999999","qid":"movie","l":"Mismatch"}]}),
+            serde_json::json!({"d":[{"id":id,"qid":"movie","l":"First"},{"id":id,"qid":"movie","l":"Second"}]}),
+            serde_json::json!({"d":[]}),
+        ] {
+            assert!(parse_imdb_catalog(&serde_json::to_vec(&response).unwrap(), id).is_none());
+        }
+    }
+
+    #[test]
+    fn imdb_catalog_bounds_titles_payload_and_public_artwork() {
+        let id = "tt0098554";
+        for cover in [
+            "https://127.0.0.1/poster.jpg",
+            "https://user:pass@example.com/poster.jpg",
+            "file:///poster.jpg",
+            "/relative.jpg",
+        ] {
+            let bytes = serde_json::to_vec(&serde_json::json!({"d":[{"id":id,"qid":"movie","l":"Movie","i":{"imageUrl":cover}}]})).unwrap();
+            let metadata = parse_imdb_catalog(&bytes, id).unwrap();
+            assert!(metadata.image_url.is_none());
+        }
+        for title in [String::new(), " ".to_string(), "é".repeat(513)] {
+            let bytes =
+                serde_json::to_vec(&serde_json::json!({"d":[{"id":id,"qid":"movie","l":title}]}))
+                    .unwrap();
+            assert!(parse_imdb_catalog(&bytes, id).is_none());
+        }
+        assert!(parse_imdb_catalog(&vec![b' '; MAX_IMDB_CATALOG_BYTES + 1], id).is_none());
+        assert!(parse_imdb_catalog(b"invalid JSON", id).is_none());
+    }
+
+    #[test]
+    fn imdb_lookup_recognizes_only_exact_title_routes() {
+        for url in [
+            "https://imdb.com/title/tt0098554",
+            "https://www.imdb.com/title/tt0098554/?ref_=tt_ov",
+        ] {
+            assert_eq!(imdb_title_id(url).as_deref(), Some("tt0098554"));
+            assert!(
+                parse_link_metadata("", url).is_none(),
+                "live inspection never uses a catalog"
+            );
+        }
+        for url in [
+            "https://imdb.com/title/tt0098554/reviews",
+            "https://imdb.com/title/tt0098554/episodes",
+            "https://imdb.com/title/tt0098554//",
+            "https://imdb.com/title/tt0098554?view=reviews",
+            "https://imdb.com/title/tt0098554#reviews",
+            "https://imdb.com/title/ttbadid",
+            "https://imdb.com.evil.test/title/tt0098554",
+            "https://user@imdb.com/title/tt0098554",
+            "https://imdb.com/name/nm1234567",
+        ] {
+            assert!(imdb_title_id(url).is_none(), "{url}");
+        }
+    }
+
+    #[test]
+    fn imdb_url_fetch_falls_back_after_unavailable_or_unclassified_html() {
+        let url = "https://imdb.com/title/tt0098554/";
+        let endpoint = imdb_catalog_url("tt0098554");
+        for unavailable in [true, false] {
+            let mut calls = Vec::new();
+            let metadata = fetch_page_metadata_with(url, |target, cap, deadline| {
+                calls.push(target.to_string());
+                if target == url {
+                    assert_eq!(cap, MAX_PRODUCT_HTML_BYTES);
+                    if unavailable {
+                        anyhow::bail!("metadata HTTP 403");
+                    }
+                    return Ok((
+                        b"<meta property='og:type' content='website'><title>IMDb</title>".to_vec(),
+                        Some("text/html".to_string()),
+                        url.to_string(),
+                    ));
+                }
+                assert_eq!(target, endpoint);
+                assert_eq!(cap, MAX_IMDB_CATALOG_BYTES);
+                assert_eq!(deadline, IMDB_CATALOG_DEADLINE);
+                Ok((
+                    movie_catalog("tt0098554"),
+                    Some("application/json; charset=utf-8".to_string()),
+                    endpoint.clone(),
+                ))
+            })
+            .unwrap();
+            assert_eq!(calls, [url, &endpoint]);
+            assert_eq!(
+                metadata.link.unwrap().title.as_deref(),
+                Some("Catalog movie")
+            );
+            assert!(metadata.product.is_none());
+        }
+    }
+
+    #[test]
+    fn imdb_page_evidence_and_atomic_budgets_veto_catalog_lookup() {
+        let url = "https://imdb.com/title/tt0098554/";
+        let mut evidence = Vec::new();
+        for kind in [
+            "TVSeries",
+            "TVEpisode",
+            "Article",
+            "Review",
+            "CollectionPage",
+            "ItemList",
+        ] {
+            evidence.push(format!(
+                "<script type='application/ld+json'>{{\"@type\":\"{kind}\"}}</script>"
+            ));
+        }
+        evidence.push("<meta property='og:type' content='video.tv_show'>".to_string());
+        evidence.push("<meta property='og:type' content='article'>".to_string());
+        evidence.push(format!(
+            "<script type='application/ld+json'>[{}]</script>",
+            std::iter::repeat_n(r#"{"@type":"Movie"}"#, 1025)
+                .collect::<Vec<_>>()
+                .join(",")
+        ));
+        evidence.push("x".repeat(MAX_PRODUCT_HTML_BYTES + 1));
+        for html in evidence {
+            let mut calls = 0;
+            let metadata = fetch_page_metadata_with(url, |target, _, _| {
+                calls += 1;
+                assert_eq!(
+                    target, url,
+                    "vetoed evidence must not trigger a catalog request"
+                );
+                Ok((
+                    html.as_bytes().to_vec(),
+                    Some("text/html".to_string()),
+                    url.to_string(),
+                ))
+            })
+            .unwrap();
+            assert_eq!(calls, 1);
+            assert!(metadata.link.is_none());
+        }
+        let mut calls = 0;
+        assert!(fetch_page_metadata_with(url, |_, _, _| {
+            calls += 1;
+            anyhow::bail!("metadata exceeded size limit")
+        })
+        .unwrap()
+        .link
+        .is_none());
+        assert_eq!(calls, 1);
+    }
+
+    #[test]
+    fn imdb_main_metadata_wins_and_retains_product_snapshot() {
+        let url = "https://imdb.com/title/tt0098554/";
+        for html in [
+            r#"<script type="application/ld+json">{"@type":"Movie","name":"Live title","image":"https://example.com/live.jpg"}</script>"#,
+            r#"<script type="application/ld+json">{"@type":["Movie","Product"],"name":"Live title","offers":{"@type":"Offer","price":"12","priceCurrency":"EUR"}}</script>"#,
+            r#"<script type="application/ld+json">{"@type":"Product","offers":{"@type":"Offer","price":"12","priceCurrency":"EUR"}}</script>"#,
+        ] {
+            let mut calls = 0;
+            let metadata = fetch_page_metadata_with(url, |target, _, _| {
+                calls += 1;
+                assert_eq!(target, url);
+                Ok((
+                    html.as_bytes().to_vec(),
+                    Some("text/html".to_string()),
+                    url.to_string(),
+                ))
+            })
+            .unwrap();
+            assert_eq!(calls, 1);
+            if html.contains("Live title") {
+                assert_eq!(metadata.link.unwrap().title.as_deref(), Some("Live title"));
+            }
+            if html.contains("Product") {
+                assert_eq!(metadata.product.unwrap().price.as_deref(), Some("12"));
+            }
+        }
+    }
+
+    #[test]
+    fn bad_imdb_catalog_or_offline_fetch_keeps_an_ordinary_link() {
+        let url = "https://imdb.com/title/tt0098554/";
+        for case in 0..4 {
+            let endpoint = imdb_catalog_url("tt0098554");
+            let metadata = fetch_page_metadata_with(url, |target, _, _| {
+                if target == url {
+                    anyhow::bail!("page unavailable");
+                }
+                match case {
+                    0 => anyhow::bail!("catalog unavailable"),
+                    1 => Ok((
+                        movie_catalog("tt0098554"),
+                        Some("text/html".to_string()),
+                        endpoint.clone(),
+                    )),
+                    2 => Ok((
+                        movie_catalog("tt9999999"),
+                        Some("application/json".to_string()),
+                        endpoint.clone(),
+                    )),
+                    _ => Ok((
+                        movie_catalog("tt0098554"),
+                        Some("application/json".to_string()),
+                        "https://example.com/catalog.json".to_string(),
+                    )),
+                }
+            })
+            .unwrap();
+            assert!(metadata.link.is_none());
+            assert!(metadata.product.is_none());
+        }
     }
 }

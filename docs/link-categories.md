@@ -21,9 +21,12 @@ collections must not change its category.
 
 Precise provider entity routes provide conservative fallback evidence for book, music, and film
 detail pages. A generic shop route, words in a title, or a price alone cannot identify the category.
-IMDb title routes require typed metadata because the same pattern also identifies TV shows and
-episodes. Artist pages, podcasts, generic YouTube videos, and book collections are not automatically
-Music or Movie items.
+IMDb title routes require typed evidence because the same pattern also identifies TV shows and
+episodes. When an exact title page has no usable entity metadata, optional retrieval can consult
+IMDb's public suggestion catalog. Only one result matching the requested title ID with `qid: movie`
+supplies Movie evidence and a poster. Explicit article, review, collection, or television metadata
+and excessive page metadata prevent this fallback. Artist pages, podcasts, generic YouTube videos,
+and book collections are not automatically Music or Movie items.
 
 The extension sends bounded raw live metadata through the existing `product_html` protocol field.
 The pure `inspect_page_metadata` request lets Rust choose an exact artwork URL before the
@@ -51,4 +54,7 @@ is deleted.
 [Schema.org Book](https://schema.org/Book), [MusicAlbum](https://schema.org/MusicAlbum),
 [MusicRecording](https://schema.org/MusicRecording), and [Movie](https://schema.org/Movie) define
 the relevant entities. The [Open Graph specification](https://ogp.me/) defines typed pages and their
-artwork. These are our detection choices; mymind does not publish its recognition algorithm.
+artwork. The [IMDb public suggestion response](https://v3.sg.media-imdb.com/suggestion/t/tt0098554.json)
+provides an exact movie type, title, and poster. This endpoint was observed on 10 October 2026;
+it is not a documented stable API, and failed or unknown responses leave the link unclassified.
+These are our detection choices; mymind does not publish its recognition algorithm.
