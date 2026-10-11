@@ -93,9 +93,11 @@ pub(super) fn full_note_text(
                 ancestor = owner.parent;
             }
             let text = result.string("text").ok_or_else(invalid)?;
+            // Short Note Tweets can already be complete in syndication. The
+            // verified owning Tweet and note result still establish the full
+            // text even when no additional characters need to be recovered.
             if !has_owner
                 || !text.starts_with(preview)
-                || text.len() <= preview.len()
                 || text.trim_end().ends_with(['…'])
                 || text.trim_end().ends_with("...")
                 || complete.as_ref().is_some_and(|previous| previous != text)

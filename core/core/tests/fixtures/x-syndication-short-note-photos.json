@@ -1,0 +1,52 @@
+{
+  "__typename": "Tweet",
+  "id_str": "1726433216511316241",
+  "text": "\"Aesthetic pleasure is not to be taken lightly; it's very important for the spirit and therefore the health.\" \n\n— Tadao Ando https://t.co/5wINqJ9ptf",
+  "display_text_range": [
+    0,
+    124
+  ],
+  "created_at": "2023-11-20T02:52:09.000Z",
+  "user": {
+    "name": "mymind",
+    "screen_name": "mymind",
+    "profile_image_url_https": "https://pbs.twimg.com/profile_images/1737155428167856128/sBofGlY__normal.jpg"
+  },
+  "mediaDetails": [
+    {
+      "type": "photo",
+      "media_url_https": "https://pbs.twimg.com/media/F_WDPxyW0AAHMGv.jpg",
+      "original_info": {
+        "width": 810,
+        "height": 1214
+      }
+    },
+    {
+      "type": "photo",
+      "media_url_https": "https://pbs.twimg.com/media/F_WEqL_XQAEOS6o.jpg",
+      "original_info": {
+        "width": 1280,
+        "height": 1600
+      }
+    },
+    {
+      "type": "photo",
+      "media_url_https": "https://pbs.twimg.com/media/F_WFJuVXEAEvVZb.jpg",
+      "original_info": {
+        "width": 1280,
+        "height": 1603
+      }
+    },
+    {
+      "type": "photo",
+      "media_url_https": "https://pbs.twimg.com/media/F_WFWOoWEAAtUKR.jpg",
+      "original_info": {
+        "width": 1250,
+        "height": 834
+      }
+    }
+  ],
+  "note_tweet": {
+    "id": "Tm90ZVR3ZWV0UmVzdWx0czoxNzI2NDMzMjE2NDQ0MTE2OTky"
+  }
+}

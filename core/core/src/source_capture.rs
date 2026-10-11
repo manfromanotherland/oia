@@ -2232,6 +2232,92 @@ mod tests {
         retriever
     }
 
+    fn short_note_photos_fixture() -> FixtureRetriever {
+        let metadata = include_bytes!("../tests/fixtures/x-syndication-short-note-photos.json");
+        let payload: serde_json::Value = serde_json::from_slice(metadata).unwrap();
+        let mut assets = HashMap::from([(
+            payload["user"]["profile_image_url_https"]
+                .as_str()
+                .unwrap()
+                .to_owned(),
+            ("image/jpeg", b"avatar".to_vec()),
+        )]);
+        for (index, media) in payload["mediaDetails"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+        {
+            assets.insert(
+                media["media_url_https"].as_str().unwrap().to_owned(),
+                ("image/jpeg", format!("photo-{index}").into_bytes()),
+            );
+        }
+        FixtureRetriever {
+            metadata: metadata.to_vec(),
+            refinement: Some(include_bytes!("../tests/fixtures/x-short-note-page.html").to_vec()),
+            assets,
+        }
+    }
+
+    #[test]
+    fn short_note_saves_every_photo_locally_in_source_order() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://x.com/mymind/status/1726433216511316241";
+        let before = legacy_post_link(&library, url, url);
+        let outcome = save_special_url_with(
+            &library,
+            &UrlSaveRequest::new(url),
+            &short_note_photos_fixture(),
+        )
+        .unwrap()
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&outcome.id)).unwrap()).unwrap();
+        assert_eq!(outcome.disposition, SaveDisposition::Upgraded);
+        assert_eq!(outcome.id, before.id);
+        assert_eq!(reading.metadata.tags, before.tags);
+        assert_eq!(reading.metadata.saved_at, before.saved_at);
+        assert!(!reading.metadata.lightweight);
+        assert!(reading.body.contains("— Tadao Ando"));
+        assert!(!reading.body.contains("pbs.twimg.com"));
+        let profile = reading.metadata.source_profile.unwrap();
+        assert_eq!(profile.attachments.len(), 4);
+        let mut previous_position = 0;
+        for (index, attachment) in profile.attachments.iter().enumerate() {
+            assert_eq!(attachment.kind, "image");
+            assert_eq!(
+                fs::read(library.reading_dir(&before.id).join(&attachment.asset)).unwrap(),
+                format!("photo-{index}").as_bytes()
+            );
+            let position = reading.body.find(&attachment.asset).unwrap();
+            assert!(position > previous_position);
+            previous_position = position;
+        }
+    }
+
+    #[test]
+    fn missing_last_photo_does_not_commit_an_incomplete_short_note() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://x.com/mymind/status/1726433216511316241";
+        let before = legacy_post_link(&library, url, url);
+        let bytes = fs::read(library.article_path(&before.id)).unwrap();
+        let mut retriever = short_note_photos_fixture();
+        retriever
+            .assets
+            .remove("https://pbs.twimg.com/media/F_WFWOoWEAAtUKR.jpg");
+        assert!(save_special_url_with(&library, &UrlSaveRequest::new(url), &retriever).is_err());
+        assert_eq!(fs::read(library.article_path(&before.id)).unwrap(), bytes);
+        assert_eq!(
+            fs::read_dir(library.assets_dir(&before.id))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
     #[test]
     fn long_post_refinement_upgrades_the_original_link_with_complete_text_and_media() {
         let directory = tempfile::tempdir().unwrap();

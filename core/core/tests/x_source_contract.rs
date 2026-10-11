@@ -12,6 +12,38 @@ const ARTICLE_FIXTURE: &str = include_str!("fixtures/x-syndication-article.json"
 const FULL_NOTE_FIXTURE: &str = include_str!("fixtures/x-syndication-full-note.json");
 const NOTE_PAGE_FIXTURE: &str = include_str!("fixtures/x-note-page.html");
 const NOTE_TEXT: &str = include_str!("fixtures/x-note-full-text.txt");
+const SHORT_NOTE_PHOTOS_FIXTURE: &str =
+    include_str!("fixtures/x-syndication-short-note-photos.json");
+const SHORT_NOTE_PAGE_FIXTURE: &str = include_str!("fixtures/x-short-note-page.html");
+
+#[test]
+fn official_note_page_accepts_already_complete_text_and_every_photo() {
+    let post = parse_syndication_payload_with_note_html(
+        SHORT_NOTE_PHOTOS_FIXTURE,
+        SHORT_NOTE_PAGE_FIXTURE,
+    )
+    .unwrap();
+    assert_eq!(post.source_id, "1726433216511316241");
+    assert_eq!(
+        post.text,
+        "\"Aesthetic pleasure is not to be taken lightly; it's very important for the spirit and therefore the health.\" \n\n— Tadao Ando"
+    );
+    assert_eq!(post.attachments.len(), 4);
+    for (attachment, (filename, width, height)) in post.attachments.iter().zip([
+        ("F_WDPxyW0AAHMGv.jpg", 810, 1214),
+        ("F_WEqL_XQAEOS6o.jpg", 1280, 1600),
+        ("F_WFJuVXEAEvVZb.jpg", 1280, 1603),
+        ("F_WFWOoWEAAtUKR.jpg", 1250, 834),
+    ]) {
+        assert_eq!(attachment.kind, AttachmentKind::Image);
+        assert_eq!(
+            attachment.url,
+            format!("https://pbs.twimg.com/media/{filename}")
+        );
+        assert_eq!(attachment.width, Some(width));
+        assert_eq!(attachment.height, Some(height));
+    }
+}
 
 #[test]
 fn official_note_page_recovers_complete_text_with_verified_syndication_media() {
@@ -41,7 +73,7 @@ fn note_pages_require_matching_owned_unambiguous_complete_results() {
         NOTE_PAGE_FIXTURE.replace("rest_id:\"2102505743278829841\"", "rest_id:\"42\""),
         NOTE_PAGE_FIXTURE.replacen(&text_literal, &serde_json::to_string(&(NOTE_TEXT.to_owned()+" Conflicting result.")).unwrap(), 1),
         NOTE_PAGE_FIXTURE.replace(&text_literal, "\"Different unrelated text.\""),
-        NOTE_PAGE_FIXTURE.replace(&text_literal, &serde_json::to_string(preview).unwrap()),
+        NOTE_PAGE_FIXTURE.replace(&text_literal, &serde_json::to_string(preview.trim_end_matches('.')).unwrap()),
         NOTE_PAGE_FIXTURE.replace(&text_literal, &serde_json::to_string(&(NOTE_TEXT.to_owned()+"…")).unwrap()),
         NOTE_PAGE_FIXTURE.replace(&text_literal, &serde_json::to_string(&(NOTE_TEXT.to_owned()+"...")).unwrap()),
         NOTE_PAGE_FIXTURE.replace(&text_literal, "\"invalid\\q string\""),
