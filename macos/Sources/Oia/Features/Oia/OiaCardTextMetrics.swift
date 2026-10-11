@@ -115,7 +115,7 @@ final class OiaCardTextMetrics {
     static let articleFooterSourceLineHeight = max(14, sourceLineHeight)
     static let quoteHorizontalPadding: CGFloat = 20
     static let quoteVerticalPadding: CGFloat = 20
-    static let quoteLineSpacing: CGFloat = 7
+    private static let quoteLineSpacingBase: CGFloat = 7
     static let quoteLineLimit = 12
     static let quoteDetailPointSize: CGFloat = 34
     static let quoteDetailLineSpacing: CGFloat = 10
@@ -273,7 +273,7 @@ final class OiaCardTextMetrics {
             text,
             width: width,
             font: font,
-            lineSpacing: quoteLineSpacing,
+            lineSpacing: quoteLineSpacing(for: cardSize),
             lineLimit: quoteLineLimit,
             renderedLineHeight: quoteRenderedLineHeight(for: cardSize)
         )
@@ -440,6 +440,10 @@ extension OiaCardTextMetrics {
         case .large: 22
         case .extraLarge: 24
         }
+    }
+
+    static func quoteLineSpacing(for cardSize: CardSize) -> CGFloat {
+        quoteLineSpacingBase * quoteScale(for: cardSize)
     }
 
     static func quoteMarkPointSize(for cardSize: CardSize) -> CGFloat {

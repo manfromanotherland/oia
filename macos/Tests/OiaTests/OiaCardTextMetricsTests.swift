@@ -378,7 +378,7 @@ extension OiaCardTextMetricsTests {
             renderedQuoteMark("“", cardSize: cardSize)
             Text(text)
                 .font(Font(OiaCardTextMetrics.quoteFont(for: cardSize)))
-                .lineSpacing(OiaCardTextMetrics.quoteLineSpacing)
+                .lineSpacing(OiaCardTextMetrics.quoteLineSpacing(for: cardSize))
                 .multilineTextAlignment(.center)
                 .lineLimit(OiaCardTextMetrics.quoteLineLimit)
                 .fixedSize(horizontal: false, vertical: true)
