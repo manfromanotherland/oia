@@ -14,6 +14,9 @@ pub struct SaveRequest {
     pub action: String,
     pub metadata: RequestMetadata,
     pub markdown: String,
+    /// Raw extracted-HTML measurements for automatic `save_page` classification.
+    #[serde(default)]
+    pub page_content: Option<oia_core::PageCaptureEvidence>,
     /// Image bytes captured by the extension. The host writes these to disk; it
     /// never downloads anything itself.
     pub images: Vec<RequestImage>,

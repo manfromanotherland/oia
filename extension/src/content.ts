@@ -6,6 +6,7 @@ import { extractQuote, extractStandaloneMedia, type StandaloneMediaKind } from "
 import { extractPageMetadata } from "./page-metadata.js";
 import type {
   ImageData,
+  PageCaptureEvidence,
   SaveRequestMetadata,
   SaveResponse,
   VideoImportMetadata,
@@ -43,6 +44,8 @@ export interface ToastMessage {
 export interface PageCapture {
   metadata: SaveRequestMetadata;
   markdown: string;
+  /** Raw extracted-content measurements interpreted by the shared core. */
+  page_content?: PageCaptureEvidence;
   images: ImageData[];
   unresolved: string[];
   /** Social/meta image URL selected as the card preview, when present. */
@@ -108,10 +111,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
-  if (msg?.action === "extract") {
+  if (msg?.action === "extract" || msg?.action === "capture-page") {
     void (async () => {
-      const result = extractPage(document, window.location.href);
+      const pageUrl =
+        msg.action === "capture-page" && typeof msg.pageUrl === "string" && msg.pageUrl
+          ? msg.pageUrl
+          : window.location.href;
+      const result = extractPage(document, pageUrl);
       if (!result) {
+        if (msg.action === "capture-page") {
+          sendResponse(await capturePageMetadata(document, pageUrl));
+          return;
+        }
         sendResponse({ error: "Could not extract article content from this page." });
         return;
       }
@@ -128,6 +139,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         preview_candidates: result.preview_candidates,
         favicon_candidates: result.favicon_candidates,
         content_image_urls: result.image_urls,
+        ...(msg.action === "capture-page" ? { page_content: result.page_content } : {}),
       };
       sendResponse(capture);
     })();
@@ -142,32 +154,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         return;
       }
 
-      const page = extractPageMetadata(document, pageUrl);
-      const title = page.title ?? new URL(pageUrl).hostname;
-      const { images, unresolved } = await fetchImages(
-        captureImageUrls(page.socialImageUrls, page.faviconUrls),
-      );
-      const capture: PageCapture = {
-        metadata: {
-          kind: "article",
-          url: pageUrl,
-          canonical_url: page.canonicalUrl,
-          title,
-          saved_at: new Date().toISOString(),
-          ...(page.author ? { author: page.author } : {}),
-          ...(page.site ? { site: page.site } : {}),
-          ...(page.themeColor ? { theme_color: page.themeColor } : {}),
-          ...(page.productHtml ? { product_html: page.productHtml } : {}),
-          ...(page.lang ? { lang: page.lang } : {}),
-          ...(page.excerpt ? { excerpt: page.excerpt } : {}),
-        },
-        markdown: "",
-        images,
-        unresolved,
-        preview_candidates: page.socialImageUrls,
-        favicon_candidates: page.faviconUrls,
-      };
-      sendResponse(capture);
+      sendResponse(await capturePageMetadata(document, pageUrl));
     })();
     return true;
   }
@@ -215,6 +202,34 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     showToast(msg as ToastMessage);
   }
 });
+
+/** Preserve live page evidence even when no readable article was extracted. */
+async function capturePageMetadata(doc: Document, pageUrl: string): Promise<PageCapture> {
+  const page = extractPageMetadata(doc, pageUrl);
+  const { images, unresolved } = await fetchImages(
+    captureImageUrls(page.socialImageUrls, page.faviconUrls),
+  );
+  return {
+    metadata: {
+      kind: "article",
+      url: pageUrl,
+      canonical_url: page.canonicalUrl,
+      title: page.title ?? new URL(pageUrl).hostname,
+      saved_at: new Date().toISOString(),
+      ...(page.author ? { author: page.author } : {}),
+      ...(page.site ? { site: page.site } : {}),
+      ...(page.themeColor ? { theme_color: page.themeColor } : {}),
+      ...(page.productHtml ? { product_html: page.productHtml } : {}),
+      ...(page.lang ? { lang: page.lang } : {}),
+      ...(page.excerpt ? { excerpt: page.excerpt } : {}),
+    },
+    markdown: "",
+    images,
+    unresolved,
+    preview_candidates: page.socialImageUrls,
+    favicon_candidates: page.faviconUrls,
+  };
+}
 
 /** Handle the public capture-media request. Every video is imported over the
  * streaming port so a successful save always contains a local movie asset;

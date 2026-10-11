@@ -4,7 +4,7 @@ import { Readability } from "@mozilla/readability";
 import TurndownService from "turndown";
 
 import { extractPageMetadata, firstText } from "./page-metadata.js";
-import type { SaveRequestMetadata } from "./protocol.js";
+import type { PageCaptureEvidence, SaveRequestMetadata } from "./protocol.js";
 import { applySiteAdapters } from "./site-adapters/index.js";
 
 export interface ExtractionResult {
@@ -13,6 +13,7 @@ export interface ExtractionResult {
   image_urls: string[];
   preview_candidates: string[];
   favicon_candidates: string[];
+  page_content?: PageCaptureEvidence;
 }
 
 /**
@@ -55,6 +56,24 @@ export function extractPage(doc: Document, pageUrl: string): ExtractionResult | 
     image_urls: imageUrls,
     preview_candidates: page.socialImageUrls,
     favicon_candidates: page.faviconUrls,
+    page_content: measurePageContent(doc, article.content),
+  };
+}
+
+/** Raw measurements of extracted HTML; Rust decides how to classify the page. */
+export function measurePageContent(doc: Document, html: string): PageCaptureEvidence {
+  const template = doc.createElement("template");
+  template.innerHTML = html;
+  const content = template.content;
+  const textLength = (node: Node): number =>
+    Array.from((node.textContent ?? "").replace(/\s+/g, " ").trim()).length;
+  return {
+    text_characters: textLength(content),
+    link_characters: Array.from(content.querySelectorAll("a")).reduce(
+      (total, link) => total + textLength(link),
+      0,
+    ),
+    paragraph_characters: Array.from(content.querySelectorAll("p")).slice(0, 1_024).map(textLength),
   };
 }
 

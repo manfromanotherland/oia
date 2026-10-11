@@ -60,6 +60,19 @@ export interface SaveRequest {
   favicon_url?: string;
 }
 
+/** Raw measurements of extracted page content; Rust decides whether it is an article. */
+export interface PageCaptureEvidence {
+  text_characters: number;
+  link_characters: number;
+  paragraph_characters: number[];
+}
+
+/** Save the current page without asking the caller to classify its content. */
+export interface SavePageRequest extends Omit<SaveRequest, "action"> {
+  action: "save_page";
+  page_content?: PageCaptureEvidence;
+}
+
 /** Serialized DOM facts captured for the exact context-menu text selection. */
 export interface SelectionContext {
   version: 1;

@@ -44,9 +44,40 @@ keeps its body, assets, saved date, and curation. Empty extraction retains a lig
 link with the verbatim passage in `highlights.md`. Each successful selection response includes
 `selection_kind: "highlight" | "quote"` for presentation.
 
+## Automatic page save request (extension → host)
+
+The toolbar's **Save**, the page context-menu action, and the keyboard shortcut use additive
+protocol-v4 action `save_page`. It has the same metadata, Markdown, images, preview, and favicon
+fields as `save`, plus optional raw content measurements:
+
+```json
+{
+  "page_content": {
+    "text_characters": 1800,
+    "link_characters": 40,
+    "paragraph_characters": [650, 700, 450]
+  }
+}
+```
+
+These are whitespace-normalized Unicode character counts from the cleaned extraction, with at
+most 1024 paragraph measurements. The extension supplies facts; Rust owns classification and
+thresholds. `metadata.kind` is the existing `article` storage base, not a caller-selected content
+classification. No extracted content is represented by empty Markdown and absent measurements.
+
+The host first offers recognized source URLs to the Rust source resolver. Otherwise, core uses
+structured main-entity evidence and extracted prose to choose a full article or lightweight link,
+and applies the existing product/book/music/movie classification. A lightweight decision uses the
+existing link writer, preserving an already-complete reading and its curation. A recognized-source
+retrieval failure can fall back to captured browser content; without captured content, the failure
+remains an error. Screenshots and clicked-media captures keep their existing explicit paths.
+
+This action requires an updated native host. Legacy `save` and `save_link` requests retain their
+existing behavior.
+
 ## Save request (extension → host)
 
-Sent when the user saves a full article, screenshot, right-clicked image, or legacy selected-text quote.
+Sent for screenshots, right-clicked images, legacy full articles, or legacy selected-text quotes.
 Every right-clicked video uses the streaming import below. The request
 always describes the **origin page** in `metadata.url`/`canonical_url`; a media identity is
 additional metadata and never replaces that origin.

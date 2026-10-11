@@ -18,7 +18,7 @@ not create a Tag or a fifth reading kind.
    SQLite and the Swift row projection remain rebuildable caches. The price is a saved snapshot;
    browsing the library does not poll stores for price changes.
 
-The browser extension's **Save link** route collects bounded raw metadata from the live DOM.
+The browser extension's **Save** action collects bounded raw metadata from the live DOM.
 Rust owns recognition and validation. This also supports metadata inserted by client-side scripts,
 without making the native host fetch the page again. Ordinary URL-only saves, including the
 Shortcut, can attempt a bounded public HTML fetch and remain normal lightweight links if offline,

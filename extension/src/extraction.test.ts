@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { countWords, extractPage, htmlToMarkdown } from "./extraction.js";
+import { countWords, extractPage, htmlToMarkdown, measurePageContent } from "./extraction.js";
 
 describe("htmlToMarkdown", () => {
   it("demotes h1 to h2 so the reading keeps a single top-level title", () => {
@@ -140,6 +140,42 @@ describe("extractPage", () => {
     expect(result.metadata.theme_color).toBe("#123456");
     expect(result.markdown).not.toContain("social.png");
     expect(result.markdown).not.toContain("favicon.ico");
+  });
+
+  it("includes extracted prose measurements without a page classification", () => {
+    const result = extractPage(buildDoc(article), "https://example.com/post")!;
+    expect(result.page_content).toBeDefined();
+    const evidence = result.page_content!;
+
+    expect(evidence.text_characters).toBeGreaterThan(500);
+    expect(evidence.paragraph_characters).toHaveLength(3);
+    expect(evidence.paragraph_characters.every((length) => length > 100)).toBe(true);
+    expect(evidence.link_characters).toBe(0);
+    expect(result.metadata).not.toHaveProperty("link_category");
+  });
+});
+
+describe("measurePageContent", () => {
+  it("measures Unicode prose, links, and paragraphs after normalizing whitespace", () => {
+    const doc = document.implementation.createHTMLDocument("Measurements");
+    const evidence = measurePageContent(
+      doc,
+      "<p>  A   🌱 <a href='/story'>small story</a> </p><p> Next\nline </p>",
+    );
+
+    expect(evidence).toEqual({
+      text_characters: 25,
+      link_characters: 11,
+      paragraph_characters: [15, 9],
+    });
+  });
+
+  it("bounds paragraph measurements while retaining the complete extracted text count", () => {
+    const doc = document.implementation.createHTMLDocument("Measurements");
+    const evidence = measurePageContent(doc, "<p>Text</p>".repeat(1_025));
+
+    expect(evidence.paragraph_characters).toHaveLength(1_024);
+    expect(evidence.text_characters).toBe(1_025 * 4);
   });
 });
 

@@ -21,6 +21,7 @@ pub mod list;
 mod locking;
 mod media_dimensions;
 pub mod notes;
+mod page_capture;
 pub mod product;
 pub mod rating;
 pub mod reconcile;
@@ -68,6 +69,9 @@ pub use list::{
     SidebarCounts, SortField, View, ViewCounts,
 };
 pub use notes::{get_note, set_note};
+pub use page_capture::{
+    classify_page_capture, PageCaptureEvidence, PageCaptureKind, MAX_PAGE_CAPTURE_PARAGRAPHS,
+};
 pub use product::{
     fetch_product_metadata, parse_product_metadata, update_product_metadata_if_unchanged,
 };

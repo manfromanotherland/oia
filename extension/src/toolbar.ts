@@ -6,7 +6,7 @@ import { PROTOCOL_VERSION } from "./protocol.js";
 
 export const TOOLBAR_SAVE_ACTION = "toolbar-save";
 
-export const TOOLBAR_SAVE_KINDS = ["article", "link", "screenshot"] as const;
+export const TOOLBAR_SAVE_KINDS = ["page", "screenshot"] as const;
 
 export type ToolbarSaveKind = (typeof TOOLBAR_SAVE_KINDS)[number];
 

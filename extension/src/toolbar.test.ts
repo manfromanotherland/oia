@@ -11,35 +11,44 @@ import {
   buildSaveLinkRequest,
   buildScreenshotCapture,
   isStableScreenshotDocument,
+  isToolbarSaveKind,
   isToolbarSaveMessage,
   toolbarSaveMessage,
 } from "./toolbar.js";
 
 describe("toolbar popup", () => {
-  it("renders the three requested actions as native buttons in order", () => {
+  it("renders Save and Save as screenshot as native buttons in order", () => {
     const html = readFileSync(resolve(process.cwd(), "popup.html"), "utf8");
     const popup = new DOMParser().parseFromString(html, "text/html");
     const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>("button[data-save-kind]"));
 
     expect(buttons.map((button) => button.textContent?.trim())).toEqual([
-      "Save article",
-      "Save link",
-      "Save screenshot",
+      "Save",
+      "Save as screenshot",
     ]);
+    expect(buttons.map((button) => button.dataset.saveKind)).toEqual(["page", "screenshot"]);
     expect(buttons.every((button) => button.type === "button")).toBe(true);
   });
 
   it("builds and validates typed toolbar messages", () => {
-    expect(toolbarSaveMessage("article", 42)).toEqual({
+    expect(toolbarSaveMessage("page", 42)).toEqual({
       action: "toolbar-save",
-      kind: "article",
+      kind: "page",
       tabId: 42,
     });
+    expect(isToolbarSaveMessage({ action: "toolbar-save", kind: "page", tabId: 42 })).toBe(true);
     expect(isToolbarSaveMessage({ action: "toolbar-save", kind: "screenshot", tabId: 42 })).toBe(
       true,
     );
     expect(isToolbarSaveMessage({ action: "toolbar-save", kind: "video", tabId: 42 })).toBe(false);
-    expect(isToolbarSaveMessage({ action: "toolbar-save", kind: "article" })).toBe(false);
+    expect(isToolbarSaveMessage({ action: "toolbar-save", kind: "page" })).toBe(false);
+  });
+
+  it("rejects legacy article and link menu intents", () => {
+    for (const kind of ["article", "link"]) {
+      expect(isToolbarSaveKind(kind)).toBe(false);
+      expect(isToolbarSaveMessage({ action: "toolbar-save", kind, tabId: 42 })).toBe(false);
+    }
   });
 
   it("accepts only a stable document around each screenshot tile", () => {

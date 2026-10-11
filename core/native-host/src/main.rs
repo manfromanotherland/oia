@@ -6,6 +6,7 @@ mod install;
 mod protocol;
 mod save;
 mod save_link;
+mod save_page;
 mod save_selection;
 mod video_import;
 
@@ -166,6 +167,13 @@ impl NativeSession {
             "save_link" => match serde_json::from_slice::<SaveLinkRequest>(raw) {
                 Err(error) => SaveResponse::error("invalid_request", &error.to_string()),
                 Ok(request) => match save_link::handle(request) {
+                    Ok(response) => response,
+                    Err(error) => SaveResponse::error("io_error", &error.to_string()),
+                },
+            },
+            "save_page" => match serde_json::from_slice::<SaveRequest>(raw) {
+                Err(error) => SaveResponse::error("invalid_request", &error.to_string()),
+                Ok(request) => match save_page::handle(request) {
                     Ok(response) => response,
                     Err(error) => SaveResponse::error("io_error", &error.to_string()),
                 },
@@ -980,6 +988,38 @@ mod integration_tests {
                     .contains("already exists"),
                 "duplicate message should mention the conflict"
             );
+        });
+    }
+
+    #[test]
+    fn automatic_page_dispatch_selects_a_link_then_upgrades_the_same_reading_with_prose() {
+        with_library(|dir| {
+            let url = "https://example.com/automatic-page";
+            let mut message: Value = serde_json::from_slice(&save_message(url)).unwrap();
+            message["action"] = serde_json::json!("save_page");
+            message["markdown"] = serde_json::json!("");
+            let linked = dispatch(&serde_json::to_vec(&message).unwrap());
+            assert!(linked.ok);
+            let article_path = dir.path().join(linked.path.as_ref().unwrap());
+            assert!(
+                oia_core::parse_reading(&std::fs::read_to_string(&article_path).unwrap())
+                    .unwrap()
+                    .metadata
+                    .lightweight
+            );
+
+            message["markdown"] = serde_json::json!("Captured prose body.");
+            message["page_content"] = serde_json::json!({
+                "text_characters": 1000, "link_characters": 20,
+                "paragraph_characters": [450, 450],
+            });
+            let article = dispatch(&serde_json::to_vec(&message).unwrap());
+            assert!(article.ok);
+            assert_eq!(article.id, linked.id);
+            let reading =
+                oia_core::parse_reading(&std::fs::read_to_string(article_path).unwrap()).unwrap();
+            assert!(!reading.metadata.lightweight);
+            assert_eq!(reading.body, "Captured prose body.\n");
         });
     }
 

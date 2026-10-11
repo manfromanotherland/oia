@@ -29,12 +29,14 @@ index is a disposable, per-device cache.
                                               SQLite + FTS5 (per-device, NOT synced)
 ```
 
-The extension toolbar can extract and clean the current article, save a lightweight link, or capture
-the full scrollable page as one long screenshot. The context menu also captures a right-clicked
+The extension toolbar offers **Save** and **Save as screenshot**. Save supplies cleaned content,
+live metadata, and raw prose measurements to Rust, which chooses a full article or lightweight
+link and applies recognized-source and product/book/music/movie classification. Save as screenshot
+captures the full scrollable page as one long screenshot. The context menu also captures a right-clicked
 image, saves a right-clicked video as a local movie, or saves selected text. Rust classifies new
 browser selections as article highlights by default and quotes only with enclosing quotation
 marks or matched quotation-element evidence. Ordinary
-captures hand Markdown, metadata, and image bytes to a small native host; every video uses the
+captures hand Markdown, metadata, and image bytes to a small native host; right-clicked videos use the
 bounded stream below. The host writes both paths into the library folder.
 Article and link saves retain live Open Graph/Twitter metadata plus local social-preview and favicon
 assets without injecting those head assets into the cleaned Markdown body. When a website declares
@@ -90,12 +92,13 @@ Rust core. Keeping them in one Git history lets protocol and format changes land
 every affected component.
 
 ### Browser extension (`extension`)
-- **Responsibility:** expose toolbar actions for an article, lightweight link, or full-page
-  screenshot; capture a selected image; record a selected video and poster; or capture selected
+- **Responsibility:** expose automatic Save and explicit full-page screenshot actions;
+  capture a selected image; record a selected video and poster; or capture selected
   text as a quote.
   Every path produces Markdown plus origin metadata and any local image bytes needed by the card.
 - **Why cleanup happens here:** the extension has the *live, rendered DOM*, so it sees JS-rendered
-  content and pages the user is logged into. The engine never sees the page.
+  content and pages the user is logged into. It passes bounded structured evidence and raw content
+  measurements to Rust; classification stays in the engine.
 - **Stack:** Manifest V3, TypeScript (Readability-style extraction + HTML→Markdown).
 - **Hard constraint:** MV3 extensions can't write files to disk, so saving goes through a **native
   messaging host** — a small native binary (a thin wrapper over `core`) that receives the cleaned

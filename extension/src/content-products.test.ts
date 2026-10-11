@@ -18,36 +18,42 @@ afterEach(() => {
 });
 
 describe("live product page capture", () => {
-  it.each(["extract", "capture-link"])("passes structured evidence through %s", async (action) => {
-    vi.resetModules();
-    let listener: RuntimeMessageListener | undefined;
-    vi.stubGlobal("chrome", {
-      runtime: {
-        onMessage: {
-          addListener: (callback: RuntimeMessageListener) => {
-            listener = callback;
+  it.each(["extract", "capture-link", "capture-page"])(
+    "passes structured evidence through %s",
+    async (action) => {
+      vi.resetModules();
+      let listener: RuntimeMessageListener | undefined;
+      vi.stubGlobal("chrome", {
+        runtime: {
+          onMessage: {
+            addListener: (callback: RuntimeMessageListener) => {
+              listener = callback;
+            },
           },
         },
-      },
-    });
-    document.head.innerHTML = `<title>Table lamp</title><script type="application/ld+json">{"@type":"Product","offers":{"price":"229.00","priceCurrency":"EUR"}}</script>`;
-    document.body.innerHTML = `<article><p>${"A table lamp made for thoughtful reading and evening light. ".repeat(40)}</p></article>`;
-    await import("./content.js");
+      });
+      document.head.innerHTML = `<title>Table lamp</title><script type="application/ld+json">{"@type":"Product","offers":{"price":"229.00","priceCurrency":"EUR"}}</script>`;
+      document.body.innerHTML = `<article><p>${"A table lamp made for thoughtful reading and evening light. ".repeat(40)}</p></article>`;
+      await import("./content.js");
 
-    const capture = await new Promise<PageCapture>((resolve) => {
-      expect(listener!({ action, pageUrl: "https://example.com/lamp" }, {}, resolve)).toBe(true);
-    });
+      const capture = await new Promise<PageCapture>((resolve) => {
+        expect(listener!({ action, pageUrl: "https://example.com/lamp" }, {}, resolve)).toBe(true);
+      });
 
-    expect(capture.metadata.kind).toBe("article");
-    expect(capture.metadata.product_html).toContain('"price":"229.00"');
-    expect(capture.markdown).not.toContain("priceCurrency");
-    if (action === "capture-link") {
-      const request = buildSaveLinkRequest(capture);
-      expect(request.metadata.product_html).toBe(capture.metadata.product_html);
-      expect(request.action).toBe("save_link");
-      expect(request).not.toHaveProperty("markdown");
-    } else {
-      expect(capture.markdown).toContain("A table lamp");
-    }
-  });
+      expect(capture.metadata.kind).toBe("article");
+      expect(capture.metadata.product_html).toContain('"price":"229.00"');
+      expect(capture.markdown).not.toContain("priceCurrency");
+      if (action === "capture-link") {
+        const request = buildSaveLinkRequest(capture);
+        expect(request.metadata.product_html).toBe(capture.metadata.product_html);
+        expect(request.action).toBe("save_link");
+        expect(request).not.toHaveProperty("markdown");
+      } else {
+        expect(capture.markdown).toContain("A table lamp");
+        if (action === "capture-page") {
+          expect(capture.page_content?.text_characters).toBeGreaterThan(500);
+        }
+      }
+    },
+  );
 });

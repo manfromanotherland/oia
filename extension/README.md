@@ -11,13 +11,15 @@
 # Browser extension
 
 The Manifest V3 browser extension for **Óia**, the local-first native macOS library. Its toolbar
-saves a cleaned article, a lightweight link, or one long screenshot of the full scrollable page. The
-context menu also saves right-clicked images/videos and selected-text quotes. Article and link saves
+offers **Save** and **Save as screenshot**. With **Save**, the engine uses the page's content and
+source to choose how to keep it, as a cleaned article or a lightweight link. **Save as screenshot**
+captures one long screenshot of the full scrollable page. The context menu also saves right-clicked
+images/videos and selected-text quotes. Article and link saves
 retain live page metadata, social previews, and favicons as local assets. Captures travel through the
 `is.edmundo.cuttings.host` native messaging host and become Markdown plus local assets in your
 library folder.
 
-Every video uses protocol v4's streaming import. The extension reads HTTP(S), `data:`, and
+Every right-clicked video uses protocol v4's streaming import. The extension reads HTTP(S), `data:`, and
 document-scoped `blob:` sources from the live page; if a source cannot be fetched, it captures one
 loop of the exact rendered video using an explicitly supported H.264 MP4 recorder. It never falls
 back to a WebM that the native app cannot play. Raw bytes travel in chunks of at most 256 KiB over
@@ -64,9 +66,9 @@ rejects any upload that carries `key`. `manifest.json` on disk keeps it.
 After editing source, re-run `npm run package` and click the **reload ↻** icon on the extension
 card. Dia/Chrome keeps the same unpacked path and stable development extension ID.
 
-Click the Óia toolbar button and choose **Save article**, **Save link**, or **Save screenshot**.
-The screenshot action captures the full scrollable page as one long screenshot. The existing
-keyboard shortcut saves the full article directly.
+Click the Óia toolbar button and choose **Save** or **Save as screenshot**. **Save** lets the engine
+choose how to keep the page. **Save as screenshot** captures the full scrollable page as one long
+screenshot. The keyboard shortcut performs the same **Save** action.
 
 On app-style pages, Óia can follow one scrolling surface that fills the browser viewport. If a
 page has multiple large, independently scrolling panes, capture stops with an error rather than

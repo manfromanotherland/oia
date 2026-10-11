@@ -14,7 +14,7 @@ import type {
   InspectPageMetadataRequest,
   InspectPageMetadataResponse,
   SaveKind,
-  SaveLinkRequest,
+  SavePageRequest,
   SaveRequest,
   SaveSelectionRequest,
   SaveResponse,
@@ -46,7 +46,6 @@ import { relayVideoImportPort, type RelayPort } from "./video-import-relay.js";
 import { VIDEO_IMPORT_PORT_NAME } from "./video-import.js";
 import {
   buildFallbackLinkCapture,
-  buildSaveLinkRequest,
   buildScreenshotCapture,
   isStableScreenshotDocument,
   isToolbarSaveMessage,
@@ -171,15 +170,11 @@ export async function requestContentResponse<T>(
   }
 }
 
-function requestExtraction(tabId: number): Promise<PageCapture | { error: string }> {
-  return requestContentResponse(tabId, { action: "extract" });
-}
-
-function requestLinkCapture(
+function requestPageCapture(
   tabId: number,
   pageUrl: string,
 ): Promise<PageCapture | { error: string }> {
-  return requestContentResponse(tabId, { action: "capture-link", pageUrl });
+  return requestContentResponse(tabId, { action: "capture-page", pageUrl });
 }
 
 function requestMediaCapture(
@@ -276,57 +271,29 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
 
   if (await rejectPaymentRequired(tabId)) return;
 
-  await log("info", "Save triggered", { kind: "article", url: tab.url });
+  await log("info", "Save triggered", { kind: "page", url: tab.url });
   await showToast(tabId, "loading", "Saving…");
 
   let capture: PageCapture;
   try {
-    const result = await requestExtraction(tabId);
-    if (result && "error" in result && result.error) {
-      await showBadge(tabId, "error");
-      await showToast(tabId, "error", "Couldn't save page", result.error);
-      await log("error", "Extraction failed", { url: tab.url, error: result.error });
-      return;
-    }
-    capture = result as PageCapture;
-    addTabFaviconCandidate(capture, tab.favIconUrl);
-  } catch (err) {
-    await showBadge(tabId, "error");
-    await showToast(
-      tabId,
-      "error",
-      "Couldn't save page",
-      "This page can't be read (it may be a browser or store page).",
-    );
-    await log("error", "Could not reach content script", { url: tab.url, error: err });
-    return;
-  }
-
-  await saveCapture(tab, capture);
-}
-
-async function saveLink(tab: chrome.tabs.Tab): Promise<void> {
-  const tabId = tab.id;
-  if (!tabId || !tab.url) {
-    await log("warn", "Save link ignored: no active tab id or URL", { tabId, url: tab.url });
-    return;
-  }
-
-  if (await rejectPaymentRequired(tabId)) return;
-
-  await log("info", "Save triggered", { kind: "link", url: tab.url });
-  await showToast(tabId, "loading", "Saving link…");
-
-  let capture: PageCapture;
-  try {
-    const result = await requestLinkCapture(tabId, tab.url);
+    const result = await requestPageCapture(tabId, tab.url);
     if (result && "error" in result && result.error) {
       throw new Error(result.error);
     }
+    if (
+      !result ||
+      !("metadata" in result) ||
+      result.metadata?.kind !== "article" ||
+      typeof result.markdown !== "string" ||
+      !Array.isArray(result.images) ||
+      !Array.isArray(result.unresolved)
+    ) {
+      throw new Error("The page returned an invalid capture response.");
+    }
     capture = result as PageCapture;
     addTabFaviconCandidate(capture, tab.favIconUrl);
   } catch (err) {
-    await log("warn", "Link preview metadata unavailable; using tab metadata", {
+    await log("warn", "Page capture unavailable; using tab metadata", {
       url: tab.url,
       error: err,
     });
@@ -338,10 +305,10 @@ async function saveLink(tab: chrome.tabs.Tab): Promise<void> {
       await showToast(
         tabId,
         "error",
-        "Couldn't save link",
+        "Couldn't save page",
         fallbackError instanceof Error ? fallbackError.message : "The page URL is not supported.",
       );
-      await log("error", "Link fallback request was invalid", {
+      await log("error", "Page fallback request was invalid", {
         url: tab.url,
         error: fallbackError,
       });
@@ -349,24 +316,7 @@ async function saveLink(tab: chrome.tabs.Tab): Promise<void> {
     }
   }
 
-  capture.images = await completeCaptureImages(capture);
-
-  let request: SaveLinkRequest;
-  try {
-    request = buildSaveLinkRequest(capture);
-  } catch (err) {
-    await showBadge(tabId, "error");
-    await showToast(
-      tabId,
-      "error",
-      "Couldn't save link",
-      err instanceof Error ? err.message : "The page URL is not supported.",
-    );
-    await log("error", "Link request was invalid", { url: tab.url, error: err });
-    return;
-  }
-
-  await persistSave(tab, request, feedbackFor(capture, "link"));
+  await saveCapture(tab, capture, { action: "save_page" });
 }
 
 async function saveScreenshot(tab: chrome.tabs.Tab): Promise<void> {
@@ -435,7 +385,7 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<void> {
 
   await log("info", "Save triggered", { kind: "screenshot", url: tab.url });
   await showToast(tabId, "loading", "Saving screenshot…");
-  await saveCapture(tab, capture, "screenshot");
+  await saveCapture(tab, capture, { item: "screenshot" });
 }
 
 async function captureStableViewport(tab: chrome.tabs.Tab): Promise<string> {
@@ -587,11 +537,11 @@ async function saveSelection(
 async function saveCapture(
   tab: chrome.tabs.Tab,
   capture: PageCapture,
-  itemOverride?: string,
+  options: { item?: string; action?: "save" | "save_page" } = {},
 ): Promise<void> {
   const tabId = tab.id!;
   const item =
-    itemOverride ?? (capture.metadata.kind === "article" ? "page" : capture.metadata.kind);
+    options.item ?? (capture.metadata.kind === "article" ? "page" : capture.metadata.kind);
   const images = await completeCaptureImages(capture);
 
   // A standalone image is only a successful save when the selected asset will
@@ -637,14 +587,17 @@ async function saveCapture(
     return;
   }
 
-  const request: SaveRequest = {
+  const request: SaveRequest | SavePageRequest = {
     protocol_version: PROTOCOL_VERSION,
-    action: "save",
+    action: options.action ?? "save",
     metadata: capture.metadata,
     markdown: capture.markdown,
     images,
     preview_url: capture.preview_url,
     favicon_url: capture.favicon_url,
+    ...(options.action === "save_page" && capture.page_content
+      ? { page_content: capture.page_content }
+      : {}),
   };
 
   await persistSave(tab, request, feedbackFor(capture, item));
@@ -735,7 +688,7 @@ function deduplicateImages(images: ImageData[]): ImageData[] {
   });
 }
 
-type NativeSaveRequest = SaveRequest | SaveLinkRequest | SaveSelectionRequest;
+type NativeSaveRequest = SaveRequest | SavePageRequest | SaveSelectionRequest;
 
 interface SaveFeedback {
   kind: SaveKind;
@@ -862,10 +815,8 @@ async function handleToolbarSave(kind: ToolbarSaveKind, tabId: number): Promise<
     return;
   }
 
-  if (kind === "article") {
+  if (kind === "page") {
     await savePage(tab);
-  } else if (kind === "link") {
-    await saveLink(tab);
   } else {
     await saveScreenshot(tab);
   }

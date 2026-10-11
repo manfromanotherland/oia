@@ -5,8 +5,9 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use base64::Engine;
 use oia_core::{
-    save_capture, save_special_url, ImageBytes, LibraryRoot, ReadingKind, SaveDisposition,
-    SaveError, SaveInput, SaveUrlError, UrlSaveRequest,
+    save_capture, save_link_capture, save_special_url, ImageBytes, LibraryRoot, PageCaptureKind,
+    ReadingKind, SaveDisposition, SaveError, SaveInput, SaveLinkInput, SaveUrlError,
+    UrlSaveRequest,
 };
 
 use crate::protocol::{SaveRequest, SaveResponse, PROTOCOL_VERSION};
@@ -79,6 +80,14 @@ fn handle_in_library_with_source_resolver(
         }
     }
 
+    persist_capture_in_library(req, library, PageCaptureKind::Article)
+}
+
+pub(crate) fn persist_capture_in_library(
+    req: SaveRequest,
+    library: &LibraryRoot,
+    page_kind: PageCaptureKind,
+) -> Result<SaveResponse> {
     // Decode the image bytes the extension captured. An image whose base64 won't
     // decode is skipped, so its URL stays in the Markdown as a placeholder.
     let product = (req.metadata.kind == oia_core::ReadingKind::Article)
@@ -100,34 +109,59 @@ fn handle_in_library_with_source_resolver(
     let images = decode_images(&req.images);
     let preview_url = detected_preview_url(detected.as_ref(), &images, req.preview_url);
 
-    let outcome = match save_capture(
-        library,
-        SaveInput {
-            quote_identity_markdown: None,
-            kind: req.metadata.kind,
-            lightweight: false,
-            url: req.metadata.url,
-            media_url: req.metadata.media_url,
-            canonical_url: req.metadata.canonical_url,
-            title: detected
-                .as_ref()
-                .and_then(|value| value.title.clone())
-                .unwrap_or(req.metadata.title),
-            author: req.metadata.author,
-            site: req.metadata.site,
-            saved_at: req.metadata.saved_at,
-            markdown: req.markdown,
-            images,
-            preview_url,
-            favicon_url: req.favicon_url,
-            theme_color: req.metadata.theme_color,
-            product,
-            link_category: detected.map(|value| value.category),
-            excerpt: req.metadata.excerpt,
-            word_count: req.metadata.word_count,
-            lang: req.metadata.lang,
-        },
-    ) {
+    let saved = match page_kind {
+        PageCaptureKind::Link => save_link_capture(
+            library,
+            SaveLinkInput {
+                url: req.metadata.url,
+                canonical_url: req.metadata.canonical_url,
+                title: detected
+                    .as_ref()
+                    .and_then(|value| value.title.clone())
+                    .unwrap_or(req.metadata.title),
+                author: req.metadata.author,
+                site: req.metadata.site,
+                saved_at: req.metadata.saved_at,
+                images,
+                preview_url,
+                favicon_url: req.favicon_url,
+                theme_color: req.metadata.theme_color,
+                product,
+                link_category: detected.map(|value| value.category),
+                excerpt: req.metadata.excerpt,
+                lang: req.metadata.lang,
+            },
+        ),
+        PageCaptureKind::Article => save_capture(
+            library,
+            SaveInput {
+                quote_identity_markdown: None,
+                kind: req.metadata.kind,
+                lightweight: false,
+                url: req.metadata.url,
+                media_url: req.metadata.media_url,
+                canonical_url: req.metadata.canonical_url,
+                title: detected
+                    .as_ref()
+                    .and_then(|value| value.title.clone())
+                    .unwrap_or(req.metadata.title),
+                author: req.metadata.author,
+                site: req.metadata.site,
+                saved_at: req.metadata.saved_at,
+                markdown: req.markdown,
+                images,
+                preview_url,
+                favicon_url: req.favicon_url,
+                theme_color: req.metadata.theme_color,
+                product,
+                link_category: detected.map(|value| value.category),
+                excerpt: req.metadata.excerpt,
+                word_count: req.metadata.word_count,
+                lang: req.metadata.lang,
+            },
+        ),
+    };
+    let outcome = match saved {
         Ok(outcome) => outcome,
         Err(SaveError::InvalidRequest(message)) => {
             return Ok(SaveResponse::error("invalid_request", &message));
