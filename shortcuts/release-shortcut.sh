@@ -99,6 +99,7 @@ source_fingerprint="${source_fingerprint%% *}"
 swift shortcuts/build-shortcut.swift "$candidate_unsigned" "$source_fingerprint"
 swift shortcuts/test-shortcut.swift "$candidate_unsigned"
 swift shortcuts/validate-shortcut.swift "$candidate_unsigned"
+swift shortcuts/conflicting-shortcut-names.swift --test
 shortcuts sign --mode anyone --input "$candidate_unsigned" --output "$candidate_signed"
 
 unsigned_publish="$script_dir/.Óia!.unsigned.shortcut.publish.$$"
@@ -124,17 +125,11 @@ if [[ "$install" == true ]]; then
     exit 0
   fi
 
-  conflicting_shortcuts=""
-  while IFS= read -r installed_name; do
-    case "$installed_name" in
-      "$shortcut_name"|"$shortcut_name "*)
-        if [[ -n "$conflicting_shortcuts" ]]; then
-          conflicting_shortcuts+=$'\n'
-        fi
-        conflicting_shortcuts+="$installed_name"
-        ;;
-    esac
-  done < <(shortcuts list)
+  # Capture errors instead of treating a failed listing as an empty library.
+  # Apple's displayed names can use a decomposed accent; normalize for matching.
+  installed_names="$(shortcuts list)"
+  conflicting_shortcuts="$(printf '%s\n' "$installed_names" |
+    swift shortcuts/conflicting-shortcut-names.swift)"
 
   if [[ -n "$conflicting_shortcuts" ]]; then
     printf '%s\n' \
