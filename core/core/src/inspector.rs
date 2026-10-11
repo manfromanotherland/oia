@@ -21,7 +21,7 @@ pub struct ReadingInspector {
     pub has_local_file: bool,
 }
 
-#[derive(Debug, uniffi::Record)]
+#[derive(Debug, Clone, PartialEq, uniffi::Record)]
 pub struct InspectorColor {
     pub red: f64,
     pub green: f64,
@@ -600,7 +600,7 @@ fn display_labels(json: &str) -> Vec<String> {
         .collect()
 }
 
-fn display_colors(json: &str) -> Vec<InspectorColor> {
+pub(crate) fn display_colors(json: &str) -> Vec<InspectorColor> {
     let palette = serde_json::from_str::<Vec<WeightedColor>>(json).unwrap_or_default();
     let palette = visual_index::normalize_palette(&palette).unwrap_or_default();
     let mut distinct: Vec<WeightedColor> = Vec::new();

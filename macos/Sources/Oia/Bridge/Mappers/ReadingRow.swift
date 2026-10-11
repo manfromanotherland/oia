@@ -113,6 +113,8 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     var faviconAsset: String?
     var themeColor: String?
     var dominantColor: ReadingColor?
+    /// Swatches from the board snapshot, ready before optional file facts load.
+    var colors: [InspectorColor] = []
     var mediaAspectRatio: Double?
     var sourceProfile: ReadingSourceProfile?
     var product: ReadingProductMetadata?
@@ -151,6 +153,7 @@ extension ReadingRow {
         faviconAsset = row.faviconAsset
         themeColor = row.themeColor
         dominantColor = row.dominantColor.map(ReadingColor.init)
+        colors = row.colors
         mediaAspectRatio = row.mediaAspectRatio
         sourceProfile = ReadingSourceProfile.decode(row.sourceProfileJson)
         product = ReadingProductMetadata.decode(row.productJson)
@@ -160,6 +163,12 @@ extension ReadingRow {
 }
 
 extension ReadingRow {
+    /// Keep the initial sidebar stable while the inspector checks the local file.
+    /// A verified inspector can discard a palette whose asset changed on disk.
+    func inspectorColors(_ inspector: ReadingInspector?) -> [InspectorColor] {
+        isFullArticle ? [] : inspector?.colors ?? colors
+    }
+
     var featuredHighlight: String? {
         guard kind == .article,
               let text = featuredHighlightText,

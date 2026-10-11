@@ -239,7 +239,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   **Colours** shows up to five distinct swatches for media and links as closely spaced
   flat circles with a subtle outline; full articles omit it. Swatch fills stay colour-accurate;
   hovering strengthens only the outline. Selecting one starts `colour:#RRGGBB` search, ranked by
-  perceptual shade similarity.
+  perceptual shade similarity. Cached swatches are part of the board snapshot so the section
+  appears at its final height when opening a card; readings without colours omit it immediately.
+  The inspector still checks the local asset in the background and discards stale swatches.
 - **Details** always shows Finder-style labeled rows for the save date and, when available,
   reading time, local media duration, dimensions, codecs, color profile, format, size, author,
   and origin. Media facts come from the local file and unavailable facts are omitted. Article

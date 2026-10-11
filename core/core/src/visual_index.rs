@@ -1378,6 +1378,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(chair.iter().map(|row| &row.id).collect::<Vec<_>>(), [&id]);
+        let inspected = crate::inspector::Snapshot::read(&conn, &id)
+            .unwrap()
+            .unwrap()
+            .inspect(&library);
+        assert_eq!(inspected.colors.len(), 2);
+        assert_eq!(chair[0].colors, inspected.colors);
+        let listed = list_readings(&conn, &ListOptions::default()).unwrap();
+        assert_eq!(listed[0].colors, inspected.colors);
         assert_eq!(
             chair[0].dominant_color,
             Some(WeightedColor {
@@ -1397,6 +1405,13 @@ mod tests {
         .unwrap();
         assert_eq!(blue.iter().map(|row| &row.id).collect::<Vec<_>>(), [&id]);
         assert_eq!(blue[0].dominant_color, chair[0].dominant_color);
+        assert_eq!(blue[0].colors, chair[0].colors);
+        assert_eq!(
+            get_reading(&conn, &id).unwrap().unwrap().0.colors,
+            chair[0].colors
+        );
+        let ffi: crate::ffi::FfiReadingRow = listed.into_iter().next().unwrap().into();
+        assert_eq!(ffi.colors, inspected.colors);
         assert_eq!(
             get_reading(&conn, &id).unwrap().unwrap().0.dominant_color,
             chair[0].dominant_color
@@ -1447,6 +1462,7 @@ mod tests {
         .unwrap();
         assert_eq!(rebuilt.len(), 1);
         assert_eq!(rebuilt[0].dominant_color, chair[0].dominant_color);
+        assert_eq!(rebuilt[0].colors, chair[0].colors);
     }
 
     #[test]
@@ -1515,6 +1531,9 @@ mod tests {
             list_readings(&conn, &ListOptions::default()).unwrap()[0].dominant_color,
             None
         );
+        assert!(list_readings(&conn, &ListOptions::default()).unwrap()[0]
+            .colors
+            .is_empty());
 
         let pending =
             pending_visual_analysis(&conn, &library, &cache_root, "vision-r2", 10).unwrap();
@@ -1556,6 +1575,7 @@ mod tests {
             let listed = list_readings(&conn, &ListOptions::default()).unwrap();
             assert_eq!(listed.len(), 1);
             assert_eq!(listed[0].dominant_color, None);
+            assert!(listed[0].colors.is_empty());
             let searched = list_readings(
                 &conn,
                 &ListOptions {
@@ -1566,6 +1586,13 @@ mod tests {
             .unwrap();
             assert_eq!(searched.len(), 1);
             assert_eq!(searched[0].dominant_color, None);
+            assert!(searched[0].colors.is_empty());
+            assert!(get_reading(&conn, &id)
+                .unwrap()
+                .unwrap()
+                .0
+                .colors
+                .is_empty());
             assert_eq!(
                 get_reading(&conn, &id).unwrap().unwrap().0.dominant_color,
                 None

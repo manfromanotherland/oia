@@ -30,6 +30,7 @@ final class ReadingRowMapperTests: XCTestCase {
             linkCategory: nil,
             featuredHighlightText: "A saved passage from the source.",
             dominantColor: FfiWeightedColor(red: 0.1, green: 0.2, blue: 0.3, weight: 0.6),
+            colors: sampleColors,
             mediaAspectRatio: 16.0 / 9.0,
             canonicalUrl: "https://example.com/article?canonical",
             author: "Ada Lovelace",
@@ -46,6 +47,13 @@ final class ReadingRowMapperTests: XCTestCase {
             tags: ["rust", "local-first", "software"],
             machineTags: ["software"]
         )
+    }
+
+    private var sampleColors: [InspectorColor] {
+        [
+            InspectorColor(red: 0.1, green: 0.2, blue: 0.3, hex: "#1A334D", searchQuery: "colour:#1A334D"),
+            InspectorColor(red: 0.8, green: 0.6, blue: 0.4, hex: "#CC9966", searchQuery: "colour:#CC9966")
+        ]
     }
 
     func testMapsEveryFieldAcross() {
@@ -83,6 +91,9 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertEqual(row.dominantColor?.green, ffi.dominantColor?.green)
         XCTAssertEqual(row.dominantColor?.blue, ffi.dominantColor?.blue)
         XCTAssertEqual(row.dominantColor?.weight, ffi.dominantColor?.weight)
+        XCTAssertEqual(row.colors, ffi.colors)
+        XCTAssertEqual(row.colors.map(\.hex), ["#1A334D", "#CC9966"])
+        XCTAssertEqual(row.colors.map(\.searchQuery), ["colour:#1A334D", "colour:#CC9966"])
         XCTAssertEqual(row.mediaAspectRatio, ffi.mediaAspectRatio)
         XCTAssertEqual(row.featuredHighlightText, ffi.featuredHighlightText)
     }
@@ -100,6 +111,7 @@ final class ReadingRowMapperTests: XCTestCase {
         ffi.productJson = nil
         ffi.featuredHighlightText = nil
         ffi.dominantColor = nil
+        ffi.colors = []
         ffi.mediaAspectRatio = nil
         ffi.author = nil
         ffi.site = nil
@@ -128,6 +140,7 @@ final class ReadingRowMapperTests: XCTestCase {
         XCTAssertNil(row.linkCategory)
         XCTAssertNil(row.featuredHighlight)
         XCTAssertNil(row.dominantColor)
+        XCTAssertTrue(row.colors.isEmpty)
         XCTAssertNil(row.mediaAspectRatio)
         XCTAssertTrue(row.tags.isEmpty)
         XCTAssertTrue(row.machineTags.isEmpty)
@@ -252,5 +265,63 @@ final class ReadingRowMapperTests: XCTestCase {
             red: 0.9, green: 0.8, blue: 0.7, weight: 0.6
         )
         XCTAssertNotEqual(base, dominantColorChanged)
+        var colorsChanged = base
+        colorsChanged.colors.removeLast()
+        XCTAssertNotEqual(base, colorsChanged)
+    }
+}
+
+extension ReadingRowMapperTests {
+    func testInspectorColoursRemainStableWhileFileFactsLoadOrRefresh() {
+        let row = makeReadingRow(kind: .image, previewAsset: "assets/photo.png", colors: sampleColors)
+        let inspector = ReadingInspector(
+            labels: [], colors: sampleColors, analysisAvailable: true, file: nil, hasLocalFile: true
+        )
+
+        let initial = row.inspectorColors(nil)
+        XCTAssertEqual(initial, sampleColors, "Opening a card must have its colour swatches immediately")
+        XCTAssertEqual(
+            row.inspectorColors(inspector), initial,
+            "Loading file facts must not replace the colours section"
+        )
+        XCTAssertEqual(
+            row.inspectorColors(nil), initial,
+            "Refreshing file facts must keep the board's colour snapshot"
+        )
+    }
+
+    func testQuoteWithoutPreviewKeepsColoursAbsentBeforeAndAfterLoading() {
+        let row = makeReadingRow(kind: .quote)
+        let inspector = ReadingInspector(
+            labels: [], colors: [], analysisAvailable: false, file: nil, hasLocalFile: false
+        )
+
+        XCTAssertNil(row.previewAsset)
+        XCTAssertTrue(row.inspectorColors(nil).isEmpty)
+        XCTAssertEqual(row.inspectorColors(inspector), row.inspectorColors(nil))
+    }
+
+    func testFullArticleSuppressesPreviewColoursBeforeAndAfterLoading() {
+        let row = makeReadingRow(previewAsset: "assets/social.png", colors: sampleColors)
+        let inspector = ReadingInspector(
+            labels: [], colors: sampleColors, analysisAvailable: true, file: nil, hasLocalFile: true
+        )
+
+        XCTAssertTrue(row.isFullArticle)
+        XCTAssertTrue(row.inspectorColors(nil).isEmpty)
+        XCTAssertTrue(row.inspectorColors(inspector).isEmpty)
+    }
+
+    func testInspectorCanRejectCachedColoursForAStalePreview() {
+        let row = makeReadingRow(kind: .image, previewAsset: "assets/photo.png", colors: sampleColors)
+        let inspector = ReadingInspector(
+            labels: [], colors: [], analysisAvailable: false, file: nil, hasLocalFile: true
+        )
+
+        XCTAssertEqual(row.inspectorColors(nil), sampleColors)
+        XCTAssertTrue(
+            row.inspectorColors(inspector).isEmpty,
+            "Verified empty analysis must override the board snapshot"
+        )
     }
 }

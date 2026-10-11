@@ -149,6 +149,8 @@ pub struct ReadingRow {
     /// secondary surface colour. This is presentation metadata only; the
     /// palette cache remains disposable and the reading file stays authoritative.
     pub dominant_color: Option<WeightedColor>,
+    /// Distinct inspector swatches from the same disposable palette snapshot.
+    pub colors: Vec<crate::inspector::InspectorColor>,
     pub media_aspect_ratio: Option<f64>,
     pub canonical_url: String,
     pub author: Option<String>,
@@ -1181,6 +1183,10 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         link_category,
         featured_highlight_text: row.get(29)?,
         dominant_color,
+        colors: palette_json
+            .as_deref()
+            .map(crate::inspector::display_colors)
+            .unwrap_or_default(),
         media_aspect_ratio: row.get(23)?,
         canonical_url: row.get(3)?,
         author: row.get(4)?,
@@ -2153,6 +2159,7 @@ mod tests {
         );
         assert_eq!(row.preview_asset.as_deref(), Some("assets/photo.png"));
         assert_eq!(row.dominant_color, None);
+        assert!(row.colors.is_empty());
         assert_eq!(row.media_aspect_ratio, Some(1900.0 / 2468.0));
 
         let search_row = list_readings(

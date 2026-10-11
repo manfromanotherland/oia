@@ -2,8 +2,8 @@
 
 import SwiftUI
 
-/// Optional facts load independently of the board. The leading sidebar scrolls
-/// its content while the reading remains visible beside it.
+/// Colours arrive with the board snapshot; optional file facts load independently.
+/// The sidebar scrolls its content while the reading remains visible beside it.
 struct OiaInspectorView: View {
     @Environment(AppState.self) private var appState
     let row: ReadingRow
@@ -26,7 +26,10 @@ struct OiaInspectorView: View {
                 heading
                 tags
                 visualAnalysis
-                InspectorDetails(row: row, inspector: currentInspector, failed: failed)
+                InspectorDetails(row: row, inspector: currentInspector, failed: currentFailure)
+                if currentFailure {
+                    InspectorPill("Try again") { retry += 1 }
+                }
                 Divider()
                 Group {
                     if #available(macOS 26.0, *) {
@@ -89,19 +92,11 @@ struct OiaInspectorView: View {
             .textSelection(.enabled)
     }
 
+    @ViewBuilder
     private var visualAnalysis: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            if let data = currentInspector {
-                if !row.isFullArticle, !data.colors.isEmpty { colors(data.colors) }
-            } else if failed {
-                VStack(alignment: .leading, spacing: 8) {
-                    status("Image colours couldn’t be loaded.")
-                    InspectorPill("Try again") { retry += 1 }
-                }
-            } else {
-                ProgressView().controlSize(.small)
-                    .accessibilityLabel("Loading image colours")
-            }
+        let swatches = row.inspectorColors(currentInspector)
+        if !swatches.isEmpty {
+            colors(swatches)
         }
     }
 
@@ -189,12 +184,12 @@ struct OiaInspectorView: View {
         Text(text).font(.system(size: 12, weight: .semibold))
     }
 
-    private func status(_ text: String) -> some View {
-        Text(text).font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-    }
-
     private var currentInspector: ReadingInspector? {
         loadedID == loadID ? inspector : nil
+    }
+
+    private var currentFailure: Bool {
+        loadedID == loadID && failed
     }
 
     private var loadID: String {

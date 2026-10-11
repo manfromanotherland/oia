@@ -16,6 +16,7 @@ func makeReadingRow(
     mediaUrl: String? = nil,
     previewAsset: String? = nil,
     dominantColor: ReadingColor? = nil,
+    colors: [InspectorColor] = [],
     mediaAspectRatio: Double? = nil,
     sourceProfile: ReadingSourceProfile? = nil
 ) -> ReadingRow {
@@ -44,6 +45,7 @@ func makeReadingRow(
         faviconAsset: nil,
         themeColor: nil,
         dominantColor: dominantColor,
+        colors: colors,
         mediaAspectRatio: mediaAspectRatio,
         sourceProfile: sourceProfile
     )
