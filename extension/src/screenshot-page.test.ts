@@ -220,46 +220,107 @@ describe("screenshot page capture", () => {
     expect(fixture.doc.querySelector("style[data-oia-screenshot-capture]")).toBeNull();
   });
 
-  it("scrolls and restores a full-viewport app surface when the document itself is fixed", async () => {
+  it.each(["hidden", "clip", "visible"])(
+    "scrolls and restores a full-viewport app surface containing overflow:%s content",
+    async (overflowY) => {
+      const fixture = pageFixture(["capture-one"], async () => undefined, undefined, 600);
+      const fixedShell = fixture.doc.createElement("div");
+      fixedShell.dataset.position = "fixed";
+      setBounds(fixedShell, () => ({ top: 0, right: 800, bottom: 600, left: 0 }));
+      const stationaryHeader = fixture.doc.createElement("header");
+      setBounds(stationaryHeader, () => ({ top: 0, right: 800, bottom: 64, left: 0 }));
+      const scroller = fixture.doc.createElement("main");
+      scroller.dataset.overflowY = "auto";
+      Object.defineProperties(scroller, {
+        scrollHeight: { configurable: true, value: 1_500 },
+        clientHeight: { configurable: true, value: 600 },
+        clientWidth: { configurable: true, value: 800 },
+        scrollTop: { configurable: true, writable: true, value: 240 },
+        scrollLeft: { configurable: true, writable: true, value: 12 },
+      });
+      setBounds(scroller, () => ({ top: 0, right: 800, bottom: 600, left: 0 }));
+      const imageContainer = fixture.doc.createElement("div");
+      imageContainer.dataset.overflowY = overflowY;
+      Object.defineProperties(imageContainer, {
+        scrollHeight: { configurable: true, value: 458 },
+        clientHeight: { configurable: true, value: 436 },
+      });
+      setBounds(imageContainer, () => ({ top: 64, right: 776, bottom: 500, left: 24 }));
+      scroller.append(imageContainer);
+      fixedShell.append(stationaryHeader, scroller);
+      fixture.doc.body.append(fixedShell);
+
+      await expect(fixture.controller.begin()).resolves.toMatchObject({
+        documentHeight: 1_500,
+        scrollY: 240,
+      });
+      await fixture.controller.scrollTo("capture-one", 0, false);
+      await expect(fixture.controller.scrollTo("capture-one", 600, true)).resolves.toMatchObject({
+        documentHeight: 1_500,
+        scrollY: 600,
+      });
+      expect(scroller.scrollTop).toBe(600);
+      expect(scroller.style.visibility).toBe("");
+      expect(fixedShell.style.visibility).toBe("");
+      expect(stationaryHeader.style.visibility).toBe("hidden");
+      expect(fixture.getScroll()).toEqual({ x: 12, y: 240 });
+
+      await fixture.controller.finish("capture-one");
+      expect(scroller.scrollTop).toBe(240);
+      expect(scroller.scrollLeft).toBe(12);
+      expect(stationaryHeader.style.visibility).toBe("");
+      expect(fixture.scrollTo).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["hidden", "clip", "visible"])(
+    "captures a scrolling document with a dominant overflow:%s container",
+    async (overflowY) => {
+      const fixture = pageFixture();
+      const imageContainer = fixture.doc.createElement("div");
+      imageContainer.dataset.overflowY = overflowY;
+      Object.defineProperties(imageContainer, {
+        scrollHeight: { configurable: true, value: 458 },
+        clientHeight: { configurable: true, value: 436 },
+      });
+      setBounds(imageContainer, () => ({ top: 64, right: 776, bottom: 500, left: 24 }));
+      fixture.doc.body.append(imageContainer);
+
+      await expect(fixture.controller.begin()).resolves.toMatchObject({ documentHeight: 1_500 });
+      await expect(fixture.controller.scrollTo("capture-one", 600, false)).resolves.toMatchObject({
+        scrollY: 600,
+      });
+      expect(fixture.scrollTo).toHaveBeenLastCalledWith({ left: 12, top: 600, behavior: "auto" });
+      expect(imageContainer.scrollTop).toBe(0);
+
+      await fixture.controller.finish("capture-one");
+      expect(fixture.getScroll()).toEqual({ x: 12, y: 240 });
+    },
+  );
+
+  it("rejects a dominant overflow:hidden surface without another page scroller", async () => {
     const fixture = pageFixture(["capture-one"], async () => undefined, undefined, 600);
-    const fixedShell = fixture.doc.createElement("div");
-    fixedShell.dataset.position = "fixed";
-    setBounds(fixedShell, () => ({ top: 0, right: 800, bottom: 600, left: 0 }));
-    const stationaryHeader = fixture.doc.createElement("header");
-    setBounds(stationaryHeader, () => ({ top: 0, right: 800, bottom: 64, left: 0 }));
     const scroller = fixture.doc.createElement("main");
-    scroller.dataset.overflowY = "auto";
+    scroller.dataset.overflowY = "hidden";
     Object.defineProperties(scroller, {
       scrollHeight: { configurable: true, value: 1_500 },
       clientHeight: { configurable: true, value: 600 },
-      clientWidth: { configurable: true, value: 800 },
-      scrollTop: { configurable: true, writable: true, value: 240 },
-      scrollLeft: { configurable: true, writable: true, value: 12 },
     });
     setBounds(scroller, () => ({ top: 0, right: 800, bottom: 600, left: 0 }));
-    fixedShell.append(stationaryHeader, scroller);
-    fixture.doc.body.append(fixedShell);
+    fixture.doc.body.append(scroller);
 
-    await expect(fixture.controller.begin()).resolves.toMatchObject({
-      documentHeight: 1_500,
-      scrollY: 240,
-    });
-    await fixture.controller.scrollTo("capture-one", 0, false);
-    await expect(fixture.controller.scrollTo("capture-one", 600, true)).resolves.toMatchObject({
-      documentHeight: 1_500,
-      scrollY: 600,
-    });
-    expect(scroller.scrollTop).toBe(600);
-    expect(scroller.style.visibility).toBe("");
-    expect(fixedShell.style.visibility).toBe("");
-    expect(stationaryHeader.style.visibility).toBe("hidden");
-    expect(fixture.getScroll()).toEqual({ x: 12, y: 240 });
+    await expect(fixture.controller.begin()).rejects.toThrow("scrolling layout");
+  });
 
-    await fixture.controller.finish("capture-one");
-    expect(scroller.scrollTop).toBe(240);
-    expect(scroller.scrollLeft).toBe(12);
-    expect(stationaryHeader.style.visibility).toBe("");
-    expect(fixture.scrollTo).not.toHaveBeenCalled();
+  it.each([600, 1_500])("rejects a full-viewport iframe on a %ipx document", async (pageHeight) => {
+    const fixture = pageFixture(["capture-one"], async () => undefined, undefined, pageHeight);
+    const iframe = fixture.doc.createElement("iframe");
+    setBounds(iframe, () => ({ top: 0, right: 800, bottom: 600, left: 0 }));
+    fixture.doc.body.append(iframe);
+
+    await expect(fixture.controller.begin()).rejects.toThrow(
+      pageHeight > 600 ? "competing scrolling surfaces" : "scrolling layout",
+    );
   });
 
   it("rejects a dominant scrolling panel that does not fill the viewport", async () => {

@@ -442,6 +442,7 @@ function viewportScrollElement(doc: Document, win: ScreenshotPageWindow): HTMLEl
     documentHeight(doc, win.innerHeight) > win.innerHeight + SCROLL_RANGE_TOLERANCE;
   const fullViewportCandidates: HTMLElement[] = [];
   let unsupportedDominantSurface = false;
+  let hiddenOverflowSurface = false;
 
   for (const element of Array.from(doc.querySelectorAll<HTMLElement>("*"))) {
     if (element === doc.documentElement || element === doc.body) continue;
@@ -451,15 +452,19 @@ function viewportScrollElement(doc: Document, win: ScreenshotPageWindow): HTMLEl
     if (element.scrollHeight <= element.clientHeight + SCROLL_RANGE_TOLERANCE) continue;
     if (!isDominantViewportSurface(bounds, win)) continue;
 
+    const style = win.getComputedStyle(element);
+    if (!hasScrollableOverflow(style)) {
+      // Cropped images and visible overflow do not compete with the page scroller.
+      // Hidden overflow can still be script-scrolled when it is the only surface.
+      if (style.overflowY === "hidden") hiddenOverflowSurface = true;
+      continue;
+    }
+
     const hasMatchingScrollport =
       fillsViewport &&
       Math.abs(element.clientHeight - win.innerHeight) <= SCROLLPORT_GEOMETRY_TOLERANCE &&
       Math.abs(bounds.bottom - bounds.top - element.clientHeight) <= SCROLLPORT_GEOMETRY_TOLERANCE;
-    if (
-      hasMatchingScrollport &&
-      hasScrollableOverflow(win.getComputedStyle(element)) &&
-      isPaintedAndUntransformed(element, doc, win)
-    ) {
+    if (hasMatchingScrollport && isPaintedAndUntransformed(element, doc, win)) {
       fullViewportCandidates.push(element);
     } else {
       unsupportedDominantSurface = true;
@@ -477,7 +482,7 @@ function viewportScrollElement(doc: Document, win: ScreenshotPageWindow): HTMLEl
   }
   if (documentScrolls) return undefined;
   if (fullViewportCandidates.length === 1) return fullViewportCandidates[0];
-  if (unsupportedDominantSurface) {
+  if (unsupportedDominantSurface || hiddenOverflowSurface) {
     throw new Error("This page's scrolling layout cannot be captured as one long screenshot.");
   }
   return undefined;
