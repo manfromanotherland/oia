@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 import type { SaveKind, SaveRequestMetadata } from "./protocol.js";
-import { absoluteUrl, extractPageMetadata, firstText } from "./page-metadata.js";
+import { absoluteUrl, documentBaseUrl, extractPageMetadata, firstText } from "./page-metadata.js";
 
 export type StandaloneMediaKind = Extract<SaveKind, "image" | "video">;
 
@@ -32,15 +32,17 @@ export function extractStandaloneMedia(
   mediaUrl: string,
   savedAt = new Date().toISOString(),
 ): MediaExtractionResult {
-  const element = findMediaElement(doc, pageUrl, kind, mediaUrl);
+  const baseUrl = documentBaseUrl(doc, pageUrl);
+  const resolvedMediaUrl = absoluteUrl(mediaUrl, baseUrl) ?? mediaUrl;
+  const element = findMediaElement(doc, baseUrl, kind, resolvedMediaUrl);
   const origin = extractPageMetadata(doc, pageUrl);
   const caption = element ? figureCaption(element) : undefined;
   const video = element instanceof HTMLVideoElement ? element : undefined;
   const videoDestination =
     kind === "video"
-      ? resolveVideoDestination(doc, pageUrl, origin.canonicalUrl, mediaUrl, video)
+      ? resolveVideoDestination(doc, pageUrl, baseUrl, origin.canonicalUrl, resolvedMediaUrl, video)
       : undefined;
-  const storedMediaUrl = videoDestination?.mediaUrl ?? mediaUrl;
+  const storedMediaUrl = videoDestination?.mediaUrl ?? resolvedMediaUrl;
   const descriptiveMediaUrl =
     kind === "video" && !videoDestination?.isDirect ? undefined : storedMediaUrl;
 
@@ -90,13 +92,13 @@ export function extractStandaloneMedia(
   if (kind === "image") {
     return {
       metadata,
-      markdown: `![${escapeMarkdownLabel(alt)}](${mediaUrl})`,
-      image_urls: [mediaUrl],
+      markdown: `![${escapeMarkdownLabel(alt)}](${storedMediaUrl})`,
+      image_urls: [storedMediaUrl],
     };
   }
 
   const posterUrl = firstText(
-    video ? absoluteUrl(video.getAttribute("poster"), pageUrl) : undefined,
+    video ? absoluteUrl(video.getAttribute("poster"), baseUrl) : undefined,
     origin.socialImageUrls[0],
   );
   const poster = posterUrl ? `![${escapeMarkdownLabel(alt)}](${posterUrl})\n\n` : "";
@@ -120,13 +122,14 @@ interface VideoDestination {
 function resolveVideoDestination(
   doc: Document,
   pageUrl: string,
+  baseUrl: string,
   canonicalUrl: string,
   clickedUrl: string,
   video: HTMLVideoElement | undefined,
 ): VideoDestination {
   const durableUrl = firstDurableHttpUrl(
     [clickedUrl, ...(video ? videoSourceUrls(video) : [])],
-    pageUrl,
+    baseUrl,
   );
   if (durableUrl) return { mediaUrl: durableUrl, watchUrl: durableUrl, isDirect: true };
 

@@ -72,6 +72,45 @@ describe("extractStandaloneMedia", () => {
     expect(result.image_urls).toEqual([imageUrl]);
   });
 
+  it("reads iframe image attributes against their document while keeping the top-level origin", () => {
+    const imageUrl = "https://frame.example/embedded/art/image.png";
+    const doc = buildDoc(
+      '<base href="https://frame.example/embedded/"><link rel="canonical" href="../canonical">',
+      '<img src="art/image.png" alt="Frame artwork">',
+      "Embedded gallery",
+    );
+
+    const result = extractStandaloneMedia(doc, "https://top.example/gallery", "image", imageUrl);
+
+    expect(result.metadata).toMatchObject({
+      url: "https://top.example/gallery",
+      canonical_url: "https://frame.example/canonical",
+      media_url: imageUrl,
+    });
+    expect(result.markdown).toBe(`![Frame artwork](${imageUrl})`);
+    expect(result.image_urls).toEqual([imageUrl]);
+  });
+
+  it("resolves an iframe video's relative durable source and poster in its owning document", () => {
+    const dataUrl = "data:video/mp4;base64,LOCAL_VIDEO";
+    const doc = buildDoc(
+      '<base href="https://frame.example/embedded/"><link rel="canonical" href="/clip">',
+      `<video src="${dataUrl}" poster="poster.jpg" aria-label="Embedded clip"><source src="../media/clip.mp4"></video>`,
+    );
+
+    const result = extractStandaloneMedia(doc, "https://top.example/gallery", "video", dataUrl);
+
+    expect(result.metadata).toMatchObject({
+      url: "https://top.example/gallery",
+      canonical_url: "https://frame.example/clip",
+      media_url: "https://frame.example/media/clip.mp4",
+    });
+    expect(result.markdown).toBe(
+      "![Embedded clip](https://frame.example/embedded/poster.jpg)\n\n[Watch video](https://frame.example/media/clip.mp4)",
+    );
+    expect(result.image_urls).toEqual(["https://frame.example/embedded/poster.jpg"]);
+  });
+
   it("stores a video URL as metadata/link and captures only its poster", () => {
     const videoUrl = "https://media.example.com/demo.mp4";
     const doc = buildDoc(

@@ -26,7 +26,48 @@ afterEach(() => {
 });
 
 describe("background screenshot save", () => {
+  it("returns capture failures to the popup when the restricted page cannot render a toast", async () => {
+    vi.resetModules();
+    const listeners: RuntimeMessageListener[] = [];
+    const tab = { id: 42, url: "https://chromewebstore.google.com/detail/extension", windowId: 7 };
+    const sendNativeMessage = vi.fn();
+    vi.stubGlobal("chrome", {
+      action: { setIcon: vi.fn(), setBadgeText: vi.fn(), setBadgeBackgroundColor: vi.fn() },
+      commands: { onCommand: event() },
+      contextMenus: { onClicked: event(), removeAll: vi.fn(), create: vi.fn() },
+      notifications: { onClicked: event() },
+      storage: { local: { get: vi.fn(async () => ({})), set: vi.fn(async () => undefined) } },
+      runtime: {
+        onInstalled: event(),
+        onStartup: event(),
+        onConnect: event(),
+        onMessage: event(listeners),
+        sendNativeMessage,
+      },
+      tabs: {
+        onActivated: event(),
+        onUpdated: event(),
+        get: vi.fn(async () => tab),
+        sendMessage: vi.fn(async () => {
+          throw new Error("Cannot access this page.");
+        }),
+      },
+      scripting: {
+        executeScript: vi.fn(async () => {
+          throw new Error("Cannot access this page.");
+        }),
+      },
+    });
+    await import("./background.js");
+    const response = await new Promise((resolve) => {
+      listeners[0]({ action: "toolbar-save", kind: "screenshot", tabId: 42 }, {}, resolve);
+    });
+    expect(response).toEqual({ accepted: false, error: "Cannot access this page." });
+    expect(sendNativeMessage).not.toHaveBeenCalled();
+  });
+
   it("runs the full-page tile session and persists the composed PNG", async () => {
+    vi.resetModules();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-10T12:00:00.000Z"));
 

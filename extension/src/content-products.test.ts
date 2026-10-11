@@ -22,6 +22,7 @@ describe("live product page capture", () => {
     "passes structured evidence through %s",
     async (action) => {
       vi.resetModules();
+      window.location.href = "https://example.com/lamp";
       let listener: RuntimeMessageListener | undefined;
       vi.stubGlobal("chrome", {
         runtime: {

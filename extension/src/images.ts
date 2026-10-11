@@ -21,6 +21,14 @@ export interface FetchImagesResult {
   /** URLs we couldn't read (e.g. cross-origin without CORS) — a caller in a more
    *  privileged context (the background worker) can retry these. */
   unresolved: string[];
+  /** URLs omitted by a byte budget. Retrying them would repeat the same work. */
+  skipped: string[];
+}
+
+export interface FetchImagesOptions {
+  maxTotalBytes?: number;
+  maxImageBytes?: number;
+  concurrency?: number;
 }
 
 /**
@@ -33,69 +41,147 @@ export interface FetchImagesResult {
  * - In the **background service worker** (with host permissions) a `fetch` can
  *   read cross-origin bytes regardless of CORS, covering the rest.
  */
-export async function fetchImages(urls: string[]): Promise<FetchImagesResult> {
+export async function fetchImages(
+  urls: string[],
+  options: FetchImagesOptions = {},
+): Promise<FetchImagesResult> {
   const unique = [...new Set(urls)];
-  const results: Array<ImageData | null> = Array.from({ length: unique.length }, () => null);
+  const maxTotalBytes = byteLimit(options.maxTotalBytes ?? MAX_FETCH_TOTAL_BYTES);
+  const maxImageBytes = byteLimit(options.maxImageBytes ?? MAX_IMAGE_BYTES);
+  const requestedConcurrency = options.concurrency ?? MAX_CONCURRENCY;
+  const concurrency = Number.isFinite(requestedConcurrency)
+    ? Math.max(1, Math.min(MAX_CONCURRENCY, Math.floor(requestedConcurrency)))
+    : MAX_CONCURRENCY;
+  if (!maxTotalBytes || !maxImageBytes) return { images: [], unresolved: [], skipped: unique };
+  const pending = new Map<number, PendingImage>();
   let next = 0;
-
-  async function worker(): Promise<void> {
-    while (next < unique.length) {
-      const index = next++;
-      results[index] = await fetchImage(unique[index]);
-    }
-  }
-
-  const workers = Array.from({ length: Math.min(MAX_CONCURRENCY, unique.length) }, worker);
-  await Promise.all(workers);
-
-  // Preserve candidate order regardless of which concurrent request finished
-  // first, and cap before a content script sends the result to the worker.
   const images: ImageData[] = [];
   const unresolved: string[] = [];
+  const skipped: string[] = [];
   let totalBytes = 0;
-  for (let index = 0; index < unique.length; index++) {
-    const image = results[index];
-    if (!image) {
-      unresolved.push(unique[index]);
-      continue;
+
+  const prefetch = (): void => {
+    while (next < unique.length && pending.size < concurrency && totalBytes < maxTotalBytes) {
+      pending.set(next, openImage(unique[next], maxImageBytes));
+      next++;
     }
-    const size = decodedBase64Size(image.data_base64);
-    if (totalBytes + size > MAX_FETCH_TOTAL_BYTES) {
-      unresolved.push(unique[index]);
-      continue;
+  };
+
+  try {
+    prefetch();
+    for (let index = 0; index < unique.length; index++) {
+      if (totalBytes >= maxTotalBytes) {
+        skipped.push(...unique.slice(index));
+        break;
+      }
+      const download = pending.get(index)!;
+      // Fetch headers concurrently, but consume and encode bodies in candidate
+      // order. Only one byte buffer exists, bounded by the remaining page budget.
+      const outcome = await consumeImage(
+        download,
+        Math.min(maxImageBytes, maxTotalBytes - totalBytes),
+      );
+      pending.delete(index);
+      if (outcome === "skipped") skipped.push(unique[index]);
+      else if (!outcome) unresolved.push(unique[index]);
+      else {
+        totalBytes += decodedBase64Size(outcome.data_base64);
+        images.push(outcome);
+      }
+      prefetch();
     }
-    totalBytes += size;
-    images.push(image);
+  } finally {
+    for (const download of pending.values()) download.cancel();
   }
-  return { images, unresolved };
+  return { images, unresolved, skipped };
 }
 
 /** Fetch one image and encode it, or return null if it can't be read. */
 export async function fetchImage(url: string): Promise<ImageData | null> {
+  const result = await consumeImage(openImage(url, MAX_IMAGE_BYTES), MAX_IMAGE_BYTES);
+  return result === "skipped" ? null : result;
+}
+
+interface OpenedImage {
+  response: Response;
+  content_type: string;
+}
+
+interface PendingImage {
+  url: string;
+  result: Promise<OpenedImage | "skipped" | null>;
+  cancel: () => void;
+  controller: AbortController;
+}
+
+function openImage(url: string, maxBytes: number): PendingImage {
   const controller = new AbortController();
+  let openedResponse: Response | undefined;
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  try {
-    const response = await fetch(url, { signal: controller.signal });
-    if (!response.ok) return null;
-    if (response.url && !safeResponseUrl(url, response.url)) return null;
-    const declaredLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > MAX_IMAGE_BYTES) return null;
-    const content_type = (response.headers.get("content-type") ?? "").split(";")[0].trim();
-    if (
-      content_type &&
-      !content_type.startsWith("image/") &&
-      content_type !== "application/octet-stream"
-    ) {
+  const cancel = (): void => {
+    clearTimeout(timer);
+    controller.abort();
+    void openedResponse?.body?.cancel().catch(() => undefined);
+  };
+  const result = (async (): Promise<OpenedImage | "skipped" | null> => {
+    try {
+      const response = await fetch(url, { signal: controller.signal });
+      openedResponse = response;
+      if (controller.signal.aborted) {
+        cancel();
+        return null;
+      }
+      if (!response.ok || (response.url && !safeResponseUrl(url, response.url))) {
+        cancel();
+        return null;
+      }
+      const declaredLength = Number(response.headers.get("content-length"));
+      if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+        cancel();
+        return "skipped";
+      }
+      const content_type = (response.headers.get("content-type") ?? "").split(";")[0].trim();
+      if (
+        content_type &&
+        !content_type.startsWith("image/") &&
+        content_type !== "application/octet-stream"
+      ) {
+        cancel();
+        return null;
+      }
+      return { response, content_type };
+    } catch {
+      cancel();
       return null;
+    } finally {
+      clearTimeout(timer);
     }
-    const bytes = await readBoundedBytes(response, MAX_IMAGE_BYTES);
+  })();
+  return { url, result, cancel, controller };
+}
+
+async function consumeImage(
+  download: PendingImage,
+  maxBytes: number,
+): Promise<ImageData | "skipped" | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const opened = await download.result;
+    if (!opened || opened === "skipped") return opened;
+    const { response, content_type } = opened;
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) return "skipped";
+    timer = setTimeout(() => download.controller.abort(), FETCH_TIMEOUT_MS);
+    const bytes = await readBoundedBytes(response, maxBytes);
+    if (bytes === "skipped") return bytes;
     if (!bytes?.byteLength) return null;
-    return { url, content_type, data_base64: bytesToBase64(bytes) };
+    return { url: download.url, content_type, data_base64: bytesToBase64(bytes) };
   } catch {
     // Opaque/blocked by CORS, network error, timeout, or abort.
     return null;
   } finally {
     clearTimeout(timer);
+    download.cancel();
   }
 }
 
@@ -127,24 +213,30 @@ export function capTotalBytes(images: ImageData[], maxBytes: number): ImageData[
   return kept;
 }
 
-async function readBoundedBytes(response: Response, maxBytes: number): Promise<Uint8Array | null> {
+async function readBoundedBytes(
+  response: Response,
+  maxBytes: number,
+): Promise<Uint8Array | "skipped" | null> {
   const reader = response.body?.getReader();
   if (!reader) {
-    const buffer = await response.arrayBuffer();
-    return buffer.byteLength <= maxBytes ? new Uint8Array(buffer) : null;
+    return null;
   }
 
   const chunks: Uint8Array[] = [];
   let total = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel();
-      return null;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        return "skipped";
+      }
+      chunks.push(value);
     }
-    chunks.push(value);
+  } finally {
+    reader.releaseLock();
   }
 
   const bytes = new Uint8Array(total);
@@ -156,7 +248,11 @@ async function readBoundedBytes(response: Response, maxBytes: number): Promise<U
   return bytes;
 }
 
-function decodedBase64Size(value: string): number {
+function byteLimit(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+}
+
+export function decodedBase64Size(value: string): number {
   const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0;
   return Math.max(0, Math.floor((value.length * 3) / 4) - padding);
 }

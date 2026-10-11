@@ -2,6 +2,7 @@
 
 import type {
   ImportedVideoCapture,
+  CaptureFailure,
   PageCapture,
   StandaloneMediaCaptureResponse,
   ToastMessage,
@@ -20,7 +21,7 @@ import type {
   SaveResponse,
 } from "./protocol.js";
 import { PROTOCOL_VERSION } from "./protocol.js";
-import { capTotalBytes, fetchImages } from "./images.js";
+import { capTotalBytes, decodedBase64Size, fetchImages } from "./images.js";
 import { HOST_ID, isHostMissing } from "./host.js";
 import { log } from "./log.js";
 import { isSessionLocalVideoUrl } from "./media.js";
@@ -54,6 +55,8 @@ import {
 import type { SelectionCapture } from "./selection-capture.js";
 import { buildSaveSelectionRequest } from "./selection-request.js";
 import { inspectCaptureArtwork } from "./structured-artwork.js";
+import { isSamePage, isWebPage, PageChangedError } from "./capture-context.js";
+import { assertMessageBudget, fitMessageImages, MessageBudgetError } from "./message-budget.js";
 
 const NOTIF_HOST_MISSING = "host-missing";
 
@@ -86,6 +89,7 @@ async function setIcon(state: IconState = "default", tabId?: number): Promise<vo
 
 /** In-memory cache: normalized URL → is it saved? Populated by check and save. */
 const savedCache = new Map<string, boolean>();
+const contentInjections = new Map<string, Promise<unknown>>();
 
 function normalizeUrl(raw: string): string {
   return raw.split("#")[0];
@@ -162,18 +166,25 @@ export async function requestContentResponse<T>(
   try {
     return (await chrome.tabs.sendMessage(tabId, message, { frameId })) as T;
   } catch {
-    await chrome.scripting.executeScript({
-      target: { tabId, frameIds: [frameId] },
-      files: ["dist/content.js"],
-    });
+    const key = `${tabId}:${frameId}`;
+    let injection = contentInjections.get(key);
+    if (!injection) {
+      injection = chrome.scripting.executeScript({
+        target: { tabId, frameIds: [frameId] },
+        files: ["dist/content.js"],
+      });
+      contentInjections.set(key, injection);
+    }
+    try {
+      await injection;
+    } finally {
+      if (contentInjections.get(key) === injection) contentInjections.delete(key);
+    }
     return (await chrome.tabs.sendMessage(tabId, message, { frameId })) as T;
   }
 }
 
-function requestPageCapture(
-  tabId: number,
-  pageUrl: string,
-): Promise<PageCapture | { error: string }> {
+function requestPageCapture(tabId: number, pageUrl: string): Promise<PageCapture | CaptureFailure> {
   return requestContentResponse(tabId, { action: "capture-page", pageUrl });
 }
 
@@ -182,13 +193,18 @@ function requestMediaCapture(
   pageUrl: string,
   kind: "image" | "video",
   mediaUrl: string,
+  frameId: number,
 ): Promise<StandaloneMediaCaptureResponse> {
-  return requestContentResponse(tabId, {
-    action: "capture-media",
-    kind,
-    mediaUrl,
-    pageUrl,
-  });
+  return requestContentResponse(
+    tabId,
+    {
+      action: "capture-media",
+      kind,
+      mediaUrl,
+      pageUrl,
+    },
+    frameId,
+  );
 }
 
 function requestSelectionCapture(
@@ -262,14 +278,19 @@ async function rejectPaymentRequired(tabId: number): Promise<boolean> {
   return true;
 }
 
-async function savePage(tab: chrome.tabs.Tab): Promise<void> {
+interface SaveOutcome {
+  error?: string;
+}
+
+async function savePage(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
   const tabId = tab.id;
   if (!tabId || !tab.url) {
     await log("warn", "Save ignored: no active tab id or URL", { tabId, url: tab.url });
-    return;
+    return { error: "The source tab is no longer available." };
   }
 
-  if (await rejectPaymentRequired(tabId)) return;
+  if (await rejectPaymentRequired(tabId))
+    return { error: "This page requires payment and wasn't saved." };
 
   await log("info", "Save triggered", { kind: "page", url: tab.url });
   await showToast(tabId, "loading", "Saving…");
@@ -278,6 +299,9 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
   try {
     const result = await requestPageCapture(tabId, tab.url);
     if (result && "error" in result && result.error) {
+      if (result.error_code) {
+        return showCaptureFailure(tabId, "page", new Error(result.error));
+      }
       throw new Error(result.error);
     }
     if (
@@ -291,8 +315,15 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
       throw new Error("The page returned an invalid capture response.");
     }
     capture = result as PageCapture;
+    if (!isSamePage(tab.url, capture.metadata.url)) throw new PageChangedError();
     addTabFaviconCandidate(capture, tab.favIconUrl);
   } catch (err) {
+    if (err instanceof PageChangedError || err instanceof MessageBudgetError) {
+      return showCaptureFailure(tabId, "page", err);
+    }
+    if (!(await isCurrentTabPage(tab))) {
+      return showCaptureFailure(tabId, "page", new PageChangedError());
+    }
     await log("warn", "Page capture unavailable; using tab metadata", {
       url: tab.url,
       error: err,
@@ -312,21 +343,48 @@ async function savePage(tab: chrome.tabs.Tab): Promise<void> {
         url: tab.url,
         error: fallbackError,
       });
-      return;
+      return {
+        error:
+          fallbackError instanceof Error ? fallbackError.message : "The page URL is not supported.",
+      };
     }
   }
 
-  await saveCapture(tab, capture, { action: "save_page" });
+  if (!(await isCurrentTabPage(tab))) {
+    return showCaptureFailure(tabId, "page", new PageChangedError());
+  }
+  return saveCapture(tab, capture, { action: "save_page" });
 }
 
-async function saveScreenshot(tab: chrome.tabs.Tab): Promise<void> {
+async function isCurrentTabPage(tab: chrome.tabs.Tab): Promise<boolean> {
+  try {
+    const current = await chrome.tabs.get(tab.id!);
+    return !current.pendingUrl && isSamePage(tab.url, current.url);
+  } catch {
+    return false;
+  }
+}
+
+async function showCaptureFailure(
+  tabId: number,
+  item: string,
+  error: unknown,
+): Promise<SaveOutcome> {
+  const detail = error instanceof Error ? error.message : "The page couldn't be captured.";
+  await showBadge(tabId, "error");
+  await showToast(tabId, "error", `Couldn't save ${item}`, detail);
+  await log("error", "Capture failed", { item, error });
+  return { error: detail };
+}
+
+async function saveScreenshot(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
   const tabId = tab.id;
   if (!tabId || !tab.url) {
     await log("warn", "Save screenshot ignored: no active tab id or URL", {
       tabId,
       url: tab.url,
     });
-    return;
+    return { error: "The source tab is no longer available." };
   }
 
   if (activeScreenshotTabId !== undefined) {
@@ -336,7 +394,7 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<void> {
       "Couldn't save screenshot",
       "A full-page screenshot is already in progress.",
     );
-    return;
+    return { error: "A full-page screenshot is already in progress." };
   }
   activeScreenshotTabId = tabId;
 
@@ -378,14 +436,14 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<void> {
       err instanceof Error ? err.message : "The full page couldn't be captured.",
     );
     await log("error", "Screenshot capture failed", { url: tab.url, error: err });
-    return;
+    return { error: err instanceof Error ? err.message : "The full page couldn't be captured." };
   } finally {
     if (activeScreenshotTabId === tabId) activeScreenshotTabId = undefined;
   }
 
   await log("info", "Save triggered", { kind: "screenshot", url: tab.url });
   await showToast(tabId, "loading", "Saving screenshot…");
-  await saveCapture(tab, capture, { item: "screenshot" });
+  return saveCapture(tab, capture, { item: "screenshot" });
 }
 
 async function captureStableViewport(tab: chrome.tabs.Tab): Promise<string> {
@@ -421,6 +479,7 @@ async function saveMedia(
   tab: chrome.tabs.Tab,
   kind: "image" | "video",
   mediaUrl: string,
+  frameId: number,
 ): Promise<void> {
   const tabId = tab.id;
   const loggedMediaUrl = loggableMediaUrl(kind, mediaUrl);
@@ -438,7 +497,7 @@ async function saveMedia(
 
   let capture: PageCapture;
   try {
-    const result = await requestMediaCapture(tabId, tab.url, kind, mediaUrl);
+    const result = await requestMediaCapture(tabId, tab.url, kind, mediaUrl, frameId);
     if (result && "error" in result && result.error) {
       if (result.error_code === "native_connection" && isHostMissing(new Error(result.error))) {
         await log("warn", "Óia app not installed", { error: result.error });
@@ -538,11 +597,16 @@ async function saveCapture(
   tab: chrome.tabs.Tab,
   capture: PageCapture,
   options: { item?: string; action?: "save" | "save_page" } = {},
-): Promise<void> {
+): Promise<SaveOutcome> {
   const tabId = tab.id!;
   const item =
     options.item ?? (capture.metadata.kind === "article" ? "page" : capture.metadata.kind);
-  const images = await completeCaptureImages(capture);
+  let images: ImageData[];
+  try {
+    images = await completeCaptureImages(capture);
+  } catch (error) {
+    return showCaptureFailure(tabId, item, error);
+  }
 
   // A standalone image is only a successful save when the selected asset will
   // actually be written into the reading's assets folder. Continuing with an
@@ -564,7 +628,7 @@ async function saveCapture(
       url: tab.url,
       mediaUrl: capture.metadata.media_url,
     });
-    return;
+    return { error: "The selected image couldn't be copied into your local library." };
   }
 
   // Every successful video save must have completed the acknowledged streaming
@@ -584,7 +648,7 @@ async function saveCapture(
         ? loggableMediaUrl("video", capture.metadata.media_url)
         : undefined,
     });
-    return;
+    return { error: "The selected video couldn't be copied into your local library." };
   }
 
   const request: SaveRequest | SavePageRequest = {
@@ -600,7 +664,7 @@ async function saveCapture(
       : {}),
   };
 
-  await persistSave(tab, request, feedbackFor(capture, item));
+  return persistSave(tab, request, feedbackFor(capture, item));
 }
 
 /**
@@ -612,8 +676,20 @@ export async function completeCaptureImages(capture: PageCapture): Promise<Image
   await inspectCaptureArtwork(capture, (request) =>
     sendNativeMessage<InspectPageMetadataRequest, InspectPageMetadataResponse>(request),
   );
-  const fallback = await fetchImages(capture.unresolved);
-  const merged = deduplicateImages([...capture.images, ...fallback.images]);
+  const fromPage = capTotalBytes(deduplicateImages(capture.images), MAX_TOTAL_IMAGE_BYTES);
+  const retainedUrls = new Set(fromPage.map((image) => image.url));
+  const skippedUrls = new Set([
+    ...(capture.skipped ?? []),
+    ...capture.images.filter((image) => !retainedUrls.has(image.url)).map((image) => image.url),
+  ]);
+  const remainingBytes =
+    MAX_TOTAL_IMAGE_BYTES -
+    fromPage.reduce((total, image) => total + decodedBase64Size(image.data_base64), 0);
+  const fallback = await fetchImages(
+    capture.unresolved.filter((url) => !skippedUrls.has(url) && !retainedUrls.has(url)),
+    { maxTotalBytes: remainingBytes },
+  );
+  const merged = deduplicateImages([...fromPage, ...fallback.images]);
   const previewCandidates = capture.preview_candidates ?? [];
   const faviconCandidates = capture.favicon_candidates ?? [];
   const selectedPreview = previewCandidates.find((url) =>
@@ -714,37 +790,55 @@ async function persistSave(
   tab: chrome.tabs.Tab,
   request: NativeSaveRequest,
   feedback: SaveFeedback,
-): Promise<void> {
+): Promise<SaveOutcome> {
   const tabId = tab.id!;
 
   let response: SaveResponse;
   try {
+    if (request.action === "save_page" && !(await isCurrentTabPage(tab))) {
+      throw new PageChangedError();
+    }
+    request =
+      request.metadata.kind === "article" || request.metadata.kind === "quote"
+        ? fitMessageImages(request)
+        : request;
+    const retained = new Set(request.images.map((image) => image.url));
+    if (request.preview_url && !retained.has(request.preview_url)) delete request.preview_url;
+    if (request.favicon_url && !retained.has(request.favicon_url)) delete request.favicon_url;
     response = await sendNativeMessage<NativeSaveRequest, SaveResponse>(request);
   } catch (err) {
     if (err instanceof Error && isHostMissing(err)) {
       await log("warn", "Óia app not installed", { error: err });
       await notifyHostMissing(tabId);
+      return { error: "You need the Óia app to save items to your library." };
     } else {
       await showBadge(tabId, "error");
       await showToast(
         tabId,
         "error",
         `Couldn't save ${feedback.item}`,
-        "The Óia app returned an error.",
+        err instanceof MessageBudgetError || err instanceof PageChangedError
+          ? err.message
+          : "The Óia app returned an error.",
       );
       await log("error", "Óia app error", { url: tab.url, error: err });
     }
-    return;
+    return {
+      error:
+        err instanceof MessageBudgetError || err instanceof PageChangedError
+          ? err.message
+          : "The Óia app returned an error.",
+    };
   }
 
-  await presentSaveResponse(tab, response, feedback);
+  return presentSaveResponse(tab, response, feedback);
 }
 
 async function presentSaveResponse(
   tab: chrome.tabs.Tab,
   response: SaveResponse,
   feedback: SaveFeedback,
-): Promise<void> {
+): Promise<SaveOutcome> {
   const tabId = tab.id!;
   if (response.ok) {
     const title =
@@ -784,7 +878,9 @@ async function presentSaveResponse(
       error: response.error,
       message: response.message,
     });
+    return { error: response.message || response.error };
   }
+  return {};
 }
 
 function isImportedVideoCapture(
@@ -802,23 +898,27 @@ function markSaved(tabId: number, tabUrl: string, canonicalUrl: string): void {
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 
-async function handleToolbarSave(kind: ToolbarSaveKind, tabId: number): Promise<void> {
+async function handleToolbarSave(kind: ToolbarSaveKind, tabId: number): Promise<SaveOutcome> {
   let tab: chrome.tabs.Tab | undefined;
   try {
     tab = await chrome.tabs.get(tabId);
   } catch (err) {
     await log("error", "Could not find the toolbar's source tab", { kind, tabId, error: err });
-    return;
+    throw new Error("The source tab is no longer available.");
   }
   if (!tab) {
     await log("warn", "Toolbar save ignored: source tab no longer exists", { kind, tabId });
-    return;
+    throw new Error("The source tab is no longer available.");
+  }
+
+  if (!isWebPage(tab.url)) {
+    throw new Error("This page isn't available to Óia. Open a regular web page and try again.");
   }
 
   if (kind === "page") {
-    await savePage(tab);
+    return savePage(tab);
   } else {
-    await saveScreenshot(tab);
+    return saveScreenshot(tab);
   }
 }
 
@@ -831,7 +931,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   } else if (target.kind === "selection") {
     void saveSelection(tab, target.text, info.frameId ?? 0, info.frameUrl ?? tab.url ?? "");
   } else if (target.mediaUrl) {
-    void saveMedia(tab, target.kind, target.mediaUrl);
+    void saveMedia(tab, target.kind, target.mediaUrl, info.frameId ?? 0);
   }
 });
 
@@ -927,14 +1027,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
   if (isToolbarSaveMessage(msg)) {
     void handleToolbarSave(msg.kind, msg.tabId).then(
-      () => sendResponse({ accepted: true }),
+      (outcome) =>
+        sendResponse(
+          outcome.error ? { accepted: false, error: outcome.error } : { accepted: true },
+        ),
       (error) => {
         void log("error", "Toolbar save failed unexpectedly", { kind: msg.kind, error });
-        sendResponse({ accepted: false });
+        sendResponse({
+          accepted: false,
+          error: error instanceof Error ? error.message : "The page couldn't be saved.",
+        });
       },
     );
-    // Keep the popup's message port (and therefore this MV3 worker) alive until
-    // capture and native persistence finish. The popup closes on the response.
+    // Respond after capture and native persistence so the popup can show dispatch
+    // failures. Worker lifetime during streaming is owned by the native port.
     return true;
   }
 
@@ -946,6 +1052,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function sendNativeMessage<TReq, TRes>(message: TReq): Promise<TRes> {
+  assertMessageBudget(message);
   return new Promise((resolve, reject) => {
     chrome.runtime.sendNativeMessage(HOST_ID, message as object, (response: TRes) => {
       if (chrome.runtime.lastError) {

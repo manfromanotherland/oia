@@ -89,7 +89,9 @@ describe("background cultural artwork capture", () => {
     });
     const images = await bg.completeCaptureImages(capture);
     expect(bg.sendNativeMessage).toHaveBeenCalledTimes(1);
-    expect(imageMock.fetchImages).toHaveBeenCalledWith(["https://example.com/cover.png"]);
+    expect(imageMock.fetchImages).toHaveBeenCalledWith(["https://example.com/cover.png"], {
+      maxTotalBytes: 40 * 1024 * 1024 - 6,
+    });
     expect(images.map((image) => image.url)).toEqual([
       "https://example.com/cover.png",
       "https://example.com/content.png",
@@ -132,5 +134,17 @@ describe("background cultural artwork capture", () => {
     expect(request.preview_url).toBe("https://example.com/cover.png");
     expect(request.images[0].url).toBe("https://example.com/cover.png");
     expect(request.metadata.product_html).toBe(capture.metadata.product_html);
+  });
+
+  it("does not refetch an asset skipped by the content-script budget, including rediscovered artwork", async () => {
+    const bg = await background();
+    const capture = page();
+    capture.skipped = ["https://example.com/cover.png", "https://example.com/large.png"];
+    capture.unresolved = ["https://example.com/large.png", "https://example.com/social.png"];
+    imageMock.fetchImages.mockResolvedValue({ images: [], unresolved: [], skipped: [] });
+    await bg.completeCaptureImages(capture);
+    expect(imageMock.fetchImages).toHaveBeenCalledWith([], {
+      maxTotalBytes: 40 * 1024 * 1024 - 6,
+    });
   });
 });

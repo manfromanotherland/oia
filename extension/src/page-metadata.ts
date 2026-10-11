@@ -23,12 +23,13 @@ export interface PageMetadata {
  * pipeline so the stored reading remains fully local.
  */
 export function extractPageMetadata(doc: Document, pageUrl: string): PageMetadata {
+  const baseUrl = documentBaseUrl(doc, pageUrl);
   const canonicalUrl = absoluteUrl(
     firstText(
       doc.querySelector<HTMLLinkElement>("link[rel~='canonical']")?.getAttribute("href"),
       metaContent(doc, "meta[property='og:url']"),
     ),
-    pageUrl,
+    baseUrl,
   );
   const resolvedCanonical = isHttpUrl(canonicalUrl) ? canonicalUrl! : pageUrl;
 
@@ -62,9 +63,9 @@ export function extractPageMetadata(doc: Document, pageUrl: string): PageMetadat
         metaContent(doc, "meta[name='twitter:image']"),
         metaContent(doc, "meta[name='twitter:image:src']"),
       ],
-      pageUrl,
+      baseUrl,
     ),
-    faviconUrls: faviconUrls(doc, pageUrl),
+    faviconUrls: faviconUrls(doc, baseUrl),
   };
 }
 
@@ -91,6 +92,17 @@ export function absoluteUrl(value: string | null | undefined, base: string): str
   } catch {
     return undefined;
   }
+}
+
+/** Resolve live DOM attributes in their owning document, including iframe and base URLs. */
+export function documentBaseUrl(doc: Document, fallbackUrl: string): string {
+  if (doc.defaultView && isHttpUrl(doc.baseURI)) return doc.baseURI;
+  // Detached extraction documents have no browsing URL of their own.
+  const declaredBase = absoluteUrl(
+    doc.querySelector<HTMLBaseElement>("base[href]")?.getAttribute("href"),
+    fallbackUrl,
+  );
+  return isHttpUrl(declaredBase) ? declaredBase : fallbackUrl;
 }
 
 function faviconUrls(doc: Document, pageUrl: string): string[] {

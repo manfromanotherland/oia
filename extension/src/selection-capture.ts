@@ -141,12 +141,13 @@ export async function captureSelection(
   const imageUrls = [
     ...new Set([...result.preview_candidates, ...result.favicon_candidates, ...result.image_urls]),
   ];
-  const { images, unresolved } = await fetchImages(imageUrls);
+  const { images, unresolved, skipped } = await fetchImages(imageUrls);
   return {
     metadata: result.metadata,
     markdown: result.markdown,
     images,
     unresolved,
+    skipped,
     preview_candidates: result.preview_candidates,
     favicon_candidates: result.favicon_candidates,
     content_image_urls: result.image_urls,

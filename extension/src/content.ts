@@ -18,6 +18,13 @@ import {
 } from "./screenshot-page.js";
 import { importVideo, type VideoImportOptions, VideoImportError } from "./video-import.js";
 import { captureSelection, SelectionContextCache } from "./selection-capture.js";
+import { isSamePage, PAGE_CHANGED_MESSAGE, PageChangedError } from "./capture-context.js";
+import { assertMessageBudget, fitMessageImages, MessageBudgetError } from "./message-budget.js";
+
+export interface CaptureFailure {
+  error: string;
+  error_code?: string;
+}
 
 /** An optional action button on a toast. Clicking it messages the background
  *  worker (which alone can open extension pages) and dismisses the toast. */
@@ -48,6 +55,8 @@ export interface PageCapture {
   page_content?: PageCaptureEvidence;
   images: ImageData[];
   unresolved: string[];
+  /** Asset URLs omitted by a byte limit; the worker must not fetch them again. */
+  skipped?: string[];
   /** Social/meta image URL selected as the card preview, when present. */
   preview_url?: string;
   /** Declared (or conventional) page favicon URL, when present. */
@@ -101,112 +110,202 @@ interface CaptureSelectionMessage {
   pageUrl: string;
 }
 
-const screenshotPageCapture = new ScreenshotPageCaptureController(document, window);
-const selectionContext = new SelectionContextCache(document);
-document.addEventListener("contextmenu", (event) => selectionContext.capture(event.target), true);
+interface ContentRegistration {
+  runtime: typeof chrome.runtime.onMessage;
+  dispose: () => void;
+}
 
-chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (isScreenshotPageMessage(msg)) {
-    void handleScreenshotPageMessage(screenshotPageCapture, msg).then(sendResponse);
-    return true;
-  }
+/** One registration per isolated world, including simultaneous fallback injections. */
+export function initializeContentScript(): void {
+  const scope = globalThis as typeof globalThis & {
+    __oiaContentRegistration?: ContentRegistration;
+  };
+  const runtime = chrome.runtime.onMessage;
+  if (scope.__oiaContentRegistration?.runtime === runtime) return;
+  scope.__oiaContentRegistration?.dispose();
+  const screenshotPageCapture = new ScreenshotPageCaptureController(document, window);
+  const selectionContext = new SelectionContextCache(document);
+  const onContextMenu = (event: Event) => selectionContext.capture(event.target);
+  document.addEventListener("contextmenu", onContextMenu, true);
 
-  if (msg?.action === "extract" || msg?.action === "capture-page") {
-    void (async () => {
-      const pageUrl =
-        msg.action === "capture-page" && typeof msg.pageUrl === "string" && msg.pageUrl
-          ? msg.pageUrl
-          : window.location.href;
-      const result = extractPage(document, pageUrl);
-      if (!result) {
-        if (msg.action === "capture-page") {
-          sendResponse(await capturePageMetadata(document, pageUrl));
-          return;
+  const listener: Parameters<typeof runtime.addListener>[0] = (msg, _sender, sendResponse) => {
+    if (isScreenshotPageMessage(msg)) {
+      void handleScreenshotPageMessage(screenshotPageCapture, msg).then(sendResponse);
+      return true;
+    }
+
+    if (msg?.action === "extract" || msg?.action === "capture-page") {
+      void respondToCapture(async () => {
+        const pageUrl = window.location.href;
+        const assertCurrentPage = () => {
+          if (
+            msg.action === "capture-page" &&
+            (!isSamePage(msg.pageUrl, pageUrl) || !isSamePage(pageUrl, window.location.href))
+          ) {
+            throw new PageChangedError();
+          }
+        };
+        assertCurrentPage();
+        const result = extractPage(document, pageUrl);
+        if (!result) {
+          if (msg.action === "capture-page") {
+            const capture = await capturePageMetadata(document, pageUrl);
+            assertCurrentPage();
+            return boundedCapture(capture);
+          }
+          return { error: "Could not extract article content from this page." };
         }
-        sendResponse({ error: "Could not extract article content from this page." });
+        // Fetch images here first: in the page's context these reuse the browser's
+        // cache, so images the browser already loaded need no network request.
+        const { images, unresolved, skipped } = await fetchImages(
+          captureImageUrls(result.preview_candidates, result.favicon_candidates, result.image_urls),
+        );
+        const capture: PageCapture = {
+          metadata: result.metadata,
+          markdown: result.markdown,
+          images,
+          unresolved,
+          skipped,
+          preview_candidates: result.preview_candidates,
+          favicon_candidates: result.favicon_candidates,
+          content_image_urls: result.image_urls,
+          ...(msg.action === "capture-page" ? { page_content: result.page_content } : {}),
+        };
+        assertCurrentPage();
+        return boundedCapture(capture);
+      }, sendResponse);
+      return true; // keep the message channel open for the async sendResponse
+    }
+
+    if (msg?.action === "capture-link") {
+      void respondToCapture(async () => {
+        const { pageUrl } = msg as CaptureLinkMessage;
+        if (!pageUrl) {
+          return { error: "The current page link could not be read." };
+        }
+
+        return boundedCapture(await capturePageMetadata(document, pageUrl));
+      }, sendResponse);
+      return true;
+    }
+
+    if (msg?.action === "capture-media") {
+      void respondToCapture(async () => {
+        const capture = await captureStandaloneMediaRequest(
+          document,
+          msg as CaptureMediaMessage,
+          importVideo,
+        );
+        if ("metadata" in capture && !("video_import" in capture)) return boundedCapture(capture);
+        assertMessageBudget(capture);
+        return capture;
+      }, sendResponse);
+      return true;
+    }
+
+    if (msg?.action === "capture-quote") {
+      const { text, pageUrl } = msg as CaptureQuoteMessage;
+      if (!text?.trim() || !pageUrl) {
+        sendResponse({ error: "The selected text could not be read." });
         return;
       }
-      // Fetch images here first: in the page's context these reuse the browser's
-      // cache, so images the browser already loaded need no network request.
-      const { images, unresolved } = await fetchImages(
-        captureImageUrls(result.preview_candidates, result.favicon_candidates, result.image_urls),
-      );
+
+      const result = extractQuote(document, pageUrl, text);
       const capture: PageCapture = {
         metadata: result.metadata,
         markdown: result.markdown,
-        images,
-        unresolved,
-        preview_candidates: result.preview_candidates,
-        favicon_candidates: result.favicon_candidates,
-        content_image_urls: result.image_urls,
-        ...(msg.action === "capture-page" ? { page_content: result.page_content } : {}),
+        images: [],
+        unresolved: [],
       };
-      sendResponse(capture);
-    })();
-    return true; // keep the message channel open for the async sendResponse
-  }
+      void respondToCapture(async () => boundedCapture(capture), sendResponse);
+      return true;
+    }
 
-  if (msg?.action === "capture-link") {
-    void (async () => {
-      const { pageUrl } = msg as CaptureLinkMessage;
-      if (!pageUrl) {
-        sendResponse({ error: "The current page link could not be read." });
+    if (msg?.action === "capture-selection") {
+      const { text, pageUrl } = msg as CaptureSelectionMessage;
+      if (!text?.trim() || !pageUrl) {
+        sendResponse({ error: "The selected text could not be read." });
         return;
       }
-
-      sendResponse(await capturePageMetadata(document, pageUrl));
-    })();
-    return true;
-  }
-
-  if (msg?.action === "capture-media") {
-    void (async () => {
-      sendResponse(
-        await captureStandaloneMediaRequest(document, msg as CaptureMediaMessage, importVideo),
+      const context = selectionContext.forText(text);
+      void respondToCapture(
+        async () => boundedCapture(await captureSelection(document, pageUrl, text, context)),
+        sendResponse,
       );
-    })();
-    return true;
-  }
-
-  if (msg?.action === "capture-quote") {
-    const { text, pageUrl } = msg as CaptureQuoteMessage;
-    if (!text?.trim() || !pageUrl) {
-      sendResponse({ error: "The selected text could not be read." });
-      return;
+      return true;
     }
 
-    const result = extractQuote(document, pageUrl, text);
-    const capture: PageCapture = {
-      metadata: result.metadata,
-      markdown: result.markdown,
-      images: [],
-      unresolved: [],
-    };
-    sendResponse(capture);
-  }
-
-  if (msg?.action === "capture-selection") {
-    const { text, pageUrl } = msg as CaptureSelectionMessage;
-    if (!text?.trim() || !pageUrl) {
-      sendResponse({ error: "The selected text could not be read." });
-      return;
+    if (msg?.action === "toast") {
+      showToast(msg as ToastMessage);
     }
-    const context = selectionContext.forText(text);
-    void captureSelection(document, pageUrl, text, context).then(sendResponse, () =>
-      sendResponse({ error: "The selected text couldn't be captured from this page." }),
-    );
-    return true;
-  }
+  };
+  runtime.addListener(listener);
+  scope.__oiaContentRegistration = {
+    runtime,
+    dispose: () => {
+      document.removeEventListener("contextmenu", onContextMenu, true);
+      try {
+        runtime.removeListener?.(listener);
+      } catch {
+        /* The old runtime may have been invalidated by an update. */
+      }
+    },
+  };
+}
 
-  if (msg?.action === "toast") {
-    showToast(msg as ToastMessage);
+initializeContentScript();
+
+function boundedCapture<T extends PageCapture>(capture: T): T {
+  // Reserve the URL bookkeeping before fitting: adding the dropped URLs after
+  // filling the envelope could otherwise exceed the same limit again.
+  const candidate = {
+    ...capture,
+    skipped: [
+      ...new Set([...(capture.skipped ?? []), ...capture.images.map((image) => image.url)]),
+    ],
+  };
+  const result = capture.metadata.kind === "image" ? { ...capture } : fitMessageImages(candidate);
+  const retained = new Set(result.images.map((image) => image.url));
+  result.skipped = [
+    ...new Set([
+      ...(capture.skipped ?? []),
+      ...capture.images.filter((image) => !retained.has(image.url)).map((image) => image.url),
+    ]),
+  ];
+  if (result.preview_url && !retained.has(result.preview_url)) delete result.preview_url;
+  if (result.favicon_url && !retained.has(result.favicon_url)) delete result.favicon_url;
+  assertMessageBudget(result);
+  return result;
+}
+
+async function respondToCapture(
+  capture: () => Promise<unknown>,
+  sendResponse: (response: unknown) => void,
+): Promise<void> {
+  try {
+    sendResponse(await capture());
+  } catch (error) {
+    sendResponse({
+      error:
+        error instanceof PageChangedError
+          ? PAGE_CHANGED_MESSAGE
+          : error instanceof Error
+            ? error.message
+            : "The page couldn't be captured.",
+      error_code:
+        error instanceof PageChangedError
+          ? "page_changed"
+          : error instanceof MessageBudgetError
+            ? "capture_too_large"
+            : "capture_failed",
+    } satisfies CaptureFailure);
   }
-});
+}
 
 /** Preserve live page evidence even when no readable article was extracted. */
 async function capturePageMetadata(doc: Document, pageUrl: string): Promise<PageCapture> {
   const page = extractPageMetadata(doc, pageUrl);
-  const { images, unresolved } = await fetchImages(
+  const { images, unresolved, skipped } = await fetchImages(
     captureImageUrls(page.socialImageUrls, page.faviconUrls),
   );
   return {
@@ -226,6 +325,7 @@ async function capturePageMetadata(doc: Document, pageUrl: string): Promise<Page
     markdown: "",
     images,
     unresolved,
+    skipped,
     preview_candidates: page.socialImageUrls,
     favicon_candidates: page.faviconUrls,
   };
@@ -259,12 +359,13 @@ export async function captureStandaloneMediaRequest(
   const result = extractStandaloneMedia(doc, pageUrl, kind, mediaUrl);
   // Only images reach the ordinary save path; every video returned above from
   // the local streaming import.
-  const { images, unresolved } = await fetchImages(result.image_urls);
+  const { images, unresolved, skipped } = await fetchImages(result.image_urls);
   return {
     metadata: result.metadata,
     markdown: result.markdown,
     images,
     unresolved,
+    skipped,
   };
 }
 

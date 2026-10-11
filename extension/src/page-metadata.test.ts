@@ -42,6 +42,46 @@ describe("extractPageMetadata", () => {
     ]);
   });
 
+  it("resolves iframe canonical and artwork metadata against its document base", () => {
+    const doc = buildDoc(`
+      <base href="https://frame.example/embedded/">
+      <link rel="canonical" href="../canonical">
+      <meta property="og:image" content="cover.jpg">
+      <link rel="icon" href="/favicon.png">
+    `);
+
+    const result = extractPageMetadata(doc, "https://top.example/gallery");
+
+    expect(result.canonicalUrl).toBe("https://frame.example/canonical");
+    expect(result.socialImageUrls).toEqual(["https://frame.example/embedded/cover.jpg"]);
+    expect(result.faviconUrls).toEqual(["https://frame.example/favicon.png"]);
+  });
+
+  it("uses the owning live document URL when there is no base element", () => {
+    const previousUrl = window.location.href;
+    const previousHead = document.head.innerHTML;
+    try {
+      window.location.href = "https://frame.example/embedded/page";
+      document.head.innerHTML = '<meta property="og:image" content="cover.jpg">';
+
+      const result = extractPageMetadata(document, "https://top.example/gallery");
+
+      expect(result.canonicalUrl).toBe("https://top.example/gallery");
+      expect(result.socialImageUrls).toEqual(["https://frame.example/embedded/cover.jpg"]);
+    } finally {
+      document.head.innerHTML = previousHead;
+      window.location.href = previousUrl;
+    }
+  });
+
+  it("keeps the supplied page origin when an iframe has no canonical metadata", () => {
+    const doc = buildDoc('<base href="https://frame.example/embedded/">');
+
+    expect(extractPageMetadata(doc, "https://top.example/gallery").canonicalUrl).toBe(
+      "https://top.example/gallery",
+    );
+  });
+
   it("prefers the largest declared raster favicon and keeps fallbacks", () => {
     const doc = buildDoc(`
       <link rel="shortcut icon" href="/small.ico" sizes="16x16">

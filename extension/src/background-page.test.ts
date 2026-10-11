@@ -2,8 +2,19 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { PageCapture } from "./content.js";
+import type { CaptureFailure, PageCapture } from "./content.js";
 import type { SavePageRequest } from "./protocol.js";
+
+const budget = vi.hoisted(() => ({ maxBytes: undefined as number | undefined }));
+vi.mock("./message-budget.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./message-budget.js")>();
+  return {
+    ...actual,
+    fitMessageImages: (capture: Parameters<typeof actual.fitMessageImages>[0]) =>
+      actual.fitMessageImages(capture, budget.maxBytes),
+    assertMessageBudget: (capture: unknown) => actual.assertMessageBudget(capture, budget.maxBytes),
+  };
+});
 
 vi.mock("./log.js", () => ({ log: async () => undefined }));
 vi.mock("./images.js", async (importOriginal) => ({
@@ -20,6 +31,7 @@ type RuntimeListener = (
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  budget.maxBytes = undefined;
 });
 
 function capturedPage(): PageCapture {
@@ -39,14 +51,17 @@ function capturedPage(): PageCapture {
 }
 
 async function harness(
-  capture?: PageCapture | { error: string } | null,
+  capture?: PageCapture | CaptureFailure | null,
   url = "https://example.com/page",
   unreachable = false,
+  currentUrl = url,
+  navigateAtRead = 1,
 ) {
   vi.resetModules();
   let runtimeListener: RuntimeListener | undefined;
   const event = () => ({ addListener: vi.fn() });
   const tab = { id: 42, url, title: "Tab title" };
+  let reads = 0;
   const requests: SavePageRequest[] = [];
   const sendMessage = vi.fn(async (_tabId: number, message: { action: string }) => {
     if (message.action !== "capture-page") return undefined;
@@ -82,13 +97,18 @@ async function harness(
       },
     },
     scripting: { executeScript: vi.fn(async () => [{ result: false }]) },
-    tabs: { onActivated: event(), onUpdated: event(), get: async () => tab, sendMessage },
+    tabs: {
+      onActivated: event(),
+      onUpdated: event(),
+      get: async () => (reads++ < navigateAtRead ? tab : { ...tab, url: currentUrl }),
+      sendMessage,
+    },
   });
   await import("./background.js");
-  await new Promise((resolve) => {
+  const response = await new Promise((resolve) => {
     runtimeListener!({ action: "toolbar-save", kind: "page", tabId: 42 }, {}, resolve);
   });
-  return { requests, sendMessage };
+  return { requests, sendMessage, response };
 }
 
 describe("automatic page save", () => {
@@ -147,10 +167,82 @@ describe("automatic page save", () => {
   it("rejects a browser-internal URL instead of saving a malformed fallback", async () => {
     const result = await harness(undefined, "chrome://extensions");
     expect(result.requests).toHaveLength(0);
+    expect(result.response).toMatchObject({
+      accepted: false,
+      error: expect.stringContaining("regular web page"),
+    });
+  });
+
+  it("does not save a capture returned for a different source URL", async () => {
+    const capture = capturedPage();
+    capture.metadata.url = "https://example.com/different";
+    const result = await harness(capture);
+    expect(result.requests).toHaveLength(0);
     expect(result.sendMessage).toHaveBeenCalledWith(
       42,
-      expect.objectContaining({ status: "error", title: "Couldn't save page" }),
+      expect.objectContaining({ status: "error", detail: expect.stringContaining("page changed") }),
       { frameId: 0 },
     );
+  });
+
+  it("does not persist old tab metadata after the tab navigates", async () => {
+    const result = await harness(
+      undefined,
+      "https://example.com/page",
+      false,
+      "https://example.com/new",
+    );
+    expect(result.requests).toHaveLength(0);
+  });
+
+  it("does not fall back to a bookmark when a capture exceeds the message budget", async () => {
+    const result = await harness({
+      error: "This page is too large to save.",
+      error_code: "capture_too_large",
+    });
+    expect(result.requests).toHaveLength(0);
+    expect(result.response).toMatchObject({
+      accepted: false,
+      error: "This page is too large to save.",
+    });
+  });
+
+  it("rechecks the page after asset completion and before native persistence", async () => {
+    const result = await harness(
+      capturedPage(),
+      "https://example.com/page",
+      false,
+      "https://example.com/new",
+      2,
+    );
+    expect(result.requests).toHaveLength(0);
+    expect(result.sendMessage).toHaveBeenCalledWith(
+      42,
+      expect.objectContaining({ status: "error", detail: expect.stringContaining("page changed") }),
+      { frameId: 0 },
+    );
+  });
+
+  it("rejects oversized text before calling native messaging instead of saving a truncated page", async () => {
+    budget.maxBytes = 100;
+    const result = await harness(capturedPage());
+    expect(result.requests).toHaveLength(0);
+    expect(result.response).toMatchObject({
+      accepted: false,
+      error: "This page is too large to save completely.",
+    });
+  });
+
+  it("fits optional images in the final native envelope while retaining the complete text", async () => {
+    budget.maxBytes = 1_024;
+    const capture = capturedPage();
+    const url = "https://example.com/preview.png";
+    capture.images = [{ url, content_type: "image/png", data_base64: "A".repeat(2_000) }];
+    capture.preview_candidates = [url];
+    const result = await harness(capture);
+    expect(result.requests).toHaveLength(1);
+    expect(result.requests[0]).toMatchObject({ markdown: capture.markdown, images: [] });
+    expect(result.requests[0]).not.toHaveProperty("preview_url");
+    expect(result.response).toEqual({ accepted: true });
   });
 });
