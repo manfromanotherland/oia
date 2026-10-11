@@ -6,3 +6,4 @@ key.pem
 *.pem
 artifacts/
 unpacked/
+unpacked-firefox/

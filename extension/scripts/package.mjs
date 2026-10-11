@@ -1,13 +1,12 @@
-// Packages the built extension into a store-ready zip.
+// SPDX-License-Identifier: MIT
+// Packages the built extension for Chromium and Firefox.
 //
 // Run via `npm run package`, which builds first, then invokes this script. It
 // stages only what the manifest references — no src/, node_modules/, or signing
-// keys — into a stable unpacked/ directory for local browser loading and
-// artifacts/oia-extension-<version>.zip for store upload.
+// keys — into stable browser-specific unpacked directories and ZIP archives.
 //
-// The staged manifest drops the `key` field: it pins a stable extension ID for
-// local unpacked development, but the Chrome Web Store manages signing itself
-// and rejects any upload that carries `key`. The source manifest.json keeps it.
+// Chromium retains the source key only in the development directory. Firefox
+// uses a Manifest V3 event page and retains its native-messaging add-on ID.
 
 import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -41,45 +40,58 @@ if (missing.length > 0) {
   );
 }
 
-const manifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
-const { version } = manifest;
+const sourceManifest = JSON.parse(readFileSync(join(root, "manifest.json"), "utf8"));
+const { version } = sourceManifest;
 
 const outDir = join(root, "artifacts");
 mkdirSync(outDir, { recursive: true });
 
-// Keep one stable, clean path that Dia/Chrome can load once and retain across
-// rebuilds. Its manifest keeps `key`, which pins the development extension ID
-// expected by the native-host manifest.
-const unpackedDir = join(root, "unpacked");
-rmSync(unpackedDir, { recursive: true, force: true });
-mkdirSync(unpackedDir, { recursive: true });
-for (const entry of CONTENTS) {
-  cpSync(join(root, entry), join(unpackedDir, entry), { recursive: true });
+function stageRuntime(directory, manifest) {
+  rmSync(directory, { recursive: true, force: true });
+  mkdirSync(directory, { recursive: true });
+  for (const entry of CONTENTS) {
+    if (entry !== "manifest.json") {
+      cpSync(join(root, entry), join(directory, entry), { recursive: true });
+    }
+  }
+  writeFileSync(join(directory, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
 }
 
-// Stage the unpacked files so stores receive a manifest without `key` while
-// the local development copy retains its stable extension ID.
-const stageDir = join(outDir, "stage");
-rmSync(stageDir, { recursive: true, force: true });
-mkdirSync(stageDir, { recursive: true });
-for (const entry of CONTENTS) {
-  cpSync(join(unpackedDir, entry), join(stageDir, entry), { recursive: true });
+for (const browser of ["chrome", "firefox"]) {
+  const manifest = structuredClone(sourceManifest);
+  if (browser === "firefox") {
+    delete manifest.key;
+    delete manifest.minimum_chrome_version;
+    manifest.background = { scripts: ["dist/background.js"], persistent: false };
+  } else {
+    delete manifest.browser_specific_settings;
+    manifest.background = { service_worker: "dist/background.js" };
+  }
+
+  const unpackedDir = join(root, browser === "chrome" ? "unpacked" : "unpacked-firefox");
+  stageRuntime(unpackedDir, manifest);
+
+  const stageDir = join(outDir, `stage-${browser}`);
+  delete manifest.key;
+  stageRuntime(stageDir, manifest);
+  const outFile = join(outDir, `oia-extension-${browser}-${version}.zip`);
+  rmSync(outFile, { force: true });
+  try {
+    // Relative archive paths; no macOS attributes or Finder metadata.
+    execFileSync("zip", ["-r", "-X", "-q", outFile, ...CONTENTS, "-x", "*.DS_Store"], {
+      cwd: stageDir,
+      stdio: "inherit",
+    });
+  } finally {
+    rmSync(stageDir, { recursive: true, force: true });
+  }
+
+  console.log(`✓ ${browser} v${version} → ${unpackedDir}`);
+  console.log(`✓ Archive → ${outFile}`);
 }
 
-delete manifest.key; // rejected by the Chrome Web Store; only used for local dev
-writeFileSync(join(stageDir, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n");
-
-const outFile = join(outDir, `oia-extension-${version}.zip`);
-rmSync(outFile, { force: true }); // a stale zip would be merged into, not replaced
-
-// -r recurse, -X drop extra file attributes, -x skip cruft. Run from the stage
-// dir so paths inside the zip are relative to the manifest.
-execFileSync("zip", ["-r", "-X", outFile, ...CONTENTS, "-x", "*.DS_Store"], {
-  cwd: stageDir,
-  stdio: "inherit",
-});
-
-rmSync(stageDir, { recursive: true, force: true });
-
-console.log(`\n✓ Unpacked v${version} → ${unpackedDir}`);
-console.log(`✓ Packaged v${version} → ${outFile}`);
+// Keep the existing archive path as a Chromium alias for local release scripts.
+cpSync(
+  join(outDir, `oia-extension-chrome-${version}.zip`),
+  join(outDir, `oia-extension-${version}.zip`),
+);
