@@ -1,6 +1,6 @@
 # Save from iPhone with Shortcuts
 
-Use **Óia!** in the iOS share sheet to save images, videos, text, and
+Use **Óia!** in the iOS share sheet to save articles, images, videos, text, and
 links into the `inbox` folder inside your iCloud library. You do not need an iOS
 Óia app, a browser extension, an account, or a server.
 
@@ -37,34 +37,40 @@ already exists, because doing so would create a numbered copy. For a stale
 release, the agent removes the old canonical Shortcut and any numbered copies
 once, reruns the install, completes Apple's import UI, and leaves the final
 **Save File** destination pointing to your library’s `inbox`.
+Updates preserve the installed Shortcut's appearance. The generated release uses
+the user's red heart icon and colour, covered by a regression check.
 
 ## What is kept
 
 | Shared item | Saved content |
 |---|---|
-| Safari webpage | Page URL, page title, and selected text when Safari supplies it. Selected text uses the browser's highlight/quote rules on the Mac. With no selection, this becomes a URL-only capture. |
+| Safari webpage | Page URL, title, and supplied Page Contents as a hashed HTML payload. Rust converts the body into a local Markdown article. Selected text uses the browser's highlight/quote rules and can carry the same source body. |
+| Article | The sharing app's article URL, title and Body, captured as HTML for the shared Rust importer. |
 | Direct image URL | URLs whose path ends in a supported image extension download into a local image attachment. The shared URL is retained as the available source. |
 | Instagram post/reel | Queues the selected image or video for download on the Mac. `img_index` selects one carousel slide; no index means the first. |
-| Other URL | A URL-only capture. The Shortcut does not download the page. |
-| Plain or rich text | A quote, or a URL-only capture when the entire text is an HTTP(S) URL. Rich text is converted to plain text. |
+| Other URL | An article request. The Mac attempts bounded public-page extraction; unavailable or unsupported pages remain links. |
+| Plain or rich text | A quote, or an article request when the entire text is an HTTP(S) URL. Rich text is converted to plain text. |
 | Image or video | The file representation and display name supplied by the sharing app, with a checksum. |
 
 On the Mac, every URL-only capture passes through the Rust URL-save facade and
 metadata classifier. Recognized public sources, including supported tweets,
 become complete local articles with supported media saved locally. Books,
 movies, music and products receive supported category metadata, covers and
-prices. Other URLs remain lightweight links. The result is the same whether the
-sharing app supplies a URL, a Safari webpage or an entire URL as text.
+prices. Ordinary version-4 article requests then use supplied page contents, or
+attempt bounded public-page retrieval on the Mac when the sharing app supplies
+only a URL. Missing content, blocked retrieval, and pages without usable prose
+remain lightweight links. This does not change ordinary paste/drop URL saves in
+the Mac app.
 
-The Shortcut passes an explicit `capture_type` (`url`, `selection`, `text` or
-`media`) in the [version-3 Inbox manifest](inbox-format.md). This records what was
+The Shortcut passes an explicit `capture_type` (`article`, `selection`, `text` or
+`media`) in the [version-4 Inbox manifest](inbox-format.md). This records what was
 shared; it does not guess a book/movie category or preassign a highlight.
 Safari text with a page URL uses Rust's shared selection router: text enclosed
 in matching quotation marks becomes a quote; other passages become attached
 highlights. The browser can also report a quotation element, which Shortcuts
 does not supply. Text with no supplied page origin remains a standalone quote.
 Update the Mac app before installing this
-Shortcut. Older version-1 captures remain supported by the updated importer;
+Shortcut. Older version-1 and version-3 captures remain supported by the updated importer;
 Instagram requests retain their separate version-2 format.
 
 Every capture records its share time. Apps choose what they send to Shortcuts:
@@ -76,13 +82,13 @@ on the sharing device (including URLs with query parameters). Shortcuts may ask
 for permission to contact the image host. A failed request or non-image response
 stops capture instead of reporting a saved link. Extensionless image URLs remain
 links. Instagram post/reel URLs use the explicit Mac download queue described
-below. Safari's own **Page URL**, **Name**,
+below. Safari's own **Page URL**, **Name**, **Page Contents**,
 and **Page Selection** properties provide the available page context. Canonical
 URLs and site names are supported by the transport but are not extracted by this
 Shortcut.
 
 The type comparisons currently use Apple's English names: **Safari Web Page**,
-**URL**, **Text**, **Rich Text**, and **Image**. They were validated against the installed
+**Article**, **URL**, **Text**, **Rich Text**, and **Image**. They were validated against the installed
 English-language Shortcuts action registry. If your iPhone uses another language,
 check these If comparisons against that device's Get Type output before
 relying on capture. On-device share-sheet behavior is a separate manual check.
@@ -147,7 +153,11 @@ image, video, text, `.url`, and `.webloc` files can also be saved directly into
 
 Before relying on this workflow, share one of each:
 
-- A Safari page with no selected text: source URL and title should be retained.
+- A Safari article with no selected text: check that the saved Markdown contains
+  its body and retains the source URL and title. Repeat while offline when the
+  sharing app supplies Page Contents.
+- An ordinary article URL from another app: check the Mac's extracted body; an
+  unavailable page or navigation-only site should retain a link.
 - A book, movie, music or product URL: check the category and supported metadata
   after Mac import, including a cover or price when the source provides one.
 - A supported tweet URL: check the full text and available local photos.
@@ -155,7 +165,7 @@ Before relying on this workflow, share one of each:
   URL. Repeat the share to check highlight deduplication. Some share paths
   provide only plain text, in which case it remains a standalone quote.
 - Long-press a website image and share its direct `.jpg` URL: confirm the card
-  is an image and its local asset opens. An ordinary page URL should remain a link.
+  is an image and its local asset opens.
 - A photo, then a short video: open the imported local assets on the Mac.
 - Plain text containing quotes, line breaks, and emoji: check the saved text.
 - Several photos at once: confirm one archive and one card per item.

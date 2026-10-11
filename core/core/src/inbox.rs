@@ -40,6 +40,33 @@ const MAX_CAPTURE_BYTES: u64 = MAX_BROWSER_VIDEO_BYTES + 2 * MAX_MANIFEST_BYTES;
 const MAX_ARCHIVE_ENTRIES: usize = 128;
 
 type UrlSaver<'a> = dyn Fn(&LibraryRoot, UrlSaveRequest) -> Result<SaveOutcome> + 'a;
+struct FetchedArticle {
+    html: String,
+    url: String,
+}
+
+type ArticleFetcher<'a> = dyn Fn(&str) -> Result<FetchedArticle> + 'a;
+
+fn fetch_article_html(url: &str) -> Result<FetchedArticle> {
+    let (bytes, content_type, final_url) = crate::product::fetch_public_bytes(
+        url,
+        crate::article_html::MAX_ARTICLE_HTML_BYTES,
+        Duration::from_secs(8),
+    )?;
+    ensure!(
+        content_type.as_deref().is_none_or(|value| {
+            matches!(
+                value.split(';').next().unwrap_or("").trim(),
+                "text/html" | "application/xhtml+xml"
+            )
+        }),
+        "The shared URL did not return an HTML page."
+    );
+    Ok(FetchedArticle {
+        html: String::from_utf8(bytes).context("The shared article must use UTF-8 HTML.")?,
+        url: final_url,
+    })
+}
 
 fn save_inbox_url(library: &LibraryRoot, request: UrlSaveRequest) -> Result<SaveOutcome> {
     Ok(save_url(library, request)?)
@@ -104,6 +131,24 @@ fn process_inbox_with_savers_at(
     now: SystemTime,
     resolver: Option<&crate::instagram::Resolver<'_>>,
     url_saver: &UrlSaver<'_>,
+) -> Result<InboxReport> {
+    process_inbox_with_fetchers_at(
+        library,
+        deferred_names,
+        now,
+        resolver,
+        url_saver,
+        &fetch_article_html,
+    )
+}
+
+fn process_inbox_with_fetchers_at(
+    library: &LibraryRoot,
+    deferred_names: &[String],
+    now: SystemTime,
+    resolver: Option<&crate::instagram::Resolver<'_>>,
+    url_saver: &UrlSaver<'_>,
+    article_fetcher: &ArticleFetcher<'_>,
 ) -> Result<InboxReport> {
     let inbox = library.inbox_dir();
     match fs::symlink_metadata(&inbox) {
@@ -173,6 +218,7 @@ fn process_inbox_with_savers_at(
                 &mut outcomes,
                 resolver,
                 url_saver,
+                article_fetcher,
             )
         } else {
             import_payload(
@@ -493,6 +539,7 @@ struct Manifest {
     origin: Origin,
     text: Option<String>,
     instagram_url: Option<String>,
+    article: Option<ArticlePayload>,
     #[serde(default)]
     attachments: Vec<Attachment>,
 }
@@ -505,15 +552,37 @@ enum CaptureType {
     Selection,
     Text,
     Media,
+    Article,
+}
+
+#[derive(Deserialize)]
+struct ArticlePayload {
+    #[serde(flatten)]
+    attachment: Attachment,
+    format: ArticleFormat,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum ArticleFormat {
+    Html,
 }
 
 fn validate_capture_type(manifest: &Manifest, origin_url: Option<&str>) -> Result<()> {
-    if manifest.version != 3 {
+    if manifest.version < 3 {
+        ensure!(
+            manifest.article.is_none(),
+            "Article content requires capture version 4."
+        );
         return Ok(());
     }
+    ensure!(
+        manifest.version == 4 || manifest.article.is_none(),
+        "Article content requires capture version 4."
+    );
     let capture_type = manifest
         .capture_type
-        .context("Capture version 3 requires a capture_type.")?;
+        .context("Typed captures require a capture_type.")?;
     let text = manifest.text.as_deref().map(str::trim).unwrap_or("");
     ensure!(
         text.len() as u64 <= MAX_SMALL_BYTES,
@@ -523,7 +592,8 @@ fn validate_capture_type(manifest: &Manifest, origin_url: Option<&str>) -> Resul
         CaptureType::Url => {
             let text_url = (!text.is_empty()).then(|| http_url(text)).transpose()?;
             ensure!(
-                manifest.attachments.is_empty()
+                manifest.article.is_none()
+                    && manifest.attachments.is_empty()
                     && (origin_url.is_some() || text_url.is_some())
                     && text_url
                         .as_deref()
@@ -535,17 +605,33 @@ fn validate_capture_type(manifest: &Manifest, origin_url: Option<&str>) -> Resul
             origin_url.is_some()
                 && !text.is_empty()
                 && text.len() <= crate::MAX_SELECTION_TEXT_BYTES
-                && manifest.attachments.is_empty(),
+                && (manifest.attachments.is_empty()
+                    || (manifest.version == 4 && manifest.article.is_some())),
             "A selection capture requires a source URL and 1–65536 bytes of selected text."
         ),
         CaptureType::Text => ensure!(
-            origin_url.is_none() && !text.is_empty() && manifest.attachments.is_empty(),
+            origin_url.is_none()
+                && !text.is_empty()
+                && manifest.attachments.is_empty()
+                && manifest.article.is_none(),
             "A text capture requires source-less text and no attachments."
         ),
         CaptureType::Media => ensure!(
-            !manifest.attachments.is_empty() && text.is_empty(),
+            !manifest.attachments.is_empty() && text.is_empty() && manifest.article.is_none(),
             "A media capture requires attachments and no additional text."
         ),
+        CaptureType::Article => {
+            let text_url = (!text.is_empty()).then(|| http_url(text)).transpose()?;
+            ensure!(
+                manifest.version == 4
+                    && (origin_url.is_some() || text_url.is_some())
+                    && text_url
+                        .as_deref()
+                        .is_none_or(|url| origin_url.is_none_or(|origin| origin == url))
+                    && (manifest.attachments.is_empty() || manifest.article.is_some()),
+                "An article capture requires one source URL and optional HTML content."
+            );
+        }
     }
     Ok(())
 }
@@ -555,6 +641,8 @@ struct Attachment {
     path: String,
     byte_count: Option<u64>,
     sha256: Option<String>,
+    source_url: Option<String>,
+    content_type: Option<String>,
 }
 
 fn safe_archive_name(name: &str) -> bool {
@@ -569,12 +657,51 @@ fn safe_archive_name(name: &str) -> bool {
         && !name.contains(':')
 }
 
+fn extract_capture_attachment<R: Read + Seek>(
+    archive: &mut zip::ZipArchive<R>,
+    attachment: &Attachment,
+    limit: u64,
+    referenced: &mut HashSet<String>,
+) -> Result<NamedTempFile> {
+    ensure!(
+        safe_archive_name(&attachment.path)
+            && attachment.path != "manifest.json"
+            && referenced.insert(attachment.path.clone()),
+        "The capture attachment path is invalid."
+    );
+    let mut entry = archive
+        .by_name(&attachment.path)
+        .context("A capture attachment is missing.")?;
+    ensure!(!entry.is_dir(), "A capture attachment is not a file.");
+    let expected = entry.size();
+    ensure!(
+        expected <= limit,
+        "A capture attachment exceeds its supported size limit."
+    );
+    let mut file = NamedTempFile::new()?;
+    let (actual, hash) = copy_hashed(&mut entry, &mut file, limit)?;
+    ensure!(
+        actual == expected && attachment.byte_count.is_none_or(|size| size == actual),
+        "A capture attachment has an unexpected size."
+    );
+    ensure!(
+        attachment
+            .sha256
+            .as_ref()
+            .is_none_or(|expected| expected.eq_ignore_ascii_case(&hash)),
+        "A capture attachment has an unexpected checksum."
+    );
+    file.flush()?;
+    Ok(file)
+}
+
 fn import_capture(
     library: &LibraryRoot,
     snapshot: &mut NamedTempFile,
     outcomes: &mut Vec<SaveOutcome>,
     resolver: Option<&crate::instagram::Resolver<'_>>,
     url_saver: &UrlSaver<'_>,
+    article_fetcher: &ArticleFetcher<'_>,
 ) -> Result<()> {
     snapshot.rewind()?;
     let mut archive =
@@ -629,7 +756,7 @@ fn import_capture(
         serde_json::from_slice(&bytes).context("The capture manifest is invalid.")?
     };
     ensure!(
-        matches!(manifest.version, 1..=3),
+        matches!(manifest.version, 1..=4),
         "This capture format is not supported."
     );
     ensure!(
@@ -653,7 +780,10 @@ fn import_capture(
     );
     if manifest.version == 2 {
         ensure!(
-            names.len() == 1 && manifest.attachments.is_empty() && manifest.text.is_none(),
+            names.len() == 1
+                && manifest.attachments.is_empty()
+                && manifest.text.is_none()
+                && manifest.article.is_none(),
             "Instagram requests cannot contain other payloads."
         );
         let request = crate::instagram::InstagramRequest::parse(
@@ -702,35 +832,41 @@ fn import_capture(
     );
     let mut attachments = Vec::new();
     let mut referenced = HashSet::new();
+    let article_html = if let Some(article) = &manifest.article {
+        let file = extract_capture_attachment(
+            &mut archive,
+            &article.attachment,
+            crate::article_html::MAX_ARTICLE_HTML_BYTES as u64,
+            &mut referenced,
+        )?;
+        match article.format {
+            ArticleFormat::Html => {
+                Some(fs::read_to_string(file.path()).context("The article HTML must use UTF-8.")?)
+            }
+        }
+    } else {
+        None
+    };
     // Validate and extract every payload to private, generated filenames before
     // importing anything. ZIP paths are never passed to filesystem writes.
+    let mut attachment_bytes = 0_u64;
     for attachment in &manifest.attachments {
-        ensure!(
-            safe_archive_name(&attachment.path)
-                && attachment.path != "manifest.json"
-                && referenced.insert(attachment.path.clone()),
-            "The capture attachment path is invalid."
-        );
-        let mut entry = archive
-            .by_name(&attachment.path)
-            .context("A capture attachment is missing.")?;
-        ensure!(!entry.is_dir(), "A capture attachment is not a file.");
-        let expected = entry.size();
-        let mut file = NamedTempFile::new()?;
-        let (actual, hash) = copy_hashed(&mut entry, &mut file, MAX_BROWSER_VIDEO_BYTES)?;
-        ensure!(
-            actual == expected && attachment.byte_count.is_none_or(|size| size == actual),
-            "A capture attachment has an unexpected size."
-        );
-        ensure!(
-            attachment
-                .sha256
-                .as_ref()
-                .is_none_or(|expected| expected.eq_ignore_ascii_case(&hash)),
-            "A capture attachment has an unexpected checksum."
-        );
-        file.flush()?;
-        attachments.push((file, attachment.path.as_str()));
+        let limit = if manifest.article.is_some() {
+            MAX_SMALL_BYTES.saturating_sub(attachment_bytes)
+        } else {
+            MAX_BROWSER_VIDEO_BYTES
+        };
+        let file = extract_capture_attachment(&mut archive, attachment, limit, &mut referenced)?;
+        if manifest.article.is_some() {
+            attachment_bytes = attachment_bytes
+                .checked_add(file.as_file().metadata()?.len())
+                .context("Invalid article image size.")?;
+            ensure!(
+                attachment_bytes <= MAX_SMALL_BYTES,
+                "Article images exceed 40 MiB."
+            );
+        }
+        attachments.push((file, attachment));
     }
     // Unreferenced regular data is rejected rather than silently discarded when
     // the archive is removed after success (harmless directory entries are OK).
@@ -749,11 +885,123 @@ fn import_capture(
             || origin_url.is_some(),
         "The capture contains no supported content."
     );
-    for (file, name) in attachments {
+    if manifest.version == 4
+        && matches!(
+            manifest.capture_type,
+            Some(CaptureType::Article | CaptureType::Selection)
+        )
+    {
+        let url = origin_url
+            .or_else(|| {
+                manifest
+                    .text
+                    .as_deref()
+                    .and_then(|text| http_url(text).ok())
+            })
+            .context("The article capture has no source URL.")?;
+        let mut images = Vec::new();
+        let mut image_bytes = 0_u64;
+        for (file, attachment) in &attachments {
+            let source = attachment
+                .source_url
+                .as_deref()
+                .context("An article image requires its source_url.")?;
+            let source = url::Url::parse(&url)?.join(source)?;
+            ensure!(
+                matches!(source.scheme(), "http" | "https"),
+                "An article image source must be an HTTP(S) URL."
+            );
+            let bytes = fs::read(file.path())?;
+            image_bytes = image_bytes
+                .checked_add(bytes.len() as u64)
+                .context("Invalid article image size.")?;
+            ensure!(
+                image_bytes <= MAX_SMALL_BYTES,
+                "Article images exceed 40 MiB."
+            );
+            let actual_type =
+                image_type(&bytes).context("An article image is unsupported or incomplete.")?;
+            ensure!(
+                attachment
+                    .content_type
+                    .as_deref()
+                    .is_none_or(|expected| expected.split(';').next() == Some(actual_type)),
+                "An article image has an unexpected content type."
+            );
+            images.push(crate::ImageBytes {
+                url: source.to_string(),
+                content_type: actual_type.into(),
+                bytes,
+            });
+        }
+        // Decode and validate the entire payload before any library mutation.
+        let article = article_html
+            .as_deref()
+            .map(|html| crate::article_html::parse_article_html(html, &url))
+            .transpose()?;
+        if manifest.capture_type == Some(CaptureType::Selection) {
+            let text = manifest
+                .text
+                .as_deref()
+                .context("The selection has no text.")?;
+            if selection_kind(text, None) == SelectionKind::Quote {
+                outcomes.push(import_text_capture(
+                    library,
+                    text,
+                    &manifest.origin,
+                    Some(&saved_at),
+                    Some(CaptureType::Selection),
+                    url_saver,
+                )?);
+            } else {
+                let outcome = import_article_capture(
+                    library,
+                    &url,
+                    &manifest.origin,
+                    &saved_at,
+                    ArticleContent {
+                        html: article,
+                        images,
+                    },
+                    url_saver,
+                    article_fetcher,
+                )?;
+                let origin = Origin {
+                    url: Some(crate::read_metadata(&library.article_path(&outcome.id))?.url),
+                    title: manifest.origin.title.clone(),
+                    canonical_url: manifest.origin.canonical_url.clone(),
+                    site_name: manifest.origin.site_name.clone(),
+                };
+                outcomes.push(import_text_capture(
+                    library,
+                    text,
+                    &origin,
+                    Some(&saved_at),
+                    Some(CaptureType::Selection),
+                    url_saver,
+                )?);
+            }
+        } else {
+            outcomes.push(import_article_capture(
+                library,
+                &url,
+                &manifest.origin,
+                &saved_at,
+                ArticleContent {
+                    html: article,
+                    images,
+                },
+                url_saver,
+                article_fetcher,
+            )?);
+        }
+        return Ok(());
+    }
+    for (file, attachment) in attachments {
         outcomes.push(import_payload(
             library,
             file.path(),
-            name,
+            &attachment.path,
             &manifest.origin,
             Some(&saved_at),
             url_saver,
@@ -769,7 +1017,7 @@ fn import_capture(
             text,
             &manifest.origin,
             Some(&saved_at),
-            (manifest.version == 3)
+            (manifest.version >= 3)
                 .then_some(manifest.capture_type)
                 .flatten(),
             url_saver,
@@ -780,7 +1028,7 @@ fn import_capture(
             "",
             &manifest.origin,
             Some(&saved_at),
-            (manifest.version == 3)
+            (manifest.version >= 3)
                 .then_some(manifest.capture_type)
                 .flatten(),
             url_saver,
@@ -961,6 +1209,258 @@ fn import_payload(
     Ok(outcome)
 }
 
+fn article_kind(article: &crate::article_html::ArticleHtml) -> crate::PageCaptureKind {
+    crate::classify_page_capture(
+        &article.page_url,
+        &article.structured_html,
+        &article.markdown,
+        Some(&article.evidence),
+    )
+}
+
+struct ArticleContent {
+    html: Option<crate::article_html::ArticleHtml>,
+    images: Vec<crate::ImageBytes>,
+}
+
+fn source_retrieval_failure(error: &anyhow::Error) -> bool {
+    matches!(
+        error.downcast_ref::<crate::SaveUrlError>(),
+        Some(
+            crate::SaveUrlError::Retrieval(_)
+                | crate::SaveUrlError::Save(crate::SaveError::InvalidRequest(_))
+        )
+    )
+}
+
+fn validate_article_images(images: &[crate::ImageBytes]) -> Result<()> {
+    let total: usize = images.iter().map(|image| image.bytes.len()).sum();
+    ensure!(
+        total <= MAX_SMALL_BYTES as usize,
+        "Article images exceed 40 MiB."
+    );
+    let mut sources = std::collections::HashMap::new();
+    for image in images {
+        let hash = crate::sha256_hex(&image.bytes);
+        ensure!(
+            sources
+                .insert(&image.url, hash.clone())
+                .is_none_or(|previous| previous == hash),
+            "An article image source has conflicting contents."
+        );
+    }
+    Ok(())
+}
+
+/// A version-4 article intent may include live HTML or ask for a bounded public
+/// retrieval. Earlier URL ingress remains the shared lightweight URL save.
+fn import_article_capture(
+    library: &LibraryRoot,
+    url: &str,
+    origin: &Origin,
+    saved_at: &str,
+    content: ArticleContent,
+    url_saver: &UrlSaver<'_>,
+    article_fetcher: &ArticleFetcher<'_>,
+) -> Result<SaveOutcome> {
+    let ArticleContent {
+        html: mut article,
+        mut images,
+    } = content;
+    if let Some(article) = &article {
+        let detected = crate::parse_link_metadata(&article.structured_html, &article.page_url);
+        ensure!(
+            images.iter().all(|image| {
+                article.markdown.contains(&image.url)
+                    || detected
+                        .as_ref()
+                        .and_then(|metadata| metadata.image_url.as_deref())
+                        == Some(image.url.as_str())
+            }),
+            "An article contains an unrelated image attachment."
+        );
+    }
+    if let Some(article) = &mut article {
+        images.append(&mut article.images);
+    }
+    validate_article_images(&images)?;
+    let resolved = match url_saver(library, origin_url_request(origin, url, saved_at)) {
+        Ok(outcome) => {
+            verify_saved(library, &outcome, SavedContent::Link)?;
+            let metadata = crate::read_metadata(&library.article_path(&outcome.id))?;
+            // Existing complete captures and source-specific adapters own their
+            // reading. A later iPhone snapshot never replaces those bodies.
+            if !metadata.lightweight || metadata.source_profile.is_some() {
+                return Ok(outcome);
+            }
+            if article.is_none() && (metadata.link_category.is_some() || metadata.product.is_some())
+            {
+                return Ok(outcome);
+            }
+            Some(outcome)
+        }
+        Err(error)
+            if source_retrieval_failure(&error)
+                && article.as_ref().is_some_and(|article| {
+                    article_kind(article) == crate::PageCaptureKind::Article
+                }) =>
+        {
+            None
+        }
+        Err(error) => return Err(error),
+    };
+    if article
+        .as_ref()
+        .is_none_or(|value| value.markdown.trim().is_empty())
+    {
+        // Fetch failure and weak extraction are ordinary fallbacks. The URL
+        // reading already exists, so the share stays useful while offline.
+        article = article_fetcher(url)
+            .ok()
+            .and_then(|page| crate::article_html::parse_article_html(&page.html, &page.url).ok());
+    }
+    let Some(mut article) = article else {
+        return resolved.context("No complete article could be captured.");
+    };
+    images.append(&mut article.images);
+    validate_article_images(&images)?;
+    let stored = resolved
+        .as_ref()
+        .map(|outcome| crate::read_metadata(&library.article_path(&outcome.id)))
+        .transpose()?;
+    let target_url = stored
+        .as_ref()
+        .map(|metadata| metadata.url.clone())
+        .unwrap_or_else(|| url.to_string());
+    let full = article_kind(&article) == crate::PageCaptureKind::Article
+        && stored
+            .as_ref()
+            .is_none_or(|metadata| metadata.link_category.is_none() && metadata.product.is_none());
+    let detected = crate::parse_link_metadata(&article.structured_html, &article.page_url);
+    let category = detected
+        .as_ref()
+        .map(|metadata| metadata.category)
+        .or_else(|| {
+            stored
+                .as_ref()
+                .and_then(|metadata| metadata.link_category.as_deref())
+                .and_then(crate::LinkCategory::parse)
+        });
+    let product = crate::parse_product_metadata(&article.structured_html, &article.page_url)
+        .or_else(|| {
+            stored
+                .as_ref()
+                .and_then(|metadata| metadata.product.clone())
+        });
+    let title = detected
+        .as_ref()
+        .and_then(|metadata| metadata.title.clone())
+        .or_else(|| origin.title.clone())
+        .or(article.title)
+        .unwrap_or_else(|| target_url.clone());
+    let canonical_url = origin
+        .canonical_url
+        .as_deref()
+        .and_then(|url| http_url(url).ok())
+        .or(article.canonical_url)
+        .unwrap_or_else(|| target_url.clone());
+    let site = origin
+        .site_name
+        .clone()
+        .or(article.site)
+        .or_else(|| origin.site(&target_url));
+    let preview_url = detected
+        .as_ref()
+        .and_then(|metadata| metadata.image_url.clone())
+        .filter(|url| images.iter().any(|image| &image.url == url))
+        .or_else(|| images.first().map(|image| image.url.clone()));
+    let markdown = if full {
+        article.markdown
+    } else {
+        format!("[Open link](<{target_url}>)")
+    };
+    let outcome = if full {
+        import_reading(
+            library,
+            SaveInput {
+                quote_identity_markdown: None,
+                kind: ReadingKind::Article,
+                lightweight: false,
+                url: target_url.clone(),
+                media_url: None,
+                canonical_url,
+                title,
+                author: None,
+                site,
+                saved_at: saved_at.into(),
+                markdown: markdown.clone(),
+                images: images
+                    .iter()
+                    .map(|image| crate::ImageBytes {
+                        url: image.url.clone(),
+                        content_type: image.content_type.clone(),
+                        bytes: image.bytes.clone(),
+                    })
+                    .collect(),
+                preview_url,
+                favicon_url: None,
+                theme_color: None,
+                product,
+                link_category: category,
+                excerpt: None,
+                word_count: Some(markdown.split_whitespace().count().min(u32::MAX as usize) as u32),
+                lang: None,
+            },
+            ImportedReadingState::default(),
+        )?
+    } else {
+        let Some(resolved) = resolved else {
+            bail!("No complete article could be captured.");
+        };
+        let input = crate::SaveLinkInput {
+            url: target_url.clone(),
+            canonical_url,
+            title,
+            author: None,
+            site,
+            saved_at: saved_at.into(),
+            images: images
+                .iter()
+                .map(|image| crate::ImageBytes {
+                    url: image.url.clone(),
+                    content_type: image.content_type.clone(),
+                    bytes: image.bytes.clone(),
+                })
+                .collect(),
+            preview_url,
+            favicon_url: None,
+            theme_color: None,
+            product,
+            link_category: category,
+            excerpt: None,
+            lang: None,
+        };
+        let snapshot = fs::read(library.article_path(&resolved.id))?;
+        crate::import_link_capture_if_unchanged(
+            library,
+            input,
+            ImportedReadingState::default(),
+            &crate::sha256_hex(&snapshot),
+        )?
+    };
+    verify_saved(
+        library,
+        &outcome,
+        SavedContent::Page {
+            url: &target_url,
+            markdown: &markdown,
+            images: &images,
+            full,
+        },
+    )?;
+    Ok(outcome)
+}
+
 fn import_text_capture(
     library: &LibraryRoot,
     text: &str,
@@ -1093,7 +1593,7 @@ fn http_url(value: &str) -> Result<String> {
     crate::normalize_url(value)
 }
 
-fn image_type(bytes: &[u8]) -> Option<&'static str> {
+pub(crate) fn image_type(bytes: &[u8]) -> Option<&'static str> {
     let content_type =
         if bytes.starts_with(b"\x89PNG\r\n\x1a\n") && bytes.ends_with(b"\0\0\0\0IEND\xaeB`\x82") {
             "image/png"
@@ -1160,7 +1660,16 @@ fn complete_iso_boxes(reader: &mut (impl Read + Seek)) -> Result<bool> {
 enum SavedContent<'a> {
     MediaHash(&'a str),
     QuoteText(&'a str),
-    Highlight { text: &'a str, url: &'a str },
+    Highlight {
+        text: &'a str,
+        url: &'a str,
+    },
+    Page {
+        url: &'a str,
+        markdown: &'a str,
+        images: &'a [crate::ImageBytes],
+        full: bool,
+    },
     Link,
 }
 
@@ -1258,6 +1767,48 @@ fn verify_saved(
             copy_hashed(&mut sidecar, &mut io::sink(), MAX_SMALL_BYTES)?;
             sidecar.sync_all()?;
         }
+        SavedContent::Page {
+            url,
+            markdown,
+            images,
+            full,
+        } => {
+            ensure!(reading.metadata.kind == ReadingKind::Article
+                && reading.metadata.url == url
+                && crate::url_id(url).is_ok_and(|id| id == outcome.id)
+                && (!full || !reading.metadata.lightweight),
+                "The saved article has an unexpected source or incomplete body. The Inbox copy was kept.");
+            // Full duplicates can contain user-edited text. The existing full
+            // reading is authoritative, matching an extension article re-save.
+            if outcome.disposition != SaveDisposition::Duplicate {
+                let mut expected = markdown.to_string();
+                for image in images {
+                    let hash = crate::sha256_hex(&image.bytes);
+                    let filename = format!(
+                        "{hash}.{}",
+                        crate::images::image_extension(&image.content_type, &image.url)
+                    );
+                    expected = crate::images::rewrite_markdown_image_destinations(
+                        &expected,
+                        &image.url,
+                        &format!("assets/{filename}"),
+                    );
+                    let mut asset =
+                        open_regular_file(&library.assets_dir(&outcome.id).join(&filename))?;
+                    let (_, actual) = copy_hashed(&mut asset, &mut io::sink(), MAX_SMALL_BYTES)?;
+                    ensure!(
+                        actual == hash,
+                        "The saved article image is incomplete. The Inbox copy was kept."
+                    );
+                    asset.sync_all()?;
+                }
+                ensure!(
+                    reading.body.trim_end_matches(['\r', '\n'])
+                        == expected.trim_end_matches(['\r', '\n']),
+                    "The saved article has different or incomplete text. The Inbox copy was kept."
+                );
+            }
+        }
         SavedContent::MediaHash(hash) => {
             let valid_identity = if reading.metadata.kind == ReadingKind::Video
                 && reading.metadata.url == format!("cuttings://local/video/{hash}")
@@ -1350,14 +1901,19 @@ mod tests {
     }
 
     fn process(library: &LibraryRoot) -> InboxReport {
-        process_inbox_with_savers_at(
+        process_inbox_with_fetchers_at(
             library,
             &[],
             SystemTime::now() + Duration::from_secs(60),
             None,
             &save_offline_url,
+            &unavailable_article,
         )
         .unwrap()
+    }
+
+    fn unavailable_article(_: &str) -> Result<FetchedArticle> {
+        bail!("fixture article retrieval unavailable")
     }
 
     fn save_offline_url(library: &LibraryRoot, request: UrlSaveRequest) -> Result<SaveOutcome> {
@@ -1448,6 +2004,350 @@ mod tests {
     fn instagram_manifest() -> serde_json::Value {
         json!({"version": 2, "capture_id": "instagram-test", "captured_at": "2026-09-22T12:00:00Z",
             "instagram_url": "https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2&stkn=tracking"})
+    }
+
+    fn article_manifest(html: &str) -> serde_json::Value {
+        json!({"version":4, "capture_id":"article-test", "captured_at":"2026-10-11T12:00:00Z",
+            "capture_type":"article", "origin":{"url":"https://example.com/article", "title":"Shared article"},
+            "article":{"path":"article.html", "format":"html", "byte_count":html.len(), "sha256":crate::sha256_hex(html.as_bytes())}})
+    }
+
+    fn process_articles(library: &LibraryRoot, fetcher: &ArticleFetcher<'_>) -> InboxReport {
+        process_inbox_with_fetchers_at(
+            library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &save_offline_url,
+            fetcher,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn article_html_upgrades_url_identity_with_local_images_and_existing_state() {
+        let (_temp, library) = library();
+        let url = "https://example.com/article";
+        let saved = import_text_capture(
+            &library,
+            "Earlier passage",
+            &Origin {
+                url: Some(url.into()),
+                ..Origin::default()
+            },
+            None,
+            Some(CaptureType::Selection),
+            &save_offline_url,
+        )
+        .unwrap();
+        let path = library.article_path(&saved.id);
+        let mut before = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+        before.metadata.tags = vec!["kept".into()];
+        before.metadata.favorite = true;
+        fs::write(&path, crate::render_reading(&before).unwrap()).unwrap();
+        let html = "<meta property='og:type' content='article'><main><h1>Heading</h1><p>Full captured article body with <strong>important words</strong>.</p><img src='/image.png' alt='Artwork'></main>";
+        let bytes = png();
+        let mut manifest = article_manifest(html);
+        manifest["attachments"] = json!([{"path":"image.png", "source_url":"/image.png", "content_type":"image/png", "byte_count":bytes.len(), "sha256":crate::sha256_hex(&bytes)}]);
+        let archive_path = archive(
+            &library,
+            &manifest,
+            &[("article.html", html.as_bytes()), ("image.png", &bytes)],
+        );
+        let fetcher = |_: &str| -> Result<FetchedArticle> {
+            panic!("Transported article must not be fetched again")
+        };
+        let report = process_articles(&library, &fetcher);
+        assert_eq!(report.saved, 1, "{report:?}");
+        assert!(!archive_path.exists());
+        let reading = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(reading.metadata.id, crate::url_id(url).unwrap());
+        assert!(!reading.metadata.lightweight);
+        assert!(reading.body.contains("**important words**"));
+        let asset = format!("assets/{}.png", crate::sha256_hex(&bytes));
+        assert!(reading.body.contains(&asset));
+        assert_eq!(
+            fs::read(library.reading_dir(&saved.id).join(asset)).unwrap(),
+            bytes
+        );
+        assert_eq!(reading.metadata.tags, before.metadata.tags);
+        assert_eq!(reading.metadata.favorite, before.metadata.favorite);
+        assert_eq!(reading.metadata.saved_at, before.metadata.saved_at);
+        assert_eq!(
+            reading.metadata.featured_highlight_id,
+            before.metadata.featured_highlight_id
+        );
+        assert_eq!(
+            crate::list_highlights(&library, &saved.id).unwrap()[0].text,
+            "Earlier passage"
+        );
+
+        let changed_html = "<meta property='og:type' content='article'><article><p>A different resave body.</p></article>";
+        let manifest = article_manifest(changed_html);
+        let archive_path = archive(
+            &library,
+            &manifest,
+            &[("article.html", changed_html.as_bytes())],
+        );
+        let report = process_articles(&library, &fetcher);
+        assert_eq!(report.duplicates, 1, "{report:?}");
+        assert!(!archive_path.exists());
+        assert_eq!(
+            fs::read_to_string(path).unwrap(),
+            crate::render_reading(&reading).unwrap()
+        );
+    }
+
+    #[test]
+    fn article_intent_without_payload_fetches_prose_for_origin_and_text_urls() {
+        for text_url in [false, true] {
+            let (_temp, library) = library();
+            let mut manifest = article_manifest("");
+            manifest.as_object_mut().unwrap().remove("article");
+            if text_url {
+                manifest.as_object_mut().unwrap().remove("origin");
+                manifest["text"] = json!("https://example.com/article");
+            }
+            let path = archive(&library, &manifest, &[]);
+            let calls = std::cell::Cell::new(0);
+            let fetcher = |url: &str| {
+                assert_eq!(url, "https://example.com/article");
+                calls.set(calls.get() + 1);
+                Ok(FetchedArticle {
+                    html: format!(
+                        "<main><p>{}</p><p>{}</p></main>",
+                        "Useful article prose. ".repeat(20),
+                        "More meaningful context. ".repeat(20)
+                    ),
+                    url: url.to_string(),
+                })
+            };
+            let report = process_articles(&library, &fetcher);
+            assert_eq!(report.saved, 1, "{report:?}");
+            assert!(!path.exists());
+            assert_eq!(calls.get(), 1);
+            assert!(!readings(&library)[0].metadata.lightweight);
+            assert!(readings(&library)[0].body.contains("Useful article prose."));
+        }
+    }
+
+    #[test]
+    fn redirected_article_resolves_relative_destinations_at_final_page_but_keeps_visited_identity()
+    {
+        let (_temp, library) = library();
+        let mut manifest = article_manifest("");
+        manifest.as_object_mut().unwrap().remove("article");
+        manifest["origin"]["url"] = json!("https://example.com/redirect");
+        archive(&library, &manifest, &[]);
+        let fetcher = |_: &str| {
+            Ok(FetchedArticle {
+            url: "https://publisher.example/stories/final".into(),
+            html: "<meta property='og:type' content='article'><meta property='og:url' content='https://publisher.example/stories/final'><link rel='canonical' href='final-canonical'><main><p>Full captured prose with <a href='related'>a relative link</a>.</p><img src='image.png' alt='Page image'></main>".into(),
+        })
+        };
+        let report = process_articles(&library, &fetcher);
+        assert_eq!(report.saved, 1, "{report:?}");
+        let reading = readings(&library).pop().unwrap();
+        assert_eq!(
+            reading.metadata.id,
+            crate::url_id("https://example.com/redirect").unwrap()
+        );
+        assert_eq!(reading.metadata.url, "https://example.com/redirect");
+        assert_eq!(
+            reading.metadata.canonical_url,
+            "https://publisher.example/stories/final-canonical"
+        );
+        assert!(reading
+            .body
+            .contains("https://publisher.example/stories/related"));
+        assert!(reading
+            .body
+            .contains("https://publisher.example/stories/image.png"));
+        assert!(!reading.metadata.lightweight);
+    }
+
+    #[test]
+    fn declared_article_attachment_size_is_rejected_before_extraction() {
+        let (_temp, library) = library();
+        let manifest = manifest();
+        let path = archive(&library, &manifest, &[("image.png", b"oversized fixture")]);
+        let mut archive = zip::ZipArchive::new(File::open(path).unwrap()).unwrap();
+        let attachment = Attachment {
+            path: "image.png".into(),
+            byte_count: None,
+            sha256: None,
+            source_url: None,
+            content_type: None,
+        };
+        assert!(
+            extract_capture_attachment(&mut archive, &attachment, 4, &mut HashSet::new()).is_err()
+        );
+    }
+
+    #[test]
+    fn unavailable_or_weak_article_extraction_keeps_a_useful_link() {
+        for html in [
+            None,
+            Some("<main><p>Homepage labels</p><a href='/one'>One</a></main>"),
+        ] {
+            let (_temp, library) = library();
+            let mut manifest = article_manifest("");
+            manifest.as_object_mut().unwrap().remove("article");
+            let path = archive(&library, &manifest, &[]);
+            let fetcher = |url: &str| {
+                html.map(|html| FetchedArticle {
+                    html: html.into(),
+                    url: url.into(),
+                })
+                .context("fixture offline")
+            };
+            let report = process_articles(&library, &fetcher);
+            assert_eq!(report.saved, 1, "{report:?}");
+            assert!(!path.exists());
+            let reading = readings(&library).pop().unwrap();
+            assert!(reading.metadata.lightweight);
+            assert_eq!(reading.body, "[Open link](<https://example.com/article>)\n");
+        }
+    }
+
+    #[test]
+    fn inline_data_image_is_local_and_uncaptured_remote_image_is_a_placeholder() {
+        use base64::Engine as _;
+        let (_temp, library) = library();
+        let bytes = png();
+        let html = format!("<meta property='og:type' content='article'><article><p>Captured story.</p><img src='data:image/png;base64,{}' alt='Embedded'><img src='/unavailable.png' alt='Missing image'></article>", base64::engine::general_purpose::STANDARD.encode(&bytes));
+        let manifest = article_manifest(&html);
+        archive(&library, &manifest, &[("article.html", html.as_bytes())]);
+        let report = process_articles(&library, &unavailable_article);
+        assert_eq!(report.saved, 1, "{report:?}");
+        let reading = readings(&library).pop().unwrap();
+        assert!(!reading.body.contains("data:image"));
+        assert!(reading
+            .body
+            .contains(&format!("assets/{}.png", crate::sha256_hex(&bytes))));
+        assert!(reading
+            .body
+            .contains("![Missing image](<https://example.com/unavailable.png>)"));
+    }
+
+    #[test]
+    fn article_selection_keeps_catalog_kind_and_quotes_skip_optional_retrieval() {
+        for quote in [false, true] {
+            let (_temp, library) = library();
+            let html = format!("<script type='application/ld+json'>{{\"@type\":\"Movie\",\"name\":\"Movie title\",\"url\":\"https://example.com/article\"}}</script><main><p>{}</p><p>{}</p></main>", "Catalog description. ".repeat(20), "More catalog prose. ".repeat(20));
+            let mut manifest = article_manifest(&html);
+            manifest["capture_type"] = json!("selection");
+            manifest["text"] = json!(if quote {
+                "“Quoted passage”"
+            } else {
+                "Highlighted passage"
+            });
+            let path = archive(&library, &manifest, &[("article.html", html.as_bytes())]);
+            let saver = |library: &LibraryRoot, request: UrlSaveRequest| {
+                assert!(!quote, "Quote must remain offline");
+                save_offline_url(library, request)
+            };
+            let fetcher = |_: &str| -> Result<FetchedArticle> {
+                panic!("Supplied selection body must not be fetched")
+            };
+            let report = process_inbox_with_fetchers_at(
+                &library,
+                &[],
+                SystemTime::now() + Duration::from_secs(60),
+                None,
+                &saver,
+                &fetcher,
+            )
+            .unwrap();
+            assert_eq!(report.saved, 1, "{report:?}");
+            assert!(!path.exists());
+            let reading = readings(&library).pop().unwrap();
+            if quote {
+                assert_eq!(reading.metadata.kind, ReadingKind::Quote);
+            } else {
+                assert!(reading.metadata.lightweight);
+                assert_eq!(reading.metadata.link_category.as_deref(), Some("movie"));
+                assert_eq!(
+                    crate::list_highlights(&library, &reading.metadata.id).unwrap()[0].text,
+                    "Highlighted passage"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn malformed_article_payloads_are_retained_before_any_library_write() {
+        let html =
+            "<meta property='og:type' content='article'><article><p>Captured story.</p></article>";
+        for invalid in [
+            "checksum",
+            "size",
+            "format",
+            "collision",
+            "type",
+            "source",
+            "utf8",
+            "image-source",
+        ] {
+            let (_temp, library) = library();
+            let mut manifest = article_manifest(html);
+            let mut content = html.as_bytes().to_vec();
+            let mut extra = Vec::new();
+            match invalid {
+                "checksum" => manifest["article"]["sha256"] = json!("incorrect"),
+                "size" => manifest["article"]["byte_count"] = json!(1),
+                "format" => manifest["article"]["format"] = json!("pdf"),
+                "collision" => {
+                    manifest["attachments"] = json!([{"path":"article.html", "source_url":"https://example.com/image.png"}])
+                }
+                "type" => manifest["capture_type"] = json!("text"),
+                "source" => manifest["text"] = json!("selected prose is not a source URL"),
+                "utf8" => {
+                    content = vec![0xff, 0xfe];
+                    manifest["article"]["byte_count"] = json!(2);
+                    manifest["article"]["sha256"] = json!(crate::sha256_hex(&content));
+                }
+                "image-source" => {
+                    manifest["attachments"] = json!([{"path":"image.png"}]);
+                    extra.push(("image.png", png()));
+                }
+                _ => unreachable!(),
+            }
+            let mut entries = vec![("article.html", content.as_slice())];
+            entries.extend(extra.iter().map(|(name, bytes)| (*name, bytes.as_slice())));
+            let path = archive(&library, &manifest, &entries);
+            let report = process_articles(&library, &unavailable_article);
+            assert_eq!(report.issues.len(), 1, "{invalid}: {report:?}");
+            assert_eq!(report.saved + report.duplicates, 0);
+            assert!(path.exists());
+            assert!(readings(&library).is_empty());
+        }
+    }
+
+    #[test]
+    fn captured_live_article_survives_a_recognized_source_retrieval_failure() {
+        let (_temp, library) = library();
+        let html = "<meta property='og:type' content='article'><article><p>Usable captured source content.</p></article>";
+        let mut manifest = article_manifest(html);
+        manifest["origin"]["url"] = json!("https://x.com/example/status/42");
+        let path = archive(&library, &manifest, &[("article.html", html.as_bytes())]);
+        let saver = |_: &LibraryRoot, _: UrlSaveRequest| -> Result<SaveOutcome> {
+            Err(crate::SaveUrlError::Retrieval("fixture offline".into()).into())
+        };
+        let report = process_inbox_with_fetchers_at(
+            &library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &saver,
+            &unavailable_article,
+        )
+        .unwrap();
+        assert_eq!(report.saved, 1, "{report:?}");
+        assert!(!path.exists());
+        let reading = readings(&library).pop().unwrap();
+        assert!(!reading.metadata.lightweight);
+        assert!(reading.body.contains("Usable captured source content."));
     }
 
     #[test]
@@ -1893,6 +2793,7 @@ mod tests {
             &mut Vec::new(),
             None,
             &save_offline_url,
+            &unavailable_article,
         )
         .unwrap();
         let SourceClaim::Claimed(name) = snapshot

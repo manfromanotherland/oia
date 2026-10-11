@@ -211,7 +211,7 @@ fn is_local_asset_path(path: &str) -> bool {
 /// Captured social previews and favicons share the image transport but do not
 /// belong in the body. A global string replacement would corrupt ordinary
 /// links, prose, or a different body URL for which the role URL is a prefix.
-fn rewrite_markdown_image_destinations(
+pub(crate) fn rewrite_markdown_image_destinations(
     markdown: &str,
     source_url: &str,
     replacement: &str,

@@ -13,11 +13,11 @@ payloads together even when an external sync service delivers files out of order
 No companion manifest or completion marker is needed outside the archive.
 
 The archive contains a root `manifest.json` and any referenced attachment files.
-The current Shortcut writes version 3 for ordinary captures:
+The current Shortcut writes version 4 for ordinary captures:
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "capture_type": "selection",
   "capture_id": "unique-transport-identifier",
   "captured_at": "2026-09-10T12:00:00Z",
@@ -38,8 +38,9 @@ classification and selected-text routing, as it does for browser saves.
 
 | `capture_type` | Required payload | Import behavior |
 |---|---|---|
+| `article` | `origin.url`, or an exact HTTP(S) URL in `text`; optional `article` HTML file and image attachments | Preserves shared source/category resolution, then saves usable supplied prose as a full article. URL-only requests attempt bounded public-page extraction on the Mac and retain a link when extraction is unavailable or unsuitable. |
 | `url` | `origin.url`, or an exact HTTP(S) URL in `text`; no attachments or other text | Uses the shared URL-save facade, including recognized public source retrieval and metadata classification. Books, movies, music and products receive supported category metadata, covers and prices. Other URLs remain lightweight links. |
-| `selection` | Nonempty `text` (at most 64 KiB) and `origin.url`; no attachments | Uses the shared selection router: text enclosed in matching quotation marks becomes a quote; other passages become attached highlights. |
+| `selection` | Nonempty `text` (at most 64 KiB) and `origin.url`; optional article HTML and its images in version 4 | Uses the shared selection router: text enclosed in matching quotation marks becomes a quote; other passages become attached highlights. Supplied source prose can upgrade the enclosing article before attaching a highlight. |
 | `text` | Nonempty `text`; no source URL or attachments | A standalone quote, unless the entire text is an HTTP(S) URL, in which case it uses the URL-save facade. |
 | `media` | One or more `attachments`; no text | Imports the shared files with their available origin metadata. |
 
@@ -48,11 +49,44 @@ retained in Inbox. Producers must not guess `book`, `movie`, `tweet` or
 `highlight` as a capture type. That decision belongs to the shared Rust engine.
 Capture time is normalized to the library's fixed-width UTC date representation.
 
+An article body stays outside the manifest so large content does not exceed its
+1 MiB bound. Safari Page Contents and native Article Body are converted to HTML
+by Apple's content actions and included in the archive:
+
+```json
+{
+  "version": 4,
+  "capture_type": "article",
+  "capture_id": "unique-transport-identifier",
+  "captured_at": "2026-10-11T12:00:00Z",
+  "origin": {"url": "https://example.com/article", "title": "An article"},
+  "article": {
+    "path": "article.html",
+    "format": "html",
+    "sha256": "64 hexadecimal characters"
+  }
+}
+```
+
+The HTML must be UTF-8 and at most 8 MiB. A supplied `byte_count` or `sha256`
+must match; the Shortcut always hashes its HTML. Rust converts semantic article
+content to Markdown, resolves relative links against the page origin, and
+derives classification evidence. It ignores navigation, hidden content and
+scripts. Supported embedded image bytes become local assets. External images
+without supplied bytes become labelled offline placeholders through the normal
+article-save pipeline; they are not silently treated as local captures.
+
+Article image attachments may include `source_url` and `content_type` alongside
+their path and optional checksum/size. Article image mappings require an HTTP(S)
+source URL and valid image bytes, with at most 64 images and 40 MiB combined
+decoded supplied image data. HTML rendering is bounded to 64 nesting levels;
+metadata evidence retains the classifier's separate 512 KiB bound.
+
 A media manifest contains its file references and checksums:
 
 ```json
 {
-  "version": 3,
+  "version": 4,
   "capture_type": "media",
   "capture_id": "unique-transport-identifier",
   "captured_at": "2026-09-10T12:00:00Z",
@@ -74,11 +108,21 @@ that omit the optional byte count/hash, using the ZIP sizes and CRC validation.
 still control deduplication. A source must be HTTP(S); local paths never become
 an origin. A canonical URL is metadata and does not replace the visited URL.
 
-Generic full-page extraction does not occur in the Inbox path. Available source
-title/site/canonical data is retained. The Shortcut uses Safari's supplied page
-selection; it does not run a DOM extractor or duplicate Rust's category
-logic. The browser can additionally report `<q>`/`<blockquote>` enclosure;
-Shortcuts supplies no such DOM evidence.
+Version-4 article requests with no supplied body can retrieve public HTML on the
+Mac, bounded to 8 MiB, eight seconds and three redirects using the existing
+public-source transport. Retrieval failure or insufficient article evidence
+keeps the lightweight link. Earlier versions and ordinary app URL saves retain
+their existing behavior. Available title/site/canonical data is retained.
+The Shortcut does not duplicate Rust's category logic. The browser can
+additionally report `<q>`/`<blockquote>` enclosure; Shortcuts supplies no such
+selection DOM evidence.
+
+## Typed ordinary captures (version 3)
+
+Version 3 remains supported with `url`, `selection`, `text` and `media` types.
+It has no article HTML field or generic full-page retrieval. Selections have no
+attachments, and ordinary URLs retain the shared URL-save facade's lightweight
+fallback.
 
 ## Legacy ordinary captures (version 1)
 
@@ -89,8 +133,8 @@ origin alone. An exact HTTP(S) URL in text still uses the URL-save facade when
 no different page origin is given. Legacy captures therefore use the updated
 shared save behavior after the Mac app is updated.
 
-Version-1/2-only readers reject version 3 and retain the archive. Update the Mac
-app before installing the new Shortcut; there is no fallback that could save a
+Earlier readers reject unsupported capture versions and retain the archive.
+Update the Mac app before installing the new Shortcut; there is no fallback that could save a
 selection as the wrong reading kind.
 
 ## Instagram requests (version 2)
@@ -138,7 +182,7 @@ stay in Inbox as issues; **Check Inbox** retries them. See [setup](ios-shortcut.
   Entries are copied to generated temporary filenames, never extracted using
   archive paths. ZIP integrity and declared hashes/sizes are checked before
   importing any attachments.
-- Limits: 128 archive entries, 64 attachments, 1 MiB manifest, 40 MiB per image
+- Limits: 128 archive entries, 64 attachments, 1 MiB manifest, 8 MiB article HTML, 40 MiB per image
   or text file, 1 GiB per video, and 1 GiB + 2 MiB for the archive/expanded total.
   The ZIP manifest limit also bounds text embedded in the manifest.
 - Saved Markdown and required asset bytes are verified and flushed before

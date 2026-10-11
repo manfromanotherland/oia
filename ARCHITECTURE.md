@@ -64,9 +64,14 @@ inside the user's synced library. The Mac requests any missing iCloud bytes and
 passes ready files to the shared Rust Inbox importer. Rust validates private
 snapshots, sends every URL-only capture through the same URL-save facade, and
 routes source-backed selected text through the shared quote/highlight logic.
-Version-3 captures declare `url`, `selection`, `text`, or `media` as their input
-type; Rust determines the saved category. Earlier ordinary captures remain
-readable. Rust verifies durable readings, assets, and highlight sidecars before
+Version-4 captures add full article intent and an optional hashed HTML payload
+from Safari Page Contents or native Article Body. Rust extracts the supplied
+prose into Markdown, retaining shared source/category priority; article requests
+with only a URL can attempt bounded public-page retrieval and otherwise remain
+links. Existing app paste/drop URL saves retain their lightweight behavior.
+Selections can carry the same source body before the shared highlight save.
+Earlier ordinary captures remain readable. Rust verifies durable readings,
+assets, and highlight sidecars before
 removing unchanged successful inputs. It then yields to a single index
 reconcile. Inbox processing starts after the existing board is published and
 runs only while the Mac app is open. See [the capture contract](docs/inbox-format.md)

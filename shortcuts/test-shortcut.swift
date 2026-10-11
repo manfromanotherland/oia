@@ -50,8 +50,8 @@ let start = try actions.firstIndex { action in
     guard kind(action) == "gettext", let text = parameters(action)["WFTextActionText"] as? String,
           let bytes = text.data(using: .utf8),
           let dictionary = try? JSONSerialization.jsonObject(with: bytes) as? Object else { return false }
-    return dictionary.count == 2 && dictionary["version"] as? Int == 3
-        && dictionary["capture_type"] as? String == "url"
+    return dictionary.count == 2 && dictionary["version"] as? Int == 4
+        && dictionary["capture_type"] as? String == "article"
 }.unwrap("Missing per-item manifest initialization")
 let safariIf = try actions.firstIndex {
     kind($0) == "conditional" && parameters($0)["WFConditionalActionString"] as? String == "Safari Web Page"
@@ -78,6 +78,9 @@ struct SafariFixture {
     let selection: String?
     var type = "Safari Web Page"
     var responseType = "Image"
+    var contents: String?
+    var convertedHTML: String?
+    var missingConvertedHTML = false
 }
 
 struct SafariGraph {
@@ -85,6 +88,7 @@ struct SafariGraph {
     var outputs: Object = [:]
     var downloads: [String] = []
     var payloads: [String] = []
+    var articleHTML: [String] = []
 
     func resolve(_ value: Any?) throws -> Any? {
         guard let value else { return nil }
@@ -190,6 +194,11 @@ struct SafariGraph {
             case "appendvariable": payloads.append(try resolve(p["WFInput"]) as! String)
             case "hash": output = String(repeating: "a", count: 64)
             case "detect.text": output = try resolve(p["WFInput"])
+            case "gethtmlfromrichtext":
+                let body = try (resolve(p["WFInput"]) as? String).unwrap("Article conversion received absent page contents")
+                try require(p["WFMakeFullDocument"] as? Bool == false, "Article HTML must preserve its supplied body fragment")
+                articleHTML.append(body)
+                output = fixture.missingConvertedHTML ? nil : (fixture.convertedHTML ?? body)
             case "alert": break
             case "exit": throw Failure(description: "Capture stopped")
             case "properties.safariwebpage":
@@ -197,7 +206,15 @@ struct SafariGraph {
                 case "Page URL": output = fixture.url
                 case "Name": output = fixture.title
                 case "Page Selection": output = fixture.selection
+                case "Page Contents": output = fixture.contents
                 default: throw Failure(description: "Unexpected Safari property")
+                }
+            case "properties.articles":
+                switch p["WFContentItemPropertyName"] as! String {
+                case "URL": output = fixture.url
+                case "Title": output = fixture.title
+                case "Body": output = fixture.contents
+                default: throw Failure(description: "Unexpected Article property")
                 }
             default: throw Failure(description: "Unexpected action in Safari graph: \(kind(action))")
             }
@@ -297,6 +314,13 @@ let cases: [(String, [String?])] = [
     ("repeat items do not retain prior selection", [selectedText, nil, "", "A different selection"]),
 ]
 var failures = 0
+do {
+    let icon = try (workflow["WFWorkflowIcon"] as? Object).unwrap("Missing Shortcut appearance")
+    try require(icon["WFWorkflowIconStartColor"] as? UInt64 == 4282601983
+                && icon["WFWorkflowIconGlyphNumber"] as? Int == 59754,
+                "Generated updates must preserve the user's red heart icon and colour")
+    print("PASS: generated updates preserve the red heart appearance")
+} catch { failures += 1; print("FAIL: Shortcut appearance: \(error)") }
 for (name, selections) in cases {
     do {
         var runner = SafariGraph()
@@ -307,7 +331,7 @@ for (name, selections) in cases {
             let origin = manifest["origin"] as? Object
             try require(origin?["url"] as? String == fixture.url, "Source URL was lost or stale")
             try require(origin?["title"] as? String == fixture.title, "Source title was lost or stale")
-            try require(manifest["version"] as? Int == 3 && manifest["capture_id"] as? String == "fixture-\(index)"
+            try require(manifest["version"] as? Int == 4 && manifest["capture_id"] as? String == "fixture-\(index)"
                         && manifest["captured_at"] as? String == "2026-09-18T12:00:00Z", "Capture metadata was lost or stale")
             if let selection, !selection.isEmpty {
                 try require(manifest["capture_type"] as? String == "selection", "Safari selection lost its explicit capture type")
@@ -315,9 +339,9 @@ for (name, selections) in cases {
                 try require(runner.variables["Save confirmation"] as? String == "Selection saved to Inbox",
                             "Selected text confirmation is not contextual")
             } else {
-                try require(manifest["capture_type"] as? String == "url", "Whole-page share retained a prior selection type")
+                try require(manifest["capture_type"] as? String == "article", "Whole-page share must request a full article import")
                 try require(manifest["text"] == nil, "Whole-page link retained a text field")
-                try require(runner.variables["Save confirmation"] as? String == "Link saved to Inbox",
+                try require(runner.variables["Save confirmation"] as? String == "Link queued in Inbox",
                             "Whole-page link confirmation is not contextual")
             }
         }
@@ -327,6 +351,62 @@ for (name, selections) in cases {
         print("FAIL: \(name): \(error)")
     }
 }
+do {
+    let html = "<article><h1>An article</h1><p>A \"quoted\" passage with café and 🌱.</p><img src=\"https://example.com/photo.jpg\"></article>"
+    let classes = workflow["WFWorkflowInputContentItemClasses"] as? [String] ?? []
+    try require(classes.contains("WFArticleContentItem"), "Native Article shares are not accepted")
+    try require(!actions.contains { kind($0) == "getarticle" },
+                "URL shares must not depend on an unsupported Safari Reader conversion before they can be queued")
+    for type in ["Safari Web Page", "Article"] {
+        var runner = SafariGraph()
+        for (index, contents) in [html, nil, "", html].enumerated() {
+            runner.payloads = []
+            runner.articleHTML = []
+            let manifest = try runner.capture(SafariFixture(url: "https://example.com/article/\(index)",
+                title: "Article \(index)", selection: nil, type: type, contents: contents), index: index)
+            try require(manifest["version"] as? Int == 4 && manifest["capture_type"] as? String == "article",
+                        "Body or URL fallback lost article import intent: \(type)")
+            try require(manifest["text"] == nil && manifest["attachments"] == nil,
+                        "Article contents must not become a quote or media attachment")
+            if let contents, !contents.isEmpty {
+                let article = try (manifest["article"] as? Object).unwrap("Article body is missing from the manifest")
+                try require(article["path"] as? String == "article.html" && article["format"] as? String == "html"
+                            && article["sha256"] as? String == String(repeating: "a", count: 64),
+                            "Article payload descriptor lost its file, format or checksum")
+                try require(runner.payloads == ["article.html"] && runner.articleHTML == [contents],
+                            "Article HTML must be converted from this item's page/body and included in the archive")
+                try require(runner.variables["Save confirmation"] as? String == "Page saved to Inbox",
+                            "Body capture confirmation must describe the page handoff")
+            } else {
+                try require(manifest["article"] == nil && runner.payloads.isEmpty && runner.articleHTML.isEmpty,
+                            "Missing body retained a prior article or ran a conversion with no input")
+                try require(runner.variables["Save confirmation"] as? String == "Link queued in Inbox",
+                            "URL-only fallback must not claim it captured the page body")
+            }
+        }
+    }
+    var selected = SafariGraph()
+    let selection = "https://example.com/selected-link"
+    let manifest = try selected.capture(SafariFixture(url: "https://example.com/source", title: "Source",
+        selection: selection, contents: html), index: 0)
+    try require(manifest["capture_type"] as? String == "selection" && manifest["text"] as? String == selection
+                && (manifest["article"] as? Object)?["path"] as? String == "article.html",
+                "Selected text and full source body must survive together without changing selection intent")
+    try require(selected.variables["Save confirmation"] as? String == "Selection saved to Inbox",
+                "Source body capture must not overwrite the selection confirmation")
+    for absent in [false, true] {
+        var runner = SafariGraph()
+        _ = try runner.capture(SafariFixture(url: "https://example.com/previous", title: "Previous",
+            selection: nil, contents: html), index: 0)
+        runner.payloads = []
+        let fallback = try runner.capture(SafariFixture(url: "https://example.com/current", title: "Current",
+            selection: nil, contents: html, convertedHTML: "", missingConvertedHTML: absent), index: 1)
+        try require(fallback["article"] == nil && runner.payloads.isEmpty
+                    && runner.variables["Save confirmation"] as? String == "Link queued in Inbox",
+                    "Missing or empty converted HTML retained a prior article or claimed a captured body")
+    }
+    print("PASS: Safari/native Article bodies, absent-body fallbacks, selection context and repeated-item isolation")
+} catch { failures += 1; print("FAIL: article capture: \(error)") }
 do {
     try require(workflow["OiaShortcutProbeVersion"] as? Int == 2,
                 "Shortcut version probe contract is missing")
@@ -361,13 +441,14 @@ do {
     print("PASS: installed-version probe returns before capture side effects")
 } catch { failures += 1; print("FAIL: installed-version probe: \(error)") }
 do {
-    for type in ["URL", "Text", "Rich Text", "Safari Web Page"] {
+    for type in ["URL", "Text", "Rich Text", "Safari Web Page", "Article"] {
         var runner = SafariGraph()
         let url = "https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2&stkn=tracking"
-        let manifest = try runner.capture(SafariFixture(url: url, title: "Post", selection: nil, type: type), index: 0)
+        let manifest = try runner.capture(SafariFixture(url: url, title: "Post", selection: nil, type: type,
+                                                      contents: "<p>Preview supplied by sharing app</p>"), index: 0)
         try require(manifest["version"] as? Int == 2 && manifest["instagram_url"] as? String == url,
                     "Instagram slide must survive as an explicit version-2 request: \(type)")
-        try require(manifest["capture_type"] == nil && manifest["text"] == nil && manifest["origin"] == nil && manifest["attachments"] == nil && runner.downloads.isEmpty,
+        try require(manifest["capture_type"] == nil && manifest["text"] == nil && manifest["origin"] == nil && manifest["article"] == nil && manifest["attachments"] == nil && runner.downloads.isEmpty && runner.payloads.isEmpty,
                     "Instagram must not download on iPhone or silently become a link")
         try require(runner.variables["Save confirmation"] as? String == "Instagram media queued in Inbox",
                     "Instagram confirmation must describe the queued handoff")
@@ -390,7 +471,7 @@ do {
         runner.downloads = []
         runner.payloads = []
         let manifest = try runner.capture(SafariFixture(url: url, title: "", selection: nil, type: "URL"), index: index)
-        try require(manifest["version"] as? Int == 3 && manifest["capture_type"] as? String == (isImage ? "media" : "url"),
+        try require(manifest["version"] as? Int == 4 && manifest["capture_type"] as? String == (isImage ? "media" : "article"),
                     "URL branch did not describe its actual payload type: \(url)")
         try require((manifest["origin"] as? Object)?["url"] as? String == url, "Shared URL was lost")
         try require(runner.downloads == (isImage ? [url] : []), "Wrong download decision: \(url)")
@@ -400,7 +481,7 @@ do {
             try require(attachments?.count == 1 && attachments?.first?["path"] as? String == "payload.jpg", "Missing image attachment array")
             try require(attachments?.first?["sha256"] as? String == String(repeating: "a", count: 64), "Missing image checksum")
         } else { try require(manifest["attachments"] == nil, "Page URL retained a prior image") }
-        let confirmation = isImage ? "Image saved to Inbox" : "Link saved to Inbox"
+        let confirmation = isImage ? "Image saved to Inbox" : "Link queued in Inbox"
         try require(runner.variables["Save confirmation"] as? String == confirmation,
                     "URL confirmation did not match its saved kind: \(url)")
     }
@@ -413,21 +494,21 @@ do {
     print("PASS: non-image response stops capture")
     runner.downloads = []
     let local = try runner.capture(SafariFixture(url: "local-image", title: "", selection: nil, type: "Image"), index: 0)
-    try require(local["version"] as? Int == 3 && local["capture_type"] as? String == "media", "Local image lost its explicit media type")
+    try require(local["version"] as? Int == 4 && local["capture_type"] as? String == "media", "Local image lost its explicit media type")
     try require((local["attachments"] as? [Object])?.count == 1 && runner.downloads.isEmpty, "Local image capture regressed")
     try require(runner.variables["Save confirmation"] as? String == "Image saved to Inbox",
                 "Local image confirmation is not contextual")
     print("PASS: local images retain attachments without downloading")
     let plain = try runner.capture(SafariFixture(url: "A thought worth keeping", title: "", selection: nil, type: "Text"), index: 0)
-    try require(plain["version"] as? Int == 3 && plain["capture_type"] as? String == "text", "Plain text lost its explicit text type")
+    try require(plain["version"] as? Int == 4 && plain["capture_type"] as? String == "text", "Plain text lost its explicit text type")
     try require(runner.variables["Save confirmation"] as? String == "Quote saved to Inbox",
                 "Plain text confirmation is not contextual")
     let rich = try runner.capture(SafariFixture(url: "https://example.com/from-text", title: "", selection: nil, type: "Rich Text"), index: 0)
-    try require(rich["version"] as? Int == 3 && rich["capture_type"] as? String == "text", "Rich text URL must preserve its transport type for Rust to resolve")
-    try require(runner.variables["Save confirmation"] as? String == "Link saved to Inbox",
+    try require(rich["version"] as? Int == 4 && rich["capture_type"] as? String == "article", "Rich text URL must request a full article import")
+    try require(runner.variables["Save confirmation"] as? String == "Link queued in Inbox",
                 "A URL supplied as text must use the link confirmation")
     let media = try runner.capture(SafariFixture(url: "local-video", title: "", selection: nil, type: "Media"), index: 0)
-    try require(media["version"] as? Int == 3 && media["capture_type"] as? String == "media", "Video lost its explicit media type")
+    try require(media["version"] as? Int == 4 && media["capture_type"] as? String == "media", "Video lost its explicit media type")
     try require(runner.variables["Save confirmation"] as? String == "Media saved to Inbox",
                 "Media confirmation is not contextual")
     print("PASS: text and media use contextual confirmations")

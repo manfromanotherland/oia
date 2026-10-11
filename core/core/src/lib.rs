@@ -2,6 +2,7 @@
 
 uniffi::setup_scaffolding!();
 
+mod article_html;
 mod card_description;
 mod category_update;
 mod color_search;

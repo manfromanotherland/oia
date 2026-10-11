@@ -4,6 +4,11 @@ When any generated Shortcut behavior changes, the work is not complete when the
 `.shortcut` file is merely built or signed. The installed copy is a separate
 state and must be updated as part of the same task.
 
+Preserve the installed Shortcut's icon, colour, and Inbox destination during
+updates. The current appearance is a **red heart**. Carry that appearance into
+the generated release and confirm it on the installed copy; appearance changes
+require a user request.
+
 1. Run `make shortcut-install`. It builds, tests, validates, signs, and
    publishes the replacement before checking the installed Shortcut. If the
    canonical installed release already matches, it exits successfully without

@@ -44,7 +44,7 @@ host, and macOS app.
 | Library folder | Same as Library, used when emphasizing the on-disk directory. |
 | Library root | The absolute folder path selected on one device. Data stored inside the index must still use paths relative to this root. |
 | Save | The user action that adds a page, media item, or text to the library as a new reading/card, from either the extension or the app's paste/drop path. |
-| Capture | The extension step that turns a page or right-click context into Markdown, universal origin metadata, optional local image bytes, or a bounded document-video stream before the save is written. Internal/technical term; users just "save". |
+| Capture | Source observations supplied before a save is written: the extension supplies cleaned Markdown, origin metadata, local image bytes, or a bounded document-video stream; the Shortcut can supply article HTML, a selection, files, or an article URL request for shared Rust extraction. Internal/technical term; users just "save". |
 | Reading | One saved item in the user's library. A reading is backed by an article file plus optional assets and highlights inside its reading folder. |
 | Card | User-facing visual representation of a reading on the macOS masonry board. Do not rename the internal `Reading` domain type merely to match presentation. |
 | Card kind | The reading's capture/rendering kind: `article`, `image`, `video`, or `quote`. A missing kind on an older file means `article`. |

@@ -100,7 +100,8 @@ func setTextSaveConfirmation(_ input: Object) {
         "WFMatchTextPattern": "(?i)^\\s*https?://[^\\s]+\\s*$",
         "WFMatchTextCaseSensitive": false])
     let isLink = beginIf(matched)
-    setSaveConfirmation("Link saved to Inbox")
+    field("capture_type", "article")
+    setSaveConfirmation("Link queued in Inbox")
     otherwise(isLink)
     setSaveConfirmation("Quote saved to Inbox")
     endIf(isLink)
@@ -120,6 +121,26 @@ func beginInstagram(_ input: Object) -> String {
     setSaveConfirmation("Instagram media queued in Inbox")
     otherwise(group)
     return group
+}
+
+// Safari shares its live page contents; Article inputs carry Apple's extracted
+// body. Keep that evidence in a separate file so it cannot exceed the small
+// manifest limit. Rust owns extraction, source/category routing and local assets.
+func captureArticle(_ contents: Object, preservingSelection: Bool = false) {
+    let hasContents = beginIf(contents)
+    let html = action("gethtmlfromrichtext", ["WFInput": attachment(contents),
+                                               "WFMakeFullDocument": false])
+    let hasHTML = beginIf(html)
+    let payload = action("setitemname", ["WFInput": attachment(html),
+                                         "WFName": "article.html", "WFDontIncludeFileExtension": false])
+    action("appendvariable", ["WFVariableName": "Capture files", "WFInput": attachment(payload)])
+    let digest = action("hash", ["WFInput": attachment(payload), "WFHashType": "SHA256"])
+    json(["path": "article.html", "format": "html"], named: "Article")
+    field("sha256", digest, in: "Article")
+    field("article", variable("Article"))
+    if !preservingSelection { setSaveConfirmation("Page saved to Inbox") }
+    endIf(hasHTML)
+    endIf(hasContents)
 }
 
 func captureMedia(_ input: Object, sourceURL: Object? = nil) {
@@ -146,7 +167,7 @@ func captureMedia(_ input: Object, sourceURL: Object? = nil) {
     // the array from JSON instead, then add the other fields without touching it.
     // Attachment itself is serialized by Shortcuts, so its values remain escaped.
     let mediaManifest = action("gettext", ["WFTextActionText": text(
-        "{\"version\":3,\"capture_type\":\"media\",\"attachments\":[", variable("Attachment"), "]}")])
+        "{\"version\":4,\"capture_type\":\"media\",\"attachments\":[", variable("Attachment"), "]}")])
     set("Manifest", action("detect.dictionary", ["WFInput": attachment(mediaManifest)]))
     field("capture_id", variable("Capture ID"))
     field("captured_at", variable("Captured at"))
@@ -178,14 +199,14 @@ set("Captured at", date)
 let random = action("number.random", ["WFRandomNumberMinimum": 1, "WFRandomNumberMaximum": 999999999999])
 let seed = action("gettext", ["WFTextActionText": text(date, "-", random, "-", variable("Repeat Index"))])
 set("Capture ID", action("hash", ["WFInput": attachment(seed), "WFHashType": "SHA256"]))
-json(["version": 3, "capture_type": "url"], named: "Manifest")
+json(["version": 4, "capture_type": "article"], named: "Manifest")
 field("capture_id", variable("Capture ID"))
 field("captured_at", variable("Captured at"))
 set("Capture files", action("list", ["WFItems": [Any]()]))
 
 let itemType = action("getitemtype", ["WFInput": attachment(repeatItem)])
 let safari = beginIf(itemType, equals: "Safari Web Page")
-setSaveConfirmation("Link saved to Inbox")
+setSaveConfirmation("Link queued in Inbox")
 json([:], named: "Origin")
 let pageURL = action("properties.safariwebpage", ["WFInput": attachment(repeatItem),
                                                 "WFContentItemPropertyName": "Page URL"])
@@ -196,18 +217,42 @@ field("origin", variable("Origin"))
 let selection = action("properties.safariwebpage", ["WFInput": attachment(repeatItem),
                                                    "WFContentItemPropertyName": "Page Selection"])
 // A whole-page share has no selection. Set Dictionary Value rejects a missing
-// value on iOS; omit the optional text field so this remains a lightweight link.
+// value on iOS; omit optional fields when Safari does not supply them.
 let hasSelection = beginIf(selection)
 setSaveConfirmation("Selection saved to Inbox")
 field("capture_type", "selection")
 field("text", selection)
+let selectedPageContents = action("properties.safariwebpage", ["WFInput": attachment(repeatItem),
+                                                               "WFContentItemPropertyName": "Page Contents"])
+captureArticle(selectedPageContents, preservingSelection: true)
 otherwise(hasSelection)
 let safariInstagram = beginInstagram(pageURL)
+let pageContents = action("properties.safariwebpage", ["WFInput": attachment(repeatItem),
+                                                      "WFContentItemPropertyName": "Page Contents"])
+captureArticle(pageContents)
 endIf(safariInstagram)
 endIf(hasSelection)
 otherwise(safari)
+let article = beginIf(itemType, equals: "Article")
+setSaveConfirmation("Link queued in Inbox")
+json([:], named: "Origin")
+let articleURL = action("properties.articles", ["WFInput": attachment(repeatItem),
+                                               "WFContentItemPropertyName": "URL"])
+field("url", articleURL, in: "Origin")
+let articleTitle = action("properties.articles", ["WFInput": attachment(repeatItem),
+                                                 "WFContentItemPropertyName": "Title"])
+let hasArticleTitle = beginIf(articleTitle)
+field("title", articleTitle, in: "Origin")
+endIf(hasArticleTitle)
+field("origin", variable("Origin"))
+let articleInstagram = beginInstagram(articleURL)
+let articleBody = action("properties.articles", ["WFInput": attachment(repeatItem),
+                                                "WFContentItemPropertyName": "Body"])
+captureArticle(articleBody)
+endIf(articleInstagram)
+otherwise(article)
 let url = beginIf(itemType, equals: "URL")
-setSaveConfirmation("Link saved to Inbox")
+setSaveConfirmation("Link queued in Inbox")
 let instagram = beginInstagram(repeatItem)
 // Safari's long-press image share can supply only a direct image URL.
 // Match the URL path, never a filename embedded in an ordinary page's query.
@@ -235,16 +280,16 @@ endIf(instagram)
 otherwise(url)
 let plain = beginIf(itemType, equals: "Text")
 let textInstagram = beginInstagram(repeatItem)
-setTextSaveConfirmation(repeatItem)
 field("capture_type", "text")
+setTextSaveConfirmation(repeatItem)
 field("text", repeatItem)
 endIf(textInstagram)
 otherwise(plain)
 let rich = beginIf(itemType, equals: "Rich Text")
 let richText = action("detect.text", ["WFInput": attachment(repeatItem)])
 let richInstagram = beginInstagram(richText)
-setTextSaveConfirmation(richText)
 field("capture_type", "text")
+setTextSaveConfirmation(richText)
 field("text", richText)
 endIf(richInstagram)
 otherwise(rich)
@@ -254,6 +299,7 @@ captureMedia(repeatItem)
 endIf(rich)
 endIf(plain)
 endIf(url)
+endIf(article)
 endIf(safari)
 
 let manifestText = action("gettext", ["WFTextActionText": text(variable("Manifest"))])
@@ -294,12 +340,13 @@ let workflow: Object = [
     "WFWorkflowClientVersion": "2302.0.4",
     "WFWorkflowMinimumClientVersion": 900,
     "WFWorkflowMinimumClientVersionString": "900",
-    "WFWorkflowIcon": ["WFWorkflowIconStartColor": 255, "WFWorkflowIconGlyphNumber": 59745],
+    // Preserve the user's red heart across generated releases.
+    "WFWorkflowIcon": ["WFWorkflowIconStartColor": 4282601983, "WFWorkflowIconGlyphNumber": 59754],
     "WFWorkflowTypes": ["ActionExtension"],
     "WFQuickActionSurfaces": [String](),
     "WFWorkflowHasShortcutInputVariables": true,
     "WFWorkflowHasOutputFallback": false,
-    "WFWorkflowInputContentItemClasses": ["WFSafariWebPageContentItem", "WFURLContentItem",
+    "WFWorkflowInputContentItemClasses": ["WFSafariWebPageContentItem", "WFArticleContentItem", "WFURLContentItem",
         "WFStringContentItem", "WFRichTextContentItem", "WFImageContentItem", "WFAVAssetContentItem",
         "WFGenericFileContentItem"],
     "WFWorkflowOutputContentItemClasses": [String](),
