@@ -313,6 +313,7 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
       .toast {
         display: flex; align-items: center; gap: 11px;
         box-sizing: border-box; width: min(340px, calc(100vw - 32px));
+        max-height: calc(100dvh - 32px); overflow-y: auto;
         min-height: 70px; padding: 12px 11px 12px 13px;
         font: 400 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
         color: var(--ink); background: var(--paper);
@@ -356,7 +357,7 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
       }
       .detail {
         margin-top: 2px; color: var(--muted);
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        white-space: normal; overflow-wrap: anywhere;
       }
       .close {
         cursor: pointer; background: transparent; border: 0; padding: 0;
