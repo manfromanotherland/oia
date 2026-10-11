@@ -373,6 +373,7 @@ extension OiaCardTextMetricsTests {
         width: CGFloat,
         cardSize: CardSize
     ) -> CGFloat {
+        let cardSize = OiaCardTextMetrics.quoteTypographySize(for: text, cardSize: cardSize)
         let view = VStack(alignment: .center, spacing: 0) {
             renderedQuoteMark("“", cardSize: cardSize)
             Text(text)

@@ -276,37 +276,39 @@ struct OiaCardView: View {
     }
 
     private var quoteCard: some View {
-        VStack(alignment: .center, spacing: 0) {
-            quoteMark("“")
+        let text = quoteText
+        let typographySize = OiaCardTextMetrics.quoteTypographySize(for: text, cardSize: cardSize)
+        return VStack(alignment: .center, spacing: 0) {
+            quoteMark("“", typographySize: typographySize)
 
-            Text(quoteText)
-                .font(Font(OiaCardTextMetrics.quoteFont(for: cardSize)))
+            Text(text)
+                .font(Font(OiaCardTextMetrics.quoteFont(for: typographySize)))
                 .foregroundStyle(.secondary)
                 .lineSpacing(OiaCardTextMetrics.quoteLineSpacing)
                 .multilineTextAlignment(.center)
                 .lineLimit(OiaCardTextMetrics.quoteLineLimit)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: cardSize))
+                .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: typographySize))
 
-            quoteMark("”")
-                .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: cardSize))
+            quoteMark("”", typographySize: typographySize)
+                .padding(.top, OiaCardTextMetrics.quoteMarkSpacing(for: typographySize))
         }
         .padding(.horizontal, OiaCardTextMetrics.quoteHorizontalPadding)
         .padding(.vertical, OiaCardTextMetrics.quoteVerticalPadding)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 
-    private func quoteMark(_ mark: String) -> some View {
+    private func quoteMark(_ mark: String, typographySize: CardSize) -> some View {
         Text(mark)
-            .font(Font(OiaCardTextMetrics.quoteMarkFont(for: cardSize)))
+            .font(Font(OiaCardTextMetrics.quoteMarkFont(for: typographySize)))
             .foregroundStyle(.tertiary)
             .fixedSize()
-            .offset(y: OiaCardTextMetrics.quoteMarkVerticalOffset(for: cardSize))
+            .offset(y: OiaCardTextMetrics.quoteMarkVerticalOffset(for: typographySize))
             .frame(
                 maxWidth: .infinity,
-                minHeight: OiaCardTextMetrics.quoteMarkHeight(for: cardSize),
-                maxHeight: OiaCardTextMetrics.quoteMarkHeight(for: cardSize),
+                minHeight: OiaCardTextMetrics.quoteMarkHeight(for: typographySize),
+                maxHeight: OiaCardTextMetrics.quoteMarkHeight(for: typographySize),
                 alignment: .center
             )
             .accessibilityHidden(true)

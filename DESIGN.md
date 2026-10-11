@@ -143,7 +143,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   metadata; session-local streams fall back to the source page for playback.
 - **Quote:** selected text rendered in centered Georgia Italic, using the article description's
   secondary text color, with 20 pt padding all around and muted quotation marks. Its origin remains
-  available in detail and the Inspector, but is omitted from the board card.
+  available in detail and the Inspector, but is omitted from the board card. Previews longer than
+  240 characters use one smaller type size; previews longer than 480 use two, with a 16 pt minimum.
+  Quotation marks and their spacing scale with the text so longer quotes show more within 12 lines.
 - **Featured highlight:** an article card led by a saved passage in larger, left-aligned system
   text, with yellow marker ink behind each wrapped line and no quotation marks or source footer.
   The source article and all saved highlights remain available in detail. Saving another ordinary

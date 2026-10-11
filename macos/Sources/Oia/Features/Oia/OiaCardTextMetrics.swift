@@ -197,14 +197,15 @@ final class OiaCardTextMetrics {
         let halfPointWidth = Int((textWidth * 2).rounded())
         let key = QuoteHeightKey(text: text, cardSize: cardSize)
         return quoteHeights.value(for: key, width: halfPointWidth) {
-            let font = Self.quoteFont(for: cardSize)
-            let markHeight = Self.quoteMarkHeight(for: cardSize)
-            let markSpacing = Self.quoteMarkSpacing(for: cardSize)
+            let typographySize = Self.quoteTypographySize(for: text, cardSize: cardSize)
+            let font = Self.quoteFont(for: typographySize)
+            let markHeight = Self.quoteMarkHeight(for: typographySize)
+            let markSpacing = Self.quoteMarkSpacing(for: typographySize)
             let measured = Self.measuredQuoteHeight(
                 text,
                 width: CGFloat(halfPointWidth) / 2,
                 font: font,
-                cardSize: cardSize
+                cardSize: typographySize
             )
             return ceil(
                 Self.quoteVerticalPadding * 2
@@ -414,6 +415,15 @@ final class OiaCardTextMetrics {
 }
 
 extension OiaCardTextMetrics {
+    /// Long previews step down through the existing type scale, stopping at 16 pt.
+    /// Bound the character scan because quote bodies can be arbitrarily long.
+    static func quoteTypographySize(for text: String, cardSize: CardSize) -> CardSize {
+        let characterCount = text.prefix(481).count
+        guard characterCount > 240 else { return cardSize }
+        let smallerSize = cardSize.smaller ?? cardSize
+        return characterCount > 480 ? (smallerSize.smaller ?? smallerSize) : smallerSize
+    }
+
     static let quoteDetailFont = makeGeorgiaQuoteFont(ofSize: quoteDetailPointSize)
 
     static let quoteDetailMarkFont =
