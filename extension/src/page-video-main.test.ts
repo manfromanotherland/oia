@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { servePageVideoSource } from "./page-video-main.js";
+import { VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS, VIDEO_TRANSFER_TIMEOUT_MS } from "./video-transfer.js";
+
+afterEach(() => vi.useRealTimers());
 
 class FakePageVideoPort {
   readonly messages: unknown[] = [];
@@ -65,8 +68,8 @@ describe("MAIN-world page video source", () => {
       recordSource,
     );
 
-    expect(fetchSource).toHaveBeenCalledWith(videoUrl);
-    expect(recordSource).toHaveBeenCalledWith(videoUrl);
+    expect(fetchSource).toHaveBeenCalledWith(videoUrl, { signal: expect.any(AbortSignal) });
+    expect(recordSource).toHaveBeenCalledWith(videoUrl, expect.any(AbortSignal));
     expect(port.messages[0]).toMatchObject({ type: "ready", contentType: "video/mp4" });
     port.send({ type: "next" });
     await vi.waitFor(() => expect(port.messages).toHaveLength(2));
@@ -102,7 +105,7 @@ describe("MAIN-world page video source", () => {
 
     await servePageVideoSource(videoUrl, port, "https://example.com", fetchSource, recordSource);
 
-    expect(fetchSource).toHaveBeenCalledWith(videoUrl);
+    expect(fetchSource).toHaveBeenCalledWith(videoUrl, { signal: expect.any(AbortSignal) });
     expect(recordSource).not.toHaveBeenCalled();
     expect(port.messages[0]).toMatchObject({ type: "ready", contentType: "video/mp4" });
     port.send({ type: "next" });
@@ -152,7 +155,10 @@ describe("MAIN-world page video source", () => {
       recordSource,
     );
 
-    expect(recordSource).toHaveBeenCalledWith("blob:https://www.cosmos.so/media-source");
+    expect(recordSource).toHaveBeenCalledWith(
+      "blob:https://www.cosmos.so/media-source",
+      expect.any(AbortSignal),
+    );
     expect(port.messages[0]).toMatchObject({
       type: "ready",
       ok: true,
@@ -186,7 +192,9 @@ describe("MAIN-world page video source", () => {
     );
 
     expect(port.started).toBe(true);
-    expect(fetchSource).toHaveBeenCalledWith("blob:https://www.cosmos.so/exact-video");
+    expect(fetchSource).toHaveBeenCalledWith("blob:https://www.cosmos.so/exact-video", {
+      signal: expect.any(AbortSignal),
+    });
     expect(read).toHaveBeenCalledTimes(1);
     expect(port.messages).toEqual([
       { type: "ready", ok: true, contentType: "video/mp4", expectedBytes: 5 },
@@ -225,7 +233,10 @@ describe("MAIN-world page video source", () => {
       recordSource,
     );
 
-    expect(recordSource).toHaveBeenCalledWith("blob:https://www.cosmos.so/media-source");
+    expect(recordSource).toHaveBeenCalledWith(
+      "blob:https://www.cosmos.so/media-source",
+      expect.any(AbortSignal),
+    );
     expect(port.messages).toEqual([
       {
         type: "error",
@@ -319,5 +330,128 @@ describe("MAIN-world page video source", () => {
         message: "The temporary video does not belong to this page.",
       },
     ]);
+  });
+
+  it("accepts cancellation before a stalled fetch has opened", async () => {
+    vi.useFakeTimers();
+    const port = new FakePageVideoPort();
+    let signal: AbortSignal | undefined;
+    const fetchSource = vi.fn((_url: unknown, options?: RequestInit) => {
+      signal = options?.signal ?? undefined;
+      return new Promise<Response>(() => undefined);
+    });
+    const recordSource = vi.fn();
+    const serving = servePageVideoSource(
+      "https://example.com/stalled.mp4",
+      port,
+      "https://example.com",
+      fetchSource as typeof fetch,
+      recordSource,
+    );
+    await vi.advanceTimersByTimeAsync(0);
+
+    port.send({ type: "cancel" });
+    await serving;
+    expect(signal?.aborted).toBe(true);
+    expect(port.closed).toBe(true);
+    expect(recordSource).not.toHaveBeenCalled();
+    expect(port.messages).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("falls back to recording after the MAIN fetch deadline", async () => {
+    vi.useFakeTimers();
+    const port = new FakePageVideoPort();
+    const recordSource = vi.fn(
+      async () =>
+        new Response(Uint8Array.from([1]), {
+          headers: { "Content-Type": "video/mp4" },
+        }),
+    );
+    const serving = servePageVideoSource(
+      "https://example.com/stalled.mp4",
+      port,
+      "https://example.com",
+      () => new Promise(() => undefined),
+      recordSource,
+    );
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    await serving;
+    expect(recordSource).toHaveBeenCalledTimes(1);
+    expect(port.messages[0]).toMatchObject({ type: "ready", contentType: "video/mp4" });
+    port.send({ type: "cancel" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels and releases a stalled body without waiting forever for cancellation", async () => {
+    vi.useFakeTimers();
+    const port = new FakePageVideoPort();
+    let first = true;
+    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const releaseLock = vi.fn();
+    const response = {
+      ok: true,
+      headers: new Headers({ "Content-Type": "video/mp4" }),
+      body: {
+        getReader: () => ({
+          read: () => {
+            if (!first) return new Promise(() => undefined);
+            first = false;
+            return Promise.resolve({ done: false, value: Uint8Array.from([1]) });
+          },
+          cancel,
+          releaseLock,
+        }),
+      },
+    } as unknown as Response;
+    await servePageVideoSource(
+      "https://example.com/body.mp4",
+      port,
+      "https://example.com",
+      async () => response,
+    );
+    port.send({ type: "next" });
+    await vi.advanceTimersByTimeAsync(0);
+    port.send({ type: "next" });
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    expect(port.closed).toBe(true);
+    expect(port.messages.at(-1)).toMatchObject({ type: "error", ok: false });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("releases an opened source if the content endpoint disappears without cancelling", async () => {
+    vi.useFakeTimers();
+    const port = new FakePageVideoPort();
+    const cancel = vi.fn(async () => undefined);
+    const releaseLock = vi.fn();
+    const response = {
+      ok: true,
+      headers: new Headers({ "Content-Type": "video/mp4" }),
+      body: {
+        getReader: () => ({
+          read: async () => ({ done: false, value: Uint8Array.from([1]) }),
+          cancel,
+          releaseLock,
+        }),
+      },
+    } as unknown as Response;
+    await servePageVideoSource(
+      "https://example.com/idle.mp4",
+      port,
+      "https://example.com",
+      async () => response,
+    );
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    expect(port.closed).toBe(true);
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

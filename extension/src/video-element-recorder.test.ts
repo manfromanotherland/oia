@@ -1,12 +1,15 @@
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   findVideoElement,
   recordVideoElement,
   selectMp4RecorderMimeType,
 } from "./video-element-recorder.js";
+import { VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS, VIDEO_TRANSFER_TIMEOUT_MS } from "./video-transfer.js";
+
+afterEach(() => vi.useRealTimers());
 
 class FakeTrack extends EventTarget {
   muted = false;
@@ -321,5 +324,120 @@ describe("rendered video recorder", () => {
       }),
     ).rejects.toThrow("Óia-compatible MP4");
     expect(fixture.videoTrack.stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores playback state when cancelled while play never resolves", async () => {
+    const blobUrl = "blob:https://example.com/stalled-play";
+    const fixture = cosmosVideo(blobUrl);
+    fixture.video.play = vi.fn(() => new Promise<void>(() => undefined));
+    const cancellation = new AbortController();
+    const recording = recordVideoElement(fixture.doc, blobUrl, {
+      MediaRecorder: FakeMediaRecorder as unknown as typeof MediaRecorder,
+      signal: cancellation.signal,
+    });
+    const rejected = expect(recording).rejects.toThrow("capture cancelled");
+    cancellation.abort(new Error("capture cancelled"));
+    await rejected;
+
+    expect(fixture.captureStream).not.toHaveBeenCalled();
+    expect(fixture.getState()).toEqual({ paused: true, currentTime: 2 });
+    expect(fixture.video.loop).toBe(false);
+    expect(fixture.video.muted).toBe(false);
+    expect(fixture.video.playbackRate).toBe(1.5);
+  });
+
+  it("times out stalled playback setup and restores its snapshot", async () => {
+    vi.useFakeTimers();
+    const blobUrl = "blob:https://example.com/stalled-play";
+    const fixture = cosmosVideo(blobUrl);
+    fixture.video.play = vi.fn(() => new Promise<void>(() => undefined));
+    const recording = recordVideoElement(fixture.doc, blobUrl, {
+      MediaRecorder: FakeMediaRecorder as unknown as typeof MediaRecorder,
+    });
+    const rejected = expect(recording).rejects.toThrow("did not start playing");
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    await rejected;
+    expect(fixture.getState()).toEqual({ paused: true, currentTime: 2 });
+    expect(fixture.video.loop).toBe(false);
+    expect(fixture.video.muted).toBe(false);
+    expect(fixture.video.playbackRate).toBe(1.5);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels track preparation without retaining its readiness timer", async () => {
+    vi.useFakeTimers();
+    const blobUrl = "blob:https://example.com/stalled-track";
+    const fixture = cosmosVideo(blobUrl);
+    fixture.videoTrack.muted = true;
+    const cancellation = new AbortController();
+    const recording = recordVideoElement(fixture.doc, blobUrl, {
+      MediaRecorder: FakeMediaRecorder as unknown as typeof MediaRecorder,
+      signal: cancellation.signal,
+    });
+    const rejected = expect(recording).rejects.toThrow("capture cancelled");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fixture.captureStream).toHaveBeenCalledTimes(1);
+    cancellation.abort(new Error("capture cancelled"));
+    await rejected;
+
+    expect(fixture.videoTrack.stop).toHaveBeenCalledTimes(1);
+    expect(fixture.getState()).toEqual({ paused: true, currentTime: 2 });
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops and restores an active recorder on source cancellation", async () => {
+    vi.useFakeTimers();
+    const blobUrl = "blob:https://example.com/active-recording";
+    const fixture = cosmosVideo(blobUrl);
+    FakeMediaRecorder.supported = new Set(['video/mp4;codecs="avc1.42E01F"']);
+    const cancellation = new AbortController();
+    const response = await recordVideoElement(fixture.doc, blobUrl, {
+      MediaRecorder: FakeMediaRecorder as unknown as typeof MediaRecorder,
+      signal: cancellation.signal,
+    });
+    const reader = response.body!.getReader();
+    const rejected = expect(reader.read()).rejects.toThrow("capture cancelled");
+    cancellation.abort(new Error("capture cancelled"));
+    await rejected;
+
+    expect(FakeMediaRecorder.instance?.state).toBe("inactive");
+    expect(fixture.videoTrack.stop).toHaveBeenCalledTimes(1);
+    expect(fixture.getState()).toEqual({ paused: true, currentTime: 2 });
+    reader.releaseLock();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("restores playback before waiting for a blob reader whose cancellation hangs", async () => {
+    vi.useFakeTimers();
+    const blobUrl = "blob:https://example.com/stalled-blob-cancel";
+    const fixture = cosmosVideo(blobUrl);
+    FakeMediaRecorder.supported = new Set(['video/mp4;codecs="avc1.42E01F"']);
+    const response = await recordVideoElement(fixture.doc, blobUrl, {
+      MediaRecorder: FakeMediaRecorder as unknown as typeof MediaRecorder,
+    });
+    const reader = response.body!.getReader();
+    const pending = reader.read();
+    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const releaseLock = vi.fn();
+    FakeMediaRecorder.instance!.emitData({
+      size: 1,
+      stream: () => ({
+        getReader: () => ({ read: () => new Promise(() => undefined), cancel, releaseLock }),
+      }),
+    } as unknown as Blob);
+    await vi.advanceTimersByTimeAsync(0);
+    const cancelled = reader.cancel();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(fixture.videoTrack.stop).toHaveBeenCalledTimes(1);
+    expect(fixture.getState()).toEqual({ paused: true, currentTime: 2 });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS);
+    await cancelled;
+    await expect(pending).resolves.toMatchObject({ done: true });
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    reader.releaseLock();
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

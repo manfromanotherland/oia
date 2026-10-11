@@ -13,9 +13,31 @@ import {
   type VideoImportResponse,
 } from "./protocol.js";
 import { recordVideoElement as recordRenderedVideoElement } from "./video-element-recorder.js";
+import {
+  cancelVideoReader,
+  openVideoResponse,
+  PAGE_VIDEO_READY_TIMEOUT_MS,
+  readVideoChunk,
+  releaseVideoReader,
+  VIDEO_PREPARATION_HEARTBEAT_MS,
+  VIDEO_PREPARATION_TIMEOUT_MS,
+  VIDEO_TRANSFER_FINISH_TIMEOUT_MS,
+  VIDEO_TRANSFER_TIMEOUT_MS,
+  VideoTransferTimeoutError,
+  waitForVideoTransfer,
+} from "./video-transfer.js";
 
 export const VIDEO_IMPORT_PORT_NAME = "oia-video-import";
 export const MAX_VIDEO_IMPORT_CHUNK_BYTES = 256 * 1024;
+
+/** Document/worker control only; never sent to the native messaging host. */
+export interface VideoImportPreparationMessage {
+  protocol_version: typeof PROTOCOL_VERSION;
+  action: "video_import_prepare";
+  upload_id: string;
+}
+
+export type VideoImportPortMessage = VideoImportRequest | VideoImportPreparationMessage;
 
 export class VideoImportError extends Error {
   constructor(
@@ -35,7 +57,7 @@ interface ListenerEvent<T extends (...args: never[]) => void> {
 /** The small runtime.Port surface used by the document-side uploader. Keeping
  * it structural makes the streaming contract testable without a browser. */
 export interface VideoImportPort {
-  postMessage(message: VideoImportRequest): void;
+  postMessage(message: VideoImportPortMessage): void;
   disconnect(): void;
   onMessage: ListenerEvent<(message: VideoImportResponse) => void>;
   onDisconnect: ListenerEvent<() => void>;
@@ -90,26 +112,41 @@ export async function importVideo({
   doc,
   pageUrl,
   mediaUrl,
-  fetchVideo = (url) => fetch(url),
-  fetchPageVideo = fetchPageVideoSource,
-  recordVideoElement = recordRenderedVideoElement,
+  fetchVideo,
+  fetchPageVideo,
+  recordVideoElement,
   connect = (name) => chrome.runtime.connect({ name }) as VideoImportPort,
   createUploadId = () => crypto.randomUUID(),
   savedAt = new Date().toISOString(),
 }: VideoImportOptions): Promise<VideoImportResult> {
   const uploadId = createUploadId();
-  const port = connect(VIDEO_IMPORT_PORT_NAME);
-  const client = new VideoImportPortClient(port);
+  // connectNative in the relay keeps the awaiting worker alive while this
+  // document prepares its source. Preparation heartbeats are scoped below.
+  const client = new VideoImportPortClient(connect(VIDEO_IMPORT_PORT_NAME));
+  let preparationTimer: ReturnType<typeof setInterval> | undefined = setInterval(
+    () => client.preparing(uploadId),
+    VIDEO_PREPARATION_HEARTBEAT_MS,
+  );
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
+  const preparation = openDocumentVideo(
+    doc,
+    mediaUrl,
+    fetchVideo,
+    fetchPageVideo,
+    recordVideoElement,
+    client.signal,
+  );
 
   try {
-    const opened = await openDocumentVideo(
-      doc,
-      mediaUrl,
-      fetchVideo,
-      fetchPageVideo,
-      recordVideoElement,
+    const opened = await waitForVideoTransfer(
+      preparation,
+      "The video source took too long to prepare.",
+      VIDEO_PREPARATION_TIMEOUT_MS,
+      client.signal,
+      (error) => client.cancelSource(error),
     );
+    clearInterval(preparationTimer);
+    preparationTimer = undefined;
     reader = opened.reader;
     const extracted = extractStandaloneMedia(doc, pageUrl, "video", mediaUrl, savedAt);
     const metadata = importMetadata(extracted.metadata);
@@ -130,7 +167,7 @@ export async function importVideo({
       sequence = await sendBytes(client, uploadId, sequence, bytes);
     }
     while (true) {
-      const next = await reader.read();
+      const next = await readVideoChunk(reader, client.signal);
       if (next.done) break;
       if (next.value?.byteLength) {
         sequence = await sendBytes(client, uploadId, sequence, next.value);
@@ -152,11 +189,24 @@ export async function importVideo({
 
     return { metadata, response: finish };
   } catch (error) {
+    clearInterval(preparationTimer);
+    // A disconnect/timeout can win as preparation returns its owned reader.
+    // Observe that late success and cancel it unless this upload adopted it.
+    void preparation.then(
+      (opened) => {
+        if (opened.reader !== reader) void cancelVideoReader(opened.reader, error);
+      },
+      () => undefined,
+    );
     client.abort(uploadId);
-    if (reader) await cancelReader(reader, error);
-    throw error;
+    client.close();
+    if (reader) await cancelVideoReader(reader, error);
+    throw error instanceof VideoTransferTimeoutError
+      ? new VideoImportError("video_timeout", error.message)
+      : error;
   } finally {
-    reader?.releaseLock();
+    clearInterval(preparationTimer);
+    if (reader) releaseVideoReader(reader);
     client.close();
   }
 }
@@ -178,28 +228,60 @@ export function importBlobVideo({
 async function openDocumentVideo(
   doc: Document,
   mediaUrl: string,
-  fetchVideo: (url: string) => Promise<Response>,
-  fetchPageVideo: (url: string) => Promise<Response>,
-  recordVideoElement: (doc: Document, url: string) => Promise<Response>,
+  fetchVideo: ((url: string) => Promise<Response>) | undefined,
+  fetchPageVideo: ((url: string) => Promise<Response>) | undefined,
+  recordVideoElement: ((doc: Document, url: string) => Promise<Response>) | undefined,
+  signal: AbortSignal,
 ): Promise<OpenedDocumentVideo> {
   try {
-    return await probeVideoResponse(await fetchVideo(mediaUrl));
+    return await probeVideoResponse(
+      await openVideoResponse(
+        (fetchSignal) =>
+          fetchVideo ? fetchVideo(mediaUrl) : fetch(mediaUrl, { signal: fetchSignal }),
+        signal,
+      ),
+      signal,
+    );
   } catch (contentError) {
+    signal.throwIfAborted();
     if (!isFallbackVideoSourceError(contentError)) throw contentError;
   }
 
   try {
-    return await probeVideoResponse(await fetchPageVideo(mediaUrl));
+    return await probeVideoResponse(
+      await openVideoResponse(
+        (pageSignal) =>
+          fetchPageVideo
+            ? fetchPageVideo(mediaUrl)
+            : fetchPageVideoSource(mediaUrl, undefined, undefined, pageSignal),
+        signal,
+        VIDEO_TRANSFER_TIMEOUT_MS + PAGE_VIDEO_READY_TIMEOUT_MS,
+      ),
+      signal,
+    );
   } catch {
+    signal.throwIfAborted();
     // A MAIN-world stream can still fail for an inaccessible source, and some
     // WebExtension hosts may not support MAIN injection. The exact rendered
     // element in the isolated world is the final capability-based fallback.
   }
 
-  return probeVideoResponse(await recordVideoElement(doc, mediaUrl));
+  return probeVideoResponse(
+    await openVideoResponse(
+      (recordingSignal) =>
+        recordVideoElement
+          ? recordVideoElement(doc, mediaUrl)
+          : recordRenderedVideoElement(doc, mediaUrl, { signal: recordingSignal }),
+      signal,
+    ),
+    signal,
+  );
 }
 
-async function probeVideoResponse(response: Response): Promise<OpenedDocumentVideo> {
+async function probeVideoResponse(
+  response: Response,
+  signal: AbortSignal,
+): Promise<OpenedDocumentVideo> {
   if (!response.ok || !response.body) {
     throw new VideoSourceUnavailableError("The temporary video could not be read from this page.");
   }
@@ -207,7 +289,7 @@ async function probeVideoResponse(response: Response): Promise<OpenedDocumentVid
   const reader = response.body.getReader();
   try {
     const declaredContentType = response.headers.get("Content-Type");
-    const initial = await readInitialVideoChunks(reader, declaredContentType);
+    const initial = await readInitialVideoChunks(reader, declaredContentType, signal);
     return {
       reader,
       initial,
@@ -215,26 +297,17 @@ async function probeVideoResponse(response: Response): Promise<OpenedDocumentVid
       expectedBytes: parseExpectedBytes(response.headers.get("Content-Length")),
     };
   } catch (error) {
-    await cancelReader(reader, error);
-    reader.releaseLock();
+    await cancelVideoReader(reader, error);
     throw error;
   }
 }
 
 function isFallbackVideoSourceError(error: unknown): boolean {
-  return error instanceof TypeError || error instanceof VideoSourceUnavailableError;
-}
-
-async function cancelReader(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  reason: unknown,
-): Promise<void> {
-  const cancellable = reader as ReadableStreamDefaultReader<Uint8Array> & {
-    cancel?: (reason?: unknown) => Promise<void>;
-  };
-  if (typeof cancellable.cancel === "function") {
-    await cancellable.cancel(reason).catch(() => undefined);
-  }
+  return (
+    error instanceof TypeError ||
+    error instanceof VideoSourceUnavailableError ||
+    error instanceof VideoTransferTimeoutError
+  );
 }
 
 async function sendBytes(
@@ -282,6 +355,7 @@ function importMetadata(metadata: SaveRequestMetadata): VideoImportMetadata {
 async function readInitialVideoChunks(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   declared: string | null,
+  signal: AbortSignal,
 ): Promise<{ chunks: Uint8Array[]; signature: Uint8Array }> {
   const chunks: Uint8Array[] = [];
   const signature = new Uint8Array(12);
@@ -289,7 +363,7 @@ async function readInitialVideoChunks(
   const needsSniffing = isGenericContentType(declared);
 
   while (true) {
-    const next = await reader.read();
+    const next = await readVideoChunk(reader, signal);
     if (next.done) break;
     if (!next.value?.byteLength) continue;
     chunks.push(next.value);
@@ -360,10 +434,12 @@ function encodeBase64(bytes: Uint8Array): string {
 }
 
 class VideoImportPortClient {
+  private readonly cancellation = new AbortController();
   private pending:
     | {
         resolve: (response: VideoImportResponse) => void;
         reject: (error: Error) => void;
+        timer: ReturnType<typeof setTimeout>;
       }
     | undefined;
   private closed = false;
@@ -372,6 +448,31 @@ class VideoImportPortClient {
   constructor(private readonly port: VideoImportPort) {
     port.onMessage.addListener(this.handleMessage);
     port.onDisconnect.addListener(this.handleDisconnect);
+  }
+
+  get signal(): AbortSignal {
+    return this.cancellation.signal;
+  }
+
+  cancelSource(reason: unknown): void {
+    this.cancellation.abort(reason);
+  }
+
+  preparing(uploadId: string): void {
+    if (this.closed || this.pending || this.signal.aborted) return;
+    try {
+      this.port.postMessage({
+        protocol_version: PROTOCOL_VERSION,
+        action: "video_import_prepare",
+        upload_id: uploadId,
+      });
+    } catch (error) {
+      this.terminalError = new VideoImportError(
+        "native_connection",
+        error instanceof Error ? error.message : String(error),
+      );
+      this.cancelSource(this.terminalError);
+    }
   }
 
   request(message: VideoImportRequest): Promise<VideoImportResponse> {
@@ -385,10 +486,26 @@ class VideoImportPortClient {
       return Promise.reject(new Error("A video import request is already pending."));
 
     return new Promise((resolve, reject) => {
-      this.pending = { resolve, reject };
+      const timer = setTimeout(
+        () => {
+          this.pending = undefined;
+          this.terminalError = new VideoImportError(
+            "video_timeout",
+            "The Óia app stopped responding to the video import.",
+          );
+          this.cancelSource(this.terminalError);
+          reject(this.terminalError);
+          this.close();
+        },
+        message.action === "video_import_finish"
+          ? VIDEO_TRANSFER_FINISH_TIMEOUT_MS
+          : VIDEO_TRANSFER_TIMEOUT_MS,
+      );
+      this.pending = { resolve, reject, timer };
       try {
         this.port.postMessage(message);
       } catch (error) {
+        clearTimeout(timer);
         this.pending = undefined;
         reject(error instanceof Error ? error : new Error(String(error)));
       }
@@ -411,12 +528,14 @@ class VideoImportPortClient {
   }
 
   close(): void {
-    if (this.closed) return;
-    this.closed = true;
     this.port.onMessage.removeListener(this.handleMessage);
     this.port.onDisconnect.removeListener(this.handleDisconnect);
+    if (this.pending) clearTimeout(this.pending.timer);
     this.pending?.reject(new Error("The video import connection closed."));
     this.pending = undefined;
+    this.cancelSource(this.terminalError ?? new Error("The video import connection closed."));
+    if (this.closed) return;
+    this.closed = true;
     this.port.disconnect();
   }
 
@@ -428,9 +547,11 @@ class VideoImportPortClient {
           response.error,
           response.message || response.error,
         );
+        this.cancelSource(this.terminalError);
       }
       return;
     }
+    clearTimeout(pending.timer);
     this.pending = undefined;
     pending.resolve(response);
   };
@@ -438,10 +559,14 @@ class VideoImportPortClient {
   private readonly handleDisconnect = (): void => {
     if (this.closed) return;
     this.closed = true;
+    this.port.onMessage.removeListener(this.handleMessage);
+    this.port.onDisconnect.removeListener(this.handleDisconnect);
+    if (this.pending) clearTimeout(this.pending.timer);
     this.terminalError ??= new VideoImportError(
       "native_connection",
       "The Óia app closed the video import connection.",
     );
+    this.cancelSource(this.terminalError);
     this.pending?.reject(this.terminalError);
     this.pending = undefined;
   };

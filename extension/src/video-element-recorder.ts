@@ -1,5 +1,11 @@
 // SPDX-License-Identifier: MIT
 
+import {
+  cancelVideoReader,
+  VIDEO_TRANSFER_TIMEOUT_MS,
+  waitForVideoTransfer,
+} from "./video-transfer.js";
+
 const RECORDING_SLICE_MS = 1_000;
 const MAX_RECORDING_WALL_TIME_MS = 24 * 60 * 60 * 1_000;
 const VIDEO_TRACK_READY_TIMEOUT_MS = 3_000;
@@ -18,6 +24,7 @@ export interface VideoElementRecorderEnvironment {
   MediaRecorder?: MediaRecorderConstructor;
   setTimeout?: typeof setTimeout;
   clearTimeout?: typeof clearTimeout;
+  signal?: AbortSignal;
 }
 
 interface VideoSnapshot {
@@ -57,6 +64,8 @@ export async function recordVideoElement(
   const scheduleTimeout = environment.setTimeout ?? setTimeout;
   const cancelTimeout = environment.clearTimeout ?? clearTimeout;
   const snapshot = snapshotVideo(video);
+  const signal = environment.signal;
+  signal?.throwIfAborted();
   let stream: MediaStream | undefined;
   let recorder: MediaRecorder;
   let actualMimeType: string;
@@ -69,13 +78,19 @@ export async function recordVideoElement(
     // A paused MediaSource element can expose a capture track that never
     // produces frames. Start the exact page element before asking the browser
     // for its stream, then wait for any initially-muted video track.
-    await video.play();
+    await waitForVideoTransfer(
+      video.play(),
+      "The temporary video did not start playing.",
+      VIDEO_TRANSFER_TIMEOUT_MS,
+      signal,
+    );
+    signal?.throwIfAborted();
     stream = capture.call(video);
     const videoTracks = stream.getVideoTracks();
     if (videoTracks.length === 0) {
       throw new Error("The temporary video did not expose a recordable video track.");
     }
-    await waitForRecordableTrack(videoTracks[0], scheduleTimeout, cancelTimeout);
+    await waitForRecordableTrack(videoTracks[0], scheduleTimeout, cancelTimeout, signal);
 
     const requestedMimeType = selectMp4RecorderMimeType(
       Recorder,
@@ -103,6 +118,7 @@ export async function recordVideoElement(
     scheduleTimeout,
     cancelTimeout,
     snapshot,
+    signal,
   );
   return new Response(body, {
     status: 200,
@@ -140,6 +156,7 @@ async function createRecorderStream(
   scheduleTimeout: typeof setTimeout,
   cancelTimeout: typeof clearTimeout,
   snapshot: VideoSnapshot,
+  signal?: AbortSignal,
 ): Promise<ReadableStream<Uint8Array>> {
   const duration = video.duration;
   const blobs: Blob[] = [];
@@ -168,6 +185,7 @@ async function createRecorderStream(
       track.stop();
     });
     cancelTimeout(wallTimer);
+    signal?.removeEventListener("abort", handleAbort);
 
     restoreVideo(video, snapshot);
   };
@@ -221,6 +239,14 @@ async function createRecorderStream(
     if (!stopped) fail(new Error("The temporary video stream ended before it was copied."));
   }
 
+  function handleAbort(): void {
+    fail(
+      signal?.reason instanceof Error
+        ? signal.reason
+        : new Error("The temporary video copy was cancelled."),
+    );
+  }
+
   recorder.addEventListener("dataavailable", (event) => {
     const blob = (event as BlobEvent).data;
     if (cancelled || !blob?.size) return;
@@ -265,6 +291,7 @@ async function createRecorderStream(
   const wallTimer = scheduleTimeout(() => {
     fail(new Error("The temporary video took too long to copy."));
   }, wallTime);
+  signal?.addEventListener("abort", handleAbort, { once: true });
 
   const takeBlob = (): Promise<Blob | undefined> => {
     const next = blobs.shift();
@@ -279,7 +306,17 @@ async function createRecorderStream(
     if (!pausedForBackpressure || stopped || terminalError) return;
     pausedForBackpressure = false;
     if (recorder.state === "paused") recorder.resume();
-    await video.play();
+    try {
+      await waitForVideoTransfer(
+        video.play(),
+        "The temporary video did not resume playing.",
+        VIDEO_TRANSFER_TIMEOUT_MS,
+        signal,
+      );
+    } catch (error) {
+      fail(error instanceof Error ? error : new Error(String(error)));
+      throw error;
+    }
   };
 
   const body = new ReadableStream<Uint8Array>(
@@ -309,14 +346,15 @@ async function createRecorderStream(
       },
       async cancel() {
         cancelled = true;
-        await blobReader?.cancel();
         fail(new Error("The temporary video copy was cancelled."));
+        if (blobReader) await cancelVideoReader(blobReader);
       },
     },
     { highWaterMark: 0 },
   );
 
   try {
+    signal?.throwIfAborted();
     recorder.start(RECORDING_SLICE_MS);
   } catch (error) {
     fail(error instanceof Error ? error : new Error(String(error)));
@@ -354,6 +392,7 @@ function waitForRecordableTrack(
   track: MediaStreamTrack,
   scheduleTimeout: typeof setTimeout,
   cancelTimeout: typeof clearTimeout,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!track.muted) return Promise.resolve();
 
@@ -362,12 +401,22 @@ function waitForRecordableTrack(
     const cleanup = (): void => {
       if (timer !== undefined) cancelTimeout(timer);
       track.removeEventListener("unmute", handleUnmute);
+      signal?.removeEventListener("abort", handleAbort);
     };
     const handleUnmute = (): void => {
       cleanup();
       resolve();
     };
+    const handleAbort = (): void => {
+      cleanup();
+      reject(signal?.reason ?? new Error("The temporary video copy was cancelled."));
+    };
     track.addEventListener("unmute", handleUnmute);
+    signal?.addEventListener("abort", handleAbort, { once: true });
+    if (signal?.aborted) {
+      handleAbort();
+      return;
+    }
     if (!track.muted) {
       handleUnmute();
       return;

@@ -2,6 +2,15 @@
 
 import { OPEN_PAGE_VIDEO_SOURCE } from "./page-video-source.js";
 import { recordVideoElement } from "./video-element-recorder.js";
+import {
+  cancelVideoReader,
+  openVideoResponse,
+  PAGE_VIDEO_READY_TIMEOUT_MS,
+  readVideoChunk,
+  releaseVideoReader,
+  VIDEO_TRANSFER_TIMEOUT_MS,
+  VideoTransferTimeoutError,
+} from "./video-transfer.js";
 
 const PAGE_VIDEO_BRIDGE_MARKER = "__oiaPageVideoBridgeV1";
 const MAX_PAGE_VIDEO_CHUNK_BYTES = 256 * 1024;
@@ -21,8 +30,8 @@ interface PageVideoBridgeWindow extends Window {
 export function installPageVideoBridge(
   targetWindow: PageVideoBridgeWindow = window,
   fetchSource: typeof fetch = fetch,
-  recordSource: (url: string) => Promise<Response> = (url) =>
-    recordVideoElement(targetWindow.document, url),
+  recordSource: (url: string, signal?: AbortSignal) => Promise<Response> = (url, signal) =>
+    recordVideoElement(targetWindow.document, url, { signal }),
 ): void {
   if (targetWindow[PAGE_VIDEO_BRIDGE_MARKER]) return;
   targetWindow[PAGE_VIDEO_BRIDGE_MARKER] = true;
@@ -48,8 +57,7 @@ export async function servePageVideoSource(
   port: PageVideoPort,
   pageOrigin: string,
   fetchSource: typeof fetch,
-  recordSource: (url: string) => Promise<Response> = (sourceUrl) =>
-    recordVideoElement(document, sourceUrl),
+  recordSource?: (url: string, signal?: AbortSignal) => Promise<Response>,
 ): Promise<void> {
   port.start();
   let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
@@ -57,12 +65,72 @@ export async function servePageVideoSource(
   let pendingOffset = 0;
   let reading = false;
   let terminal = false;
+  const cancellation = new AbortController();
+  let idleTimer: ReturnType<typeof setTimeout>;
 
-  const close = (): void => {
+  const close = (reason?: unknown): void => {
     if (terminal) return;
     terminal = true;
-    reader?.releaseLock();
+    clearTimeout(idleTimer);
+    cancellation.abort(reason);
+    port.onmessage = null;
     port.close();
+    if (reader) {
+      if (reason === undefined) releaseVideoReader(reader);
+      else void cancelVideoReader(reader, reason);
+    }
+  };
+  const fail = (error: unknown): void => {
+    if (terminal) return;
+    try {
+      port.postMessage({
+        type: "error",
+        ok: false,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    } catch {
+      // The isolated endpoint may have disappeared with its document.
+    } finally {
+      close(error);
+    }
+  };
+  const armIdle = (timeoutMs = VIDEO_TRANSFER_TIMEOUT_MS): void => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(
+      () => fail(new VideoTransferTimeoutError("The page video capture stopped making progress.")),
+      timeoutMs,
+    );
+  };
+  armIdle(PAGE_VIDEO_READY_TIMEOUT_MS);
+
+  // Cancellation must be accepted while fetch, first bytes, or play() is still
+  // pending, not only after the source has announced that it is ready.
+  port.onmessage = (event): void => {
+    const request = event.data as { type?: unknown } | null;
+    if (request?.type === "cancel") {
+      close(new Error("The page video capture was cancelled."));
+      return;
+    }
+    if (request?.type !== "next" || reading || terminal || !reader) return;
+    armIdle();
+    reading = true;
+    void nextTransferableChunk(reader, () => ({ pendingBytes, pendingOffset }), cancellation.signal)
+      .then((next) => {
+        if (terminal) return;
+        pendingBytes = next.pendingBytes;
+        pendingOffset = next.pendingOffset;
+        if (!next.data) {
+          port.postMessage({ type: "done" });
+          close();
+          return;
+        }
+        port.postMessage({ type: "chunk", data: next.data }, [next.data]);
+        armIdle();
+      })
+      .catch(fail)
+      .finally(() => {
+        reading = false;
+      });
   };
 
   try {
@@ -74,10 +142,13 @@ export async function servePageVideoSource(
       throw new Error("The page video uses an unsupported source.");
     }
 
-    const opened = await openPageVideoSource(url, fetchSource, recordSource);
+    const opened = await openPageVideoSource(url, fetchSource, recordSource, cancellation.signal);
+    if (terminal) {
+      void cancelVideoReader(opened.reader, cancellation.signal.reason);
+      return;
+    }
     reader = opened.reader;
     pendingBytes = opened.firstBytes;
-    const sourceReader = reader;
     port.postMessage({
       type: "ready",
       ok: true,
@@ -85,45 +156,9 @@ export async function servePageVideoSource(
       ...(opened.expectedBytes === undefined ? {} : { expectedBytes: opened.expectedBytes }),
     });
 
-    port.onmessage = (event): void => {
-      const request = event.data as { type?: unknown } | null;
-      if (request?.type === "cancel") {
-        terminal = true;
-        void sourceReader.cancel().finally(() => port.close());
-        return;
-      }
-      if (request?.type !== "next" || reading || terminal) return;
-      reading = true;
-      void nextTransferableChunk(sourceReader, () => ({ pendingBytes, pendingOffset }))
-        .then((next) => {
-          pendingBytes = next.pendingBytes;
-          pendingOffset = next.pendingOffset;
-          if (!next.data) {
-            port.postMessage({ type: "done" });
-            close();
-            return;
-          }
-          port.postMessage({ type: "chunk", data: next.data }, [next.data]);
-        })
-        .catch((error: unknown) => {
-          port.postMessage({
-            type: "error",
-            ok: false,
-            message: error instanceof Error ? error.message : String(error),
-          });
-          close();
-        })
-        .finally(() => {
-          reading = false;
-        });
-    };
+    armIdle();
   } catch (error) {
-    port.postMessage({
-      type: "error",
-      ok: false,
-      message: error instanceof Error ? error.message : String(error),
-    });
-    close();
+    fail(error);
   }
 }
 
@@ -137,16 +172,33 @@ interface OpenedPageVideoSource {
 async function openPageVideoSource(
   url: string,
   fetchSource: typeof fetch,
-  recordSource: (url: string) => Promise<Response>,
+  recordSource: ((url: string, signal?: AbortSignal) => Promise<Response>) | undefined,
+  signal: AbortSignal,
 ): Promise<OpenedPageVideoSource> {
   try {
-    return await openNonEmptyResponse(await fetchSource(url));
+    return await openNonEmptyResponse(
+      await openVideoResponse((fetchSignal) => fetchSource(url, { signal: fetchSignal }), signal),
+      signal,
+    );
   } catch {
-    return openNonEmptyResponse(await recordSource(url));
+    signal.throwIfAborted();
+    return openNonEmptyResponse(
+      await openVideoResponse(
+        (recordingSignal) =>
+          recordSource
+            ? recordSource(url, recordingSignal)
+            : recordVideoElement(document, url, { signal: recordingSignal }),
+        signal,
+      ),
+      signal,
+    );
   }
 }
 
-async function openNonEmptyResponse(response: Response): Promise<OpenedPageVideoSource> {
+async function openNonEmptyResponse(
+  response: Response,
+  signal: AbortSignal,
+): Promise<OpenedPageVideoSource> {
   if (!response.ok || !response.body) {
     throw new Error("The temporary video could not be read from this page.");
   }
@@ -154,7 +206,7 @@ async function openNonEmptyResponse(response: Response): Promise<OpenedPageVideo
   const reader = response.body.getReader();
   try {
     while (true) {
-      const first = await reader.read();
+      const first = await readVideoChunk(reader, signal);
       if (first.done) throw new Error("The temporary video was empty.");
       if (!first.value.byteLength) continue;
       return {
@@ -165,8 +217,7 @@ async function openNonEmptyResponse(response: Response): Promise<OpenedPageVideo
       };
     }
   } catch (error) {
-    await reader.cancel(error).catch(() => undefined);
-    reader.releaseLock();
+    await cancelVideoReader(reader, error);
     throw error;
   }
 }
@@ -183,6 +234,7 @@ interface TransferableChunk extends PendingSourceBytes {
 async function nextTransferableChunk(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   pending: () => PendingSourceBytes,
+  signal: AbortSignal,
 ): Promise<TransferableChunk> {
   let { pendingBytes, pendingOffset } = pending();
 
@@ -198,7 +250,7 @@ async function nextTransferableChunk(
       return { data, pendingBytes, pendingOffset };
     }
 
-    const next = await reader.read();
+    const next = await readVideoChunk(reader, signal);
     if (next.done) return { pendingBytes: undefined, pendingOffset: 0 };
     if (!next.value.byteLength) continue;
     pendingBytes = next.value;

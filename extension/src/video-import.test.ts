@@ -1,15 +1,25 @@
 // SPDX-License-Identifier: MIT
 
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PROTOCOL_VERSION, type VideoImportRequest, type VideoImportResponse } from "./protocol.js";
+import { PROTOCOL_VERSION, type VideoImportResponse } from "./protocol.js";
 import {
   importBlobVideo,
   importVideo,
   MAX_VIDEO_IMPORT_CHUNK_BYTES,
   VIDEO_IMPORT_PORT_NAME,
   type VideoImportPort,
+  type VideoImportPortMessage,
 } from "./video-import.js";
+import {
+  VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS,
+  VIDEO_TRANSFER_FINISH_TIMEOUT_MS,
+  VIDEO_TRANSFER_TIMEOUT_MS,
+  VIDEO_PREPARATION_HEARTBEAT_MS,
+  VIDEO_PREPARATION_TIMEOUT_MS,
+} from "./video-transfer.js";
+
+afterEach(() => vi.useRealTimers());
 
 class ListenerEvent<T extends (...args: never[]) => void> {
   private readonly listeners = new Set<T>();
@@ -30,10 +40,10 @@ class ListenerEvent<T extends (...args: never[]) => void> {
 class FakeVideoImportPort implements VideoImportPort {
   readonly onMessage = new ListenerEvent<(message: VideoImportResponse) => void>();
   readonly onDisconnect = new ListenerEvent<() => void>();
-  readonly messages: VideoImportRequest[] = [];
+  readonly messages: VideoImportPortMessage[] = [];
   disconnected = false;
 
-  postMessage(message: VideoImportRequest): void {
+  postMessage(message: VideoImportPortMessage): void {
     this.messages.push(message);
   }
 
@@ -51,7 +61,7 @@ class FakeVideoImportPort implements VideoImportPort {
 }
 
 class AutoAckVideoImportPort extends FakeVideoImportPort {
-  override postMessage(message: VideoImportRequest): void {
+  override postMessage(message: VideoImportPortMessage): void {
     super.postMessage(message);
     queueMicrotask(() => {
       this.acknowledge(
@@ -83,7 +93,7 @@ function decodedLength(base64: string): number {
   return Buffer.from(base64, "base64").byteLength;
 }
 
-function encodedChunk(request: VideoImportRequest): string {
+function encodedChunk(request: VideoImportPortMessage): string {
   if (request.action !== "video_import_chunk") throw new Error("expected video chunk");
   return request.data_base64;
 }
@@ -508,24 +518,27 @@ describe("browser video import", () => {
     );
   });
 
-  it("retains an early native-connection error while the blob fetch is still opening", async () => {
-    const bytes = Uint8Array.from([
-      0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6f, 0x6d,
-    ]);
-    let resolveFetch!: (response: Response) => void;
-    const fetchPending = new Promise<Response>((resolve) => {
-      resolveFetch = resolve;
-    });
+  it("retains native keepalive while preparing, then immediately cancels opening if the host fails", async () => {
+    vi.useFakeTimers();
     const port = new FakeVideoImportPort();
+    const connect = vi.fn(() => port);
+    const fetchPageBlob = vi.fn();
     const imported = importBlobVideo({
       doc: cosmosDocument("blob:https://www.cosmos.so/early-native-error"),
       pageUrl: "https://www.cosmos.so/e/2035271300",
       blobUrl: "blob:https://www.cosmos.so/early-native-error",
-      fetchBlob: async () => fetchPending,
-      connect: () => port,
+      fetchBlob: () => new Promise(() => undefined),
+      fetchPageBlob,
+      connect,
       createUploadId: () => "early-error-upload",
     });
-
+    const rejected = expect(imported).rejects.toMatchObject({
+      code: "native_connection",
+      message: "Specified native messaging host not found.",
+    });
+    expect(connect).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(VIDEO_PREPARATION_HEARTBEAT_MS);
+    expect(port.messages.at(-1)?.action).toBe("video_import_prepare");
     port.acknowledge({
       protocol_version: PROTOCOL_VERSION,
       ok: false,
@@ -533,30 +546,15 @@ describe("browser video import", () => {
       message: "Specified native messaging host not found.",
     });
     port.drop();
-    let read = false;
-    resolveFetch({
-      ok: true,
-      headers: new Headers({ "Content-Type": "video/mp4" }),
-      body: {
-        getReader: () => ({
-          read: async () => {
-            if (read) return { done: true as const, value: undefined };
-            read = true;
-            return { done: false as const, value: bytes };
-          },
-          releaseLock: () => undefined,
-        }),
-      },
-    } as unknown as Response);
-
-    await expect(imported).rejects.toMatchObject({
-      name: "VideoImportError",
-      code: "native_connection",
-      message: "Specified native messaging host not found.",
-    });
+    await rejected;
+    expect(fetchPageBlob).not.toHaveBeenCalled();
+    const sent = port.messages.length;
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    expect(port.messages).toHaveLength(sent);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("aborts its upload id when fetching the document-scoped blob fails", async () => {
+  it("closes its preparation connection when opening the source fails", async () => {
     const port = new FakeVideoImportPort();
 
     await expect(
@@ -579,6 +577,286 @@ describe("browser video import", () => {
         upload_id: "fetch-failure-upload",
       },
     ]);
+    expect(port.disconnected).toBe(true);
+  });
+
+  it("immediately stops preparation after a native disconnect without a response", async () => {
+    vi.useFakeTimers();
+    const port = new FakeVideoImportPort();
+    const mediaUrl = "https://example.com/stalled.mp4";
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: () => new Promise(() => undefined),
+      connect: () => port,
+    });
+    const rejected = expect(imported).rejects.toMatchObject({ code: "native_connection" });
+    await vi.advanceTimersByTimeAsync(0);
+    port.drop();
+    await rejected;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cancels a prepared reader when native disconnect wins before the upload adopts it", async () => {
+    vi.useFakeTimers();
+    const port = new FakeVideoImportPort();
+    const cancel = vi.fn(async () => undefined);
+    const releaseLock = vi.fn();
+    const response = {
+      ok: true,
+      headers: {
+        get(name: string) {
+          if (name === "Content-Length") {
+            // The probe has read valid bytes and is about to return its reader.
+            port.drop();
+            return null;
+          }
+          return "video/mp4";
+        },
+      },
+      body: {
+        getReader: () => ({
+          read: async () => ({ done: false, value: Uint8Array.from([1]) }),
+          cancel,
+          releaseLock,
+        }),
+      },
+    } as unknown as Response;
+    const mediaUrl = "https://example.com/disconnect-at-ready.mp4";
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: async () => response,
+      connect: () => port,
+    });
+    const rejected = expect(imported).rejects.toMatchObject({ code: "native_connection" });
+
+    await vi.advanceTimersByTimeAsync(0);
+    await rejected;
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(releaseLock).toHaveBeenCalledTimes(1);
+    expect(port.messages).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("stops its preparation heartbeat when posting to a disconnected port fails", async () => {
+    vi.useFakeTimers();
+    class DisconnectedPreparationPort extends FakeVideoImportPort {
+      override postMessage(message: VideoImportPortMessage): void {
+        if (message.action === "video_import_prepare") throw new Error("port disconnected");
+        super.postMessage(message);
+      }
+    }
+    const port = new DisconnectedPreparationPort();
+    const mediaUrl = "https://example.com/stalled.mp4";
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: () => new Promise(() => undefined),
+      connect: () => port,
+    });
+    const rejected = expect(imported).rejects.toMatchObject({
+      code: "native_connection",
+      message: "port disconnected",
+    });
+    await vi.advanceTimersByTimeAsync(VIDEO_PREPARATION_HEARTBEAT_MS);
+    await rejected;
+    expect(port.disconnected).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("cannot heartbeat indefinitely when every source-opening attempt stalls", async () => {
+    vi.useFakeTimers();
+    const mediaUrl = "https://example.com/stalled.mp4";
+    const port = new AutoAckVideoImportPort();
+    const stalled = () => new Promise<Response>(() => undefined);
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: stalled,
+      fetchPageVideo: stalled,
+      recordVideoElement: stalled,
+      connect: () => port,
+    });
+    const rejected = expect(imported).rejects.toMatchObject({ code: "video_timeout" });
+    await vi.advanceTimersByTimeAsync(VIDEO_PREPARATION_TIMEOUT_MS);
+    await rejected;
+    expect(port.disconnected).toBe(true);
+    expect(port.messages.some((message) => message.action === "video_import_prepare")).toBe(true);
+    expect(port.messages.some((message) => message.action === "video_import_begin")).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("tries the page source after the initial fetch stops responding", async () => {
+    vi.useFakeTimers();
+    const mediaUrl = "https://example.com/stalled.mp4";
+    const port = new AutoAckVideoImportPort();
+    const fetchPageVideo = vi.fn(
+      async () =>
+        new Response(Uint8Array.from([1]), {
+          headers: { "Content-Type": "video/mp4" },
+        }),
+    );
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: () => new Promise(() => undefined),
+      fetchPageVideo,
+      connect: () => port,
+    });
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    await expect(imported).resolves.toMatchObject({ response: { ok: true } });
+    expect(fetchPageVideo).toHaveBeenCalledWith(mediaUrl);
+    expect(port.disconnected).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it.each(["video_import_begin", "video_import_chunk", "video_import_finish"] as const)(
+    "closes the native port and cancels its source when %s never acknowledges",
+    async (stalledAction) => {
+      vi.useFakeTimers();
+      const mediaUrl = "https://example.com/no-ack.mp4";
+      class StalledAckPort extends FakeVideoImportPort {
+        override postMessage(message: VideoImportPortMessage): void {
+          super.postMessage(message);
+          if (message.action !== stalledAction) {
+            queueMicrotask(() =>
+              this.acknowledge({ protocol_version: PROTOCOL_VERSION, ok: true }),
+            );
+          }
+        }
+      }
+      const port = new StalledAckPort();
+      let first = true;
+      const cancel = vi.fn(async () => undefined);
+      const releaseLock = vi.fn();
+      const response = {
+        ok: true,
+        headers: new Headers({ "Content-Type": "video/mp4" }),
+        body: {
+          getReader: () => ({
+            read: async () => {
+              if (!first) return { done: true, value: undefined };
+              first = false;
+              return { done: false, value: Uint8Array.from([1]) };
+            },
+            cancel,
+            releaseLock,
+          }),
+        },
+      } as unknown as Response;
+      const imported = importVideo({
+        doc: cosmosDocument(mediaUrl),
+        pageUrl: "https://example.com/work",
+        mediaUrl,
+        fetchVideo: async () => response,
+        connect: () => port,
+      });
+      const rejected = expect(imported).rejects.toMatchObject({ code: "video_timeout" });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(port.messages.at(-1)?.action).toBe(stalledAction);
+
+      if (stalledAction === "video_import_finish") {
+        await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+        expect(port.disconnected).toBe(false);
+        await vi.advanceTimersByTimeAsync(
+          VIDEO_TRANSFER_FINISH_TIMEOUT_MS - VIDEO_TRANSFER_TIMEOUT_MS,
+        );
+      } else {
+        await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+      }
+      await rejected;
+      expect(port.disconnected).toBe(true);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      expect(releaseLock).toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    },
+  );
+
+  it("closes its port before a stalled stream's cancellation can hang cleanup", async () => {
+    vi.useFakeTimers();
+    const mediaUrl = "https://example.com/stalled-body.mp4";
+    let first = true;
+    const cancel = vi.fn(() => new Promise<void>(() => undefined));
+    const releaseLock = vi.fn();
+    const response = {
+      ok: true,
+      headers: new Headers({ "Content-Type": "video/mp4" }),
+      body: {
+        getReader: () => ({
+          read: () => {
+            if (!first) return new Promise(() => undefined);
+            first = false;
+            return Promise.resolve({ done: false, value: Uint8Array.from([1]) });
+          },
+          cancel,
+          releaseLock,
+        }),
+      },
+    } as unknown as Response;
+    const port = new AutoAckVideoImportPort();
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: async () => response,
+      connect: () => port,
+    });
+    const rejected = expect(imported).rejects.toMatchObject({ code: "video_timeout" });
+
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_TIMEOUT_MS);
+    expect(port.disconnected).toBe(true);
+    expect(port.messages.at(-1)?.action).toBe("video_import_abort");
+    expect(cancel).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(VIDEO_TRANSFER_CLEANUP_TIMEOUT_MS);
+    await rejected;
+    expect(releaseLock).toHaveBeenCalled();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("allows a slow stream to continue for longer than the inactivity deadline", async () => {
+    vi.useFakeTimers();
+    const mediaUrl = "https://example.com/progressing.mp4";
+    let reads = 0;
+    const response = {
+      ok: true,
+      headers: new Headers({ "Content-Type": "video/mp4" }),
+      body: {
+        getReader: () => ({
+          read: () =>
+            new Promise((resolve) =>
+              setTimeout(() => {
+                reads += 1;
+                resolve(
+                  reads <= 3 ? { done: false, value: Uint8Array.from([reads]) } : { done: true },
+                );
+              }, 40_000),
+            ),
+          releaseLock: vi.fn(),
+        }),
+      },
+    } as unknown as Response;
+    const port = new AutoAckVideoImportPort();
+    const imported = importVideo({
+      doc: cosmosDocument(mediaUrl),
+      pageUrl: "https://example.com/work",
+      mediaUrl,
+      fetchVideo: async () => response,
+      connect: () => port,
+    });
+
+    await vi.advanceTimersByTimeAsync(160_000);
+    await expect(imported).resolves.toMatchObject({ response: { ok: true } });
+    expect(port.messages.filter((message) => message.action === "video_import_chunk")).toHaveLength(
+      3,
+    );
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("aborts after a Response.body reader failure", async () => {
