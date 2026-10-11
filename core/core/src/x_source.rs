@@ -11,6 +11,8 @@ use thiserror::Error;
 use time::{format_description::well_known::Rfc3339, OffsetDateTime};
 use url::Url;
 
+mod note_text;
+
 /// Prefer the best progressive MP4 no larger than this bitrate.
 pub const PREFERRED_VIDEO_BITRATE: u64 = 2_000_000;
 
@@ -142,6 +144,58 @@ pub fn syndication_url(post: &XPostReference) -> String {
 
 /// Parse one public syndication response without performing any I/O.
 pub fn parse_syndication_payload(payload: &str) -> Result<ResolvedPost, XSourceError> {
+    let raw = parse_raw_syndication(payload)?;
+    if raw.note_tweet.is_some() {
+        return Err(XSourceError::TruncatedPost);
+    }
+    resolve_syndication_post(raw)
+}
+
+/// Resolve a long post only when its exact note result is present in the
+/// official public post HTML. HTML is parsed as data; no script is executed.
+pub fn parse_syndication_payload_with_note_html(
+    payload: &str,
+    html: &str,
+) -> Result<ResolvedPost, XSourceError> {
+    let raw = parse_raw_syndication(payload)?;
+    let note = raw
+        .note_tweet
+        .as_ref()
+        .ok_or(XSourceError::MalformedPayload("note_tweet"))?;
+    let note_id = note_results_id(note)?.to_owned();
+    let mut post = resolve_syndication_post(raw)?;
+    post.text = note_text::full_note_text(html, &note_id, &post.source_id, &post.text)?;
+    Ok(post)
+}
+
+pub(crate) struct NoteTweetRefinement {
+    pub source_id: String,
+    pub canonical_url: String,
+}
+
+pub(crate) fn note_tweet_refinement(
+    payload: &str,
+) -> Result<Option<NoteTweetRefinement>, XSourceError> {
+    let raw = parse_raw_syndication(payload)?;
+    let Some(note) = raw.note_tweet.as_ref() else {
+        return Ok(None);
+    };
+    note_results_id(note)?;
+    let post = resolve_syndication_post(raw)?;
+    Ok(Some(NoteTweetRefinement {
+        source_id: post.source_id,
+        canonical_url: post.canonical_url,
+    }))
+}
+
+fn note_results_id(note: &serde_json::Value) -> Result<&str, XSourceError> {
+    note.get("id")
+        .and_then(serde_json::Value::as_str)
+        .filter(|id| note_text::graphql_identifier(id, "NoteTweetResults").is_some())
+        .ok_or(XSourceError::MalformedPayload("note_tweet.id"))
+}
+
+fn parse_raw_syndication(payload: &str) -> Result<RawTweet, XSourceError> {
     let raw: RawTweet = serde_json::from_str(payload).map_err(|_| XSourceError::InvalidJson)?;
 
     if raw.type_name.as_deref() != Some("Tweet") {
@@ -150,10 +204,10 @@ pub fn parse_syndication_payload(payload: &str) -> Result<ResolvedPost, XSourceE
     if raw.article.is_some() {
         return Err(XSourceError::UnsupportedArticle);
     }
-    if raw.note_tweet.is_some() {
-        return Err(XSourceError::TruncatedPost);
-    }
+    Ok(raw)
+}
 
+fn resolve_syndication_post(raw: RawTweet) -> Result<ResolvedPost, XSourceError> {
     let source_id = required_string(raw.id_str, "id_str")?;
     if !decimal_identifier(&source_id) {
         return Err(XSourceError::MalformedPayload("id_str"));

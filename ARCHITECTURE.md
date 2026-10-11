@@ -126,6 +126,11 @@ every affected component.
   lightweight t.co reading may use its stored canonical X post URL as bounded, file-backed
   evidence. Both upgrade the original URL-derived reading, preserving curation and existing
   assets. New short links and unrelated pages' canonical hints remain ordinary links.
+- **Long X posts:** when syndication identifies a truncated Note Tweet, the X adapter may fetch
+  the exact public post page within the same retrieval deadline and response-size limit. It
+  reads inert serialized data, verifies the post and note identities and the preview prefix,
+  and accepts only unambiguous complete text. Missing or conflicting text remains a capture
+  error; successful saves retain syndication's verified author and media.
 - **Index:** local SQLite database with FTS5. Rebuildable; per-device; never synced.
 - **Tag persistence:** `tags` contains user labels; `machine_tags` contains image/text source
   entries with `source`, `source_fingerprint`, `analyzer_version`, and inferred `tags`;

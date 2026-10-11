@@ -25,7 +25,10 @@ use tempfile::TempDir;
 use thiserror::Error;
 use url::Url;
 
-use crate::x_source::{classify_x_post_url, parse_syndication_payload, syndication_url};
+use crate::x_source::{
+    classify_x_post_url, note_tweet_refinement, parse_syndication_payload,
+    parse_syndication_payload_with_note_html, syndication_url,
+};
 use crate::{
     find_by_url, import_link_with_options, parse_reading, save_source_capture,
     ExpectedArticleState, ImportOptions, LibraryRoot, Metadata, ReadingKind, SaveDisposition,
@@ -123,7 +126,20 @@ trait SourceProvider: Sync {
     fn descriptor(&self) -> ProviderDescriptor;
     fn classify(&self, url: &str) -> Option<SourceReference>;
     fn metadata_url(&self, reference: &SourceReference) -> Result<String, String>;
-    fn parse_metadata(&self, payload: &[u8]) -> Result<ResolvedSource, String>;
+    fn metadata_refinement(&self, _: &[u8]) -> Result<Option<MetadataRefinement>, String> {
+        Ok(None)
+    }
+    fn parse_metadata(
+        &self,
+        payload: &[u8],
+        refinement: Option<&[u8]>,
+    ) -> Result<ResolvedSource, String>;
+}
+
+struct MetadataRefinement {
+    source_id: String,
+    url: String,
+    url_policy: UrlPolicy,
 }
 
 struct XSourceProvider;
@@ -153,10 +169,36 @@ impl SourceProvider for XSourceProvider {
         Ok(syndication_url(&reference))
     }
 
-    fn parse_metadata(&self, payload: &[u8]) -> Result<ResolvedSource, String> {
+    fn metadata_refinement(&self, payload: &[u8]) -> Result<Option<MetadataRefinement>, String> {
         let payload = std::str::from_utf8(payload)
             .map_err(|_| "the provider returned non-UTF-8 metadata".to_string())?;
-        let post = parse_syndication_payload(payload).map_err(|error| error.to_string())?;
+        note_tweet_refinement(payload)
+            .map(|refinement| {
+                refinement.map(|refinement| MetadataRefinement {
+                    source_id: refinement.source_id,
+                    url: refinement.canonical_url,
+                    url_policy: allowed_x_post_url,
+                })
+            })
+            .map_err(|error| error.to_string())
+    }
+
+    fn parse_metadata(
+        &self,
+        payload: &[u8],
+        refinement: Option<&[u8]>,
+    ) -> Result<ResolvedSource, String> {
+        let payload = std::str::from_utf8(payload)
+            .map_err(|_| "the provider returned non-UTF-8 metadata".to_string())?;
+        let post = match refinement {
+            Some(html) => {
+                let html = std::str::from_utf8(html)
+                    .map_err(|_| "the provider returned non-UTF-8 metadata".to_string())?;
+                parse_syndication_payload_with_note_html(payload, html)
+            }
+            None => parse_syndication_payload(payload),
+        }
+        .map_err(|error| error.to_string())?;
         Ok(ResolvedSource {
             source_id: post.source_id,
             canonical_url: post.canonical_url,
@@ -478,9 +520,37 @@ fn save_special_url_with_providers(
     deadline
         .ensure_remaining()
         .map_err(SaveUrlError::Retrieval)?;
+    let refinement = source
+        .provider
+        .metadata_refinement(&payload)
+        .map_err(SaveUrlError::Retrieval)?;
+    let refinement_payload = refinement
+        .map(|refinement| {
+            if refinement.source_id != source.reference.source_id {
+                return Err(SaveUrlError::Retrieval(
+                    "the provider returned a different post identifier".into(),
+                ));
+            }
+            let timeout = deadline
+                .request_timeout()
+                .map_err(SaveUrlError::Retrieval)?;
+            let bytes = retriever
+                .fetch_metadata(
+                    &refinement.url,
+                    refinement.url_policy,
+                    METADATA_LIMIT,
+                    timeout,
+                )
+                .map_err(SaveUrlError::Retrieval)?;
+            deadline
+                .ensure_remaining()
+                .map_err(SaveUrlError::Retrieval)?;
+            Ok(bytes)
+        })
+        .transpose()?;
     let post = source
         .provider
-        .parse_metadata(&payload)
+        .parse_metadata(&payload, refinement_payload.as_deref())
         .map_err(SaveUrlError::Retrieval)?;
     if post.source_id != source.reference.source_id {
         return Err(SaveUrlError::Retrieval(
@@ -1529,6 +1599,13 @@ fn allowed_x_syndication_url(url: &Url) -> bool {
     safe_https_url(url) && url.host_str() == Some("cdn.syndication.twimg.com")
 }
 
+fn allowed_x_post_url(url: &Url) -> bool {
+    safe_https_url(url)
+        && url.host_str() == Some("x.com")
+        && classify_x_post_url(url.as_str())
+            .is_some_and(|reference| reference.canonical_url == url.as_str())
+}
+
 fn allowed_x_asset_url(url: &Url) -> bool {
     safe_https_url(url) && matches!(url.host_str(), Some("pbs.twimg.com" | "video.twimg.com"))
 }
@@ -1549,18 +1626,33 @@ mod tests {
 
     struct FixtureRetriever {
         metadata: Vec<u8>,
+        refinement: Option<Vec<u8>>,
         assets: HashMap<String, (&'static str, Vec<u8>)>,
     }
 
     impl SourceRetriever for FixtureRetriever {
         fn fetch_metadata(
             &self,
-            _: &str,
-            _: UrlPolicy,
-            _: u64,
+            url: &str,
+            allowed_url: UrlPolicy,
+            limit: u64,
             _: Duration,
         ) -> Result<Vec<u8>, String> {
-            Ok(self.metadata.clone())
+            let parsed = Url::parse(url).map_err(|error| error.to_string())?;
+            if !allowed_url(&parsed) {
+                return Err("fixture metadata URL rejected".into());
+            }
+            let bytes = if allowed_x_post_url(&parsed) {
+                self.refinement
+                    .as_ref()
+                    .ok_or("missing fixture public post HTML")?
+            } else {
+                &self.metadata
+            };
+            if bytes.len() as u64 > limit {
+                return Err("fixture metadata exceeded limit".into());
+            }
+            Ok(bytes.clone())
         }
 
         fn download(
@@ -1634,7 +1726,11 @@ mod tests {
             ))
         }
 
-        fn parse_metadata(&self, payload: &[u8]) -> Result<ResolvedSource, String> {
+        fn parse_metadata(
+            &self,
+            payload: &[u8],
+            _: Option<&[u8]>,
+        ) -> Result<ResolvedSource, String> {
             let source_id = std::str::from_utf8(payload)
                 .map_err(|_| "example metadata was not UTF-8".to_string())?
                 .trim();
@@ -1691,6 +1787,7 @@ mod tests {
     fn fixture() -> FixtureRetriever {
         FixtureRetriever {
             metadata: include_bytes!("../tests/fixtures/x-syndication-video.json").to_vec(),
+            refinement: None,
             assets: HashMap::from([
                 (
                     "https://pbs.twimg.com/profile_images/1595516312154869760/aSJL1rPu_normal.jpg"
@@ -1721,6 +1818,7 @@ mod tests {
     fn example_fixture(source_id: &str) -> FixtureRetriever {
         FixtureRetriever {
             metadata: source_id.as_bytes().to_vec(),
+            refinement: None,
             assets: HashMap::new(),
         }
     }
@@ -2124,6 +2222,140 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    fn full_note_fixture() -> FixtureRetriever {
+        let mut retriever = fixture();
+        retriever.metadata =
+            include_bytes!("../tests/fixtures/x-syndication-full-note.json").to_vec();
+        retriever.refinement = Some(include_bytes!("../tests/fixtures/x-note-page.html").to_vec());
+        retriever
+    }
+
+    #[test]
+    fn long_post_refinement_upgrades_the_original_link_with_complete_text_and_media() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://twitter.com/BenSpringwater/status/2102505743278829840/photo/1";
+        let canonical = "https://x.com/benspringwater/status/2102505743278829840";
+        let before = legacy_post_link(&library, url, canonical);
+        let outcome =
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &full_note_fixture())
+                .unwrap()
+                .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&outcome.id)).unwrap()).unwrap();
+        assert_eq!(outcome.disposition, SaveDisposition::Upgraded);
+        assert_eq!(outcome.id, before.id);
+        assert_eq!(reading.metadata.url, before.url);
+        assert_eq!(reading.metadata.tags, before.tags);
+        assert_eq!(reading.metadata.saved_at, before.saved_at);
+        assert_eq!(
+            reading.metadata.excerpt.as_deref(),
+            Some(include_str!("../tests/fixtures/x-note-full-text.txt"))
+        );
+        let profile = reading.metadata.source_profile.unwrap();
+        assert_eq!(
+            fs::read(
+                library
+                    .reading_dir(&before.id)
+                    .join(&profile.attachments[0].asset)
+            )
+            .unwrap(),
+            b"movie"
+        );
+    }
+
+    #[test]
+    fn required_long_post_html_failures_never_promote_the_truncated_preview() {
+        let url = "https://x.com/benspringwater/status/2102505743278829840";
+        for refinement in [
+            None,
+            Some(vec![b'a'; METADATA_LIMIT as usize + 1]),
+            Some(b"<html>Missing complete note</html>".to_vec()),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let library = LibraryRoot::new(directory.path()).unwrap();
+            let before = legacy_post_link(&library, url, url);
+            let bytes = fs::read(library.article_path(&before.id)).unwrap();
+            let mut retriever = full_note_fixture();
+            retriever.refinement = refinement;
+            assert!(
+                save_special_url_with(&library, &UrlSaveRequest::new(url), &retriever).is_err()
+            );
+            assert_eq!(fs::read(library.article_path(&before.id)).unwrap(), bytes);
+            assert_eq!(
+                fs::read_dir(library.assets_dir(&before.id))
+                    .unwrap()
+                    .count(),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn long_post_html_and_assets_share_one_aggregate_deadline() {
+        struct SlowRefinement(FixtureRetriever);
+        impl SourceRetriever for SlowRefinement {
+            fn fetch_metadata(
+                &self,
+                url: &str,
+                allowed: UrlPolicy,
+                limit: u64,
+                timeout: Duration,
+            ) -> Result<Vec<u8>, String> {
+                let result = self.0.fetch_metadata(url, allowed, limit, timeout);
+                if allowed_x_post_url(&Url::parse(url).unwrap()) {
+                    std::thread::sleep(Duration::from_millis(30));
+                }
+                result
+            }
+            fn download(
+                &self,
+                _: &str,
+                _: &Path,
+                _: AssetRole,
+                _: UrlPolicy,
+                _: u64,
+                _: Duration,
+            ) -> Result<DownloadReceipt, String> {
+                panic!("a spent HTML retrieval deadline must prevent asset adoption")
+            }
+        }
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://x.com/benspringwater/status/2102505743278829840";
+        let before = legacy_post_link(&library, url, url);
+        let bytes = fs::read(library.article_path(&before.id)).unwrap();
+        let error = save_special_url_with_timeout(
+            &library,
+            &UrlSaveRequest::new(url),
+            &SlowRefinement(full_note_fixture()),
+            Duration::from_millis(20),
+        )
+        .unwrap_err();
+        assert!(
+            matches!(error, SaveUrlError::Retrieval(message) if message.contains("retrieval deadline"))
+        );
+        assert_eq!(fs::read(library.article_path(&before.id)).unwrap(), bytes);
+    }
+
+    #[test]
+    fn long_post_html_policy_allows_only_canonical_primary_post_routes() {
+        assert!(allowed_x_post_url(
+            &Url::parse("https://x.com/benspringwater/status/2102505743278829840").unwrap()
+        ));
+        for url in [
+            "https://twitter.com/benspringwater/status/2102505743278829840",
+            "https://x.com.evil.example/benspringwater/status/2102505743278829840",
+            "https://x.com/benspringwater",
+            "https://x.com/benspringwater/status/2102505743278829840/photo/1",
+            "https://x.com/benspringwater/status/2102505743278829840?source=redirect",
+            "http://x.com/benspringwater/status/2102505743278829840",
+            "https://user:password@x.com/benspringwater/status/2102505743278829840",
+        ] {
+            assert!(!allowed_x_post_url(&Url::parse(url).unwrap()), "{url}");
+        }
     }
 
     #[test]

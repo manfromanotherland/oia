@@ -1,0 +1,57 @@
+{
+  "__typename": "Tweet",
+  "id_str": "2102505743278829840",
+  "text": "This long post 🚀 &amp; starts here. https://t.co/media",
+  "display_text_range": [
+    0,
+    36
+  ],
+  "created_at": "2026-09-22T21:10:06.000Z",
+  "user": {
+    "name": "Ben Springwater",
+    "screen_name": "benspringwater",
+    "profile_image_url_https": "https://pbs.twimg.com/profile_images/1595516312154869760/aSJL1rPu_normal.jpg"
+  },
+  "mediaDetails": [
+    {
+      "type": "video",
+      "media_url_https": "https://pbs.twimg.com/amplify_video_thumb/2102504201188499456/img/poster.jpg",
+      "ext_alt_text": "Shapes moving like Newton's cradle",
+      "original_info": {
+        "width": 2160,
+        "height": 2160
+      },
+      "video_info": {
+        "variants": [
+          {
+            "content_type": "application/x-mpegURL",
+            "url": "https://video.twimg.com/amplify_video/playlist.m3u8"
+          },
+          {
+            "bitrate": 8768000,
+            "content_type": "video/mp4",
+            "url": "https://video.twimg.com/amplify_video/1080.mp4"
+          },
+          {
+            "bitrate": 432000,
+            "content_type": "video/mp4",
+            "url": "https://video.twimg.com/amplify_video/320.mp4"
+          },
+          {
+            "bitrate": 1280000,
+            "content_type": "video/mp4",
+            "url": "https://video.twimg.com/amplify_video/720.mp4"
+          },
+          {
+            "bitrate": 832000,
+            "content_type": "video/mp4",
+            "url": "https://video.twimg.com/amplify_video/540.mp4"
+          }
+        ]
+      }
+    }
+  ],
+  "note_tweet": {
+    "id": "Tm90ZVR3ZWV0UmVzdWx0czoyMTAyNTA1NzQzMjc4ODI5ODQx"
+  }
+}
