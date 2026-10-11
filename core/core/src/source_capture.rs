@@ -204,6 +204,69 @@ fn recognize_source<'a>(
     })
 }
 
+/// A saved t.co link can carry the resolved post URL from its original browser
+/// capture. Use only that file-backed evidence: a new short URL or another
+/// site's canonical hint never authorizes a social-post replacement.
+fn recognize_saved_source<'a>(
+    library: &LibraryRoot,
+    providers: &'a [&dyn SourceProvider],
+    submitted_url: &str,
+) -> Option<RecognizedSource<'a>> {
+    if let Some(source) = recognize_source(providers, submitted_url) {
+        return Some(source);
+    }
+    if !valid_x_shortlink_url(submitted_url) {
+        return None;
+    }
+
+    let id = crate::url_id(submitted_url).ok()?;
+    let article_path = library.article_path(&id);
+    let metadata = read_source_metadata(&article_path).ok()?;
+    if !valid_article_identity(library, article_path.parent()?, &metadata) {
+        return None;
+    }
+    let canonical = saved_x_shortlink_canonical(&metadata)?;
+    recognize_source(providers, canonical)
+}
+
+fn valid_x_shortlink_url(raw_url: &str) -> bool {
+    let Ok(url) = Url::parse(raw_url.trim()) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str() != Some("t.co")
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+    {
+        return false;
+    }
+    let Some(mut segments) = url.path_segments() else {
+        return false;
+    };
+    let Some(token) = segments.next() else {
+        return false;
+    };
+    (1..=64).contains(&token.len())
+        && token.bytes().all(|byte| byte.is_ascii_alphanumeric())
+        && segments.next().is_none()
+}
+
+fn saved_x_shortlink_canonical(metadata: &Metadata) -> Option<&str> {
+    if !valid_x_shortlink_url(&metadata.url) {
+        return None;
+    }
+    let reference = classify_x_post_url(&metadata.canonical_url)?;
+    let supported_state = match metadata.source_profile.as_ref() {
+        None => metadata.lightweight,
+        Some(profile) => {
+            !metadata.lightweight
+                && valid_matching_profile(profile, X_PROVIDER.descriptor(), &reference.post_id)
+        }
+    };
+    supported_state.then_some(metadata.canonical_url.as_str())
+}
+
 /// Save a URL through the provider registry, falling back to the ordinary
 /// lightweight link representation when no provider recognises it.
 pub fn save_url(
@@ -312,7 +375,7 @@ fn find_saved_url_with_providers(
     submitted_url: &str,
     providers: &[&dyn SourceProvider],
 ) -> Result<Option<String>, SaveUrlError> {
-    if let Some(source) = recognize_source(providers, submitted_url) {
+    if let Some(source) = recognize_saved_source(library, providers, submitted_url) {
         if let Some(id) = find_by_url(library, submitted_url)? {
             return Ok(Some(id));
         }
@@ -362,7 +425,7 @@ fn save_special_url_with_providers(
     providers: &[&dyn SourceProvider],
     retrieval_timeout: Duration,
 ) -> Result<Option<SaveOutcome>, SaveUrlError> {
-    let Some(source) = recognize_source(providers, &request.url) else {
+    let Some(source) = recognize_saved_source(library, providers, &request.url) else {
         return Ok(None);
     };
 
@@ -555,6 +618,7 @@ fn identity_for_existing_url(
         || metadata.id != id
         || metadata.kind != ReadingKind::Article
         || !crate::url_id(&metadata.url).is_ok_and(|stored_id| stored_id == id)
+        || !origin_matches(provider, reference, &metadata)
     {
         return Ok(Some(IdentitySelection::Duplicate(id)));
     }
@@ -628,7 +692,7 @@ fn scan_source_matches(
                 continue;
             };
             if !valid_article_identity(library, &reading.path(), &metadata)
-                || !origin_matches(provider, reference, &metadata.url)
+                || !origin_matches(provider, reference, &metadata)
             {
                 continue;
             }
@@ -672,7 +736,7 @@ fn existing_source_from_candidate(
     let metadata = snapshot.metadata;
     if metadata.lightweight
         || !valid_article_identity(library, candidate.article_path.parent()?, &metadata)
-        || !origin_matches(provider, reference, &metadata.url)
+        || !origin_matches(provider, reference, &metadata)
     {
         return None;
     }
@@ -697,7 +761,7 @@ fn existing_legacy_from_candidate(
     let metadata = snapshot.metadata;
     if metadata.source_profile.is_some()
         || !valid_article_identity(library, candidate.article_path.parent()?, &metadata)
-        || !origin_matches(provider, reference, &metadata.url)
+        || !origin_matches(provider, reference, &metadata)
     {
         return None;
     }
@@ -707,10 +771,18 @@ fn existing_legacy_from_candidate(
     })
 }
 
-fn origin_matches(provider: &dyn SourceProvider, reference: &SourceReference, url: &str) -> bool {
+fn origin_matches(
+    provider: &dyn SourceProvider,
+    reference: &SourceReference,
+    metadata: &Metadata,
+) -> bool {
     provider
-        .classify(url)
+        .classify(&metadata.url)
         .is_some_and(|candidate| candidate.source_id == reference.source_id)
+        || (provider.descriptor().provider == "x"
+            && saved_x_shortlink_canonical(metadata)
+                .and_then(|canonical| provider.classify(canonical))
+                .is_some_and(|candidate| candidate.source_id == reference.source_id))
 }
 
 fn profile_matches_identity(
@@ -1829,6 +1901,228 @@ mod tests {
             .unwrap()
             .as_deref(),
             Some(placeholder.id.as_str())
+        );
+    }
+
+    fn legacy_post_link(library: &LibraryRoot, url: &str, canonical_url: &str) -> Metadata {
+        let placeholder = import_link(library, url).unwrap();
+        let path = library.article_path(&placeholder.id);
+        let mut reading = parse_reading(&fs::read_to_string(path).unwrap()).unwrap();
+        reading.metadata.canonical_url = canonical_url.into();
+        reading.metadata.saved_at = "2021-11-08T12:34:56.000Z".into();
+        reading.metadata.read_at = Some("2022-01-01T00:00:00.000Z".into());
+        reading.metadata.archived = true;
+        reading.metadata.favorite = true;
+        reading.metadata.rating = 4;
+        reading.metadata.tags = vec!["Saved inspiration".into()];
+        reading.metadata.machine_tags = vec![crate::MachineTagSource {
+            source: "text".into(),
+            source_fingerprint: "a".repeat(64),
+            analyzer_version: "1".into(),
+            tags: vec!["motion".into()],
+        }];
+        reading.metadata.excluded_machine_tags = vec!["excluded".into()];
+        reading.metadata.featured_highlight_id = Some("saved-highlight".into());
+        reading.metadata.lang = Some("en".into());
+        let metadata = reading.metadata.clone();
+        crate::write_reading(library, reading.metadata, reading.body).unwrap();
+        metadata
+    }
+
+    #[test]
+    fn upgrades_media_routes_and_saved_shortlinks_in_place_without_losing_curation() {
+        let canonical_url = "https://x.com/benspringwater/status/2102505743278829840";
+        for url in [
+            "https://twitter.com/BenSpringwater/status/2102505743278829840/photo/2?ssr=true",
+            "https://t.co/odIZlOG1SS?ssr=true",
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let library = LibraryRoot::new(directory.path()).unwrap();
+            let before = legacy_post_link(&library, url, canonical_url);
+            let reading_dir = library.reading_dir(&before.id);
+            fs::create_dir_all(library.assets_dir(&before.id)).unwrap();
+            for (relative, bytes) in [
+                ("note.md", "Personal note"),
+                ("highlights.md", "Saved passage"),
+                ("assets/original.jpg", "Original thumbnail"),
+            ] {
+                fs::write(reading_dir.join(relative), bytes).unwrap();
+            }
+
+            let outcome = save_special_url_with(&library, &UrlSaveRequest::new(url), &fixture())
+                .unwrap()
+                .unwrap();
+            let reading =
+                parse_reading(&fs::read_to_string(library.article_path(&outcome.id)).unwrap())
+                    .unwrap();
+            let metadata = &reading.metadata;
+            assert_eq!(outcome.disposition, SaveDisposition::Upgraded, "{url}");
+            assert_eq!(outcome.id, before.id);
+            assert_eq!(metadata.url, before.url);
+            assert_eq!(metadata.canonical_url, canonical_url);
+            assert!(!metadata.lightweight);
+            assert_eq!(metadata.saved_at, before.saved_at);
+            assert_eq!(metadata.read_at, before.read_at);
+            assert_eq!(metadata.archived, before.archived);
+            assert_eq!(metadata.favorite, before.favorite);
+            assert_eq!(metadata.rating, before.rating);
+            assert_eq!(metadata.tags, before.tags);
+            assert_eq!(metadata.machine_tags, before.machine_tags);
+            assert_eq!(metadata.excluded_machine_tags, before.excluded_machine_tags);
+            assert_eq!(metadata.featured_highlight_id, before.featured_highlight_id);
+            assert_eq!(metadata.lang, before.lang);
+            assert_eq!(metadata.excerpt.as_deref(), Some("Motion \"study\""));
+            let profile = metadata.source_profile.as_ref().unwrap();
+            assert_eq!(profile.source_id, "2102505743278829840");
+            assert_eq!(profile.attachments.len(), 1);
+            assert_eq!(
+                fs::read(reading_dir.join(&profile.attachments[0].asset)).unwrap(),
+                b"movie"
+            );
+            assert_eq!(
+                fs::read(reading_dir.join(profile.attachments[0].poster_asset.as_ref().unwrap()))
+                    .unwrap(),
+                b"poster"
+            );
+            for (relative, bytes) in [
+                ("note.md", "Personal note"),
+                ("highlights.md", "Saved passage"),
+                ("assets/original.jpg", "Original thumbnail"),
+            ] {
+                assert_eq!(
+                    fs::read_to_string(reading_dir.join(relative)).unwrap(),
+                    bytes
+                );
+            }
+
+            // Both the original link and another post alias find the upgraded
+            // source. A complete re-save does not retrieve or rewrite it.
+            let bytes = fs::read(library.article_path(&outcome.id)).unwrap();
+            for alias in [
+                url,
+                "https://x.com/renamed/status/2102505743278829840/video/1",
+            ] {
+                assert_eq!(
+                    find_saved_url(&library, alias).unwrap(),
+                    Some(before.id.clone())
+                );
+                let duplicate = save_special_url_with(
+                    &library,
+                    &UrlSaveRequest::new(alias),
+                    &example_fixture("must not fetch"),
+                )
+                .unwrap()
+                .unwrap();
+                assert_eq!(duplicate.disposition, SaveDisposition::Duplicate);
+                assert_eq!(duplicate.id, before.id);
+                assert_eq!(fs::read(library.article_path(&before.id)).unwrap(), bytes);
+            }
+        }
+    }
+
+    #[test]
+    fn media_and_saved_shortlink_retrieval_failure_keeps_the_original_link() {
+        let canonical_url = "https://x.com/benspringwater/status/2102505743278829840";
+        for url in [
+            "https://x.com/benspringwater/status/2102505743278829840/photo/1",
+            "https://t.co/odIZlOG1SS?ssr=true",
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let library = LibraryRoot::new(directory.path()).unwrap();
+            let before = legacy_post_link(&library, url, canonical_url);
+            let bytes = fs::read(library.article_path(&before.id)).unwrap();
+            let original_asset = library.assets_dir(&before.id).join("original.jpg");
+            fs::write(&original_asset, b"Original thumbnail").unwrap();
+            let mut retriever = fixture();
+            retriever
+                .assets
+                .remove("https://video.twimg.com/amplify_video/720.mp4");
+
+            assert!(
+                save_special_url_with(&library, &UrlSaveRequest::new(url), &retriever).is_err()
+            );
+            assert_eq!(fs::read(library.article_path(&before.id)).unwrap(), bytes);
+            assert_eq!(fs::read(original_asset).unwrap(), b"Original thumbnail");
+            assert_eq!(
+                fs::read_dir(library.assets_dir(&before.id))
+                    .unwrap()
+                    .count(),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn unrelated_origins_cannot_supply_canonical_post_identity() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let canonical_url = "https://x.com/benspringwater/status/2102505743278829840";
+        for url in [
+            "https://example.com/copied-post",
+            "https://t.co.example.com/odIZlOG1SS",
+            "https://t.co/odIZlOG1SS/extra",
+            "https://user:password@t.co/odIZlOG1SS",
+        ] {
+            let before = legacy_post_link(&library, url, canonical_url);
+            assert!(
+                save_special_url_with(&library, &UrlSaveRequest::new(url), &fixture())
+                    .unwrap()
+                    .is_none()
+            );
+            assert_eq!(find_saved_url(&library, canonical_url).unwrap(), None);
+            assert_eq!(
+                read_metadata(&library.article_path(&before.id))
+                    .unwrap()
+                    .source_profile,
+                None
+            );
+        }
+        assert!(save_special_url_with(
+            &library,
+            &UrlSaveRequest::new("https://t.co/unsavedToken"),
+            &fixture(),
+        )
+        .unwrap()
+        .is_none());
+    }
+
+    #[test]
+    fn saved_shortlink_recognition_requires_a_bounded_valid_article_header() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://t.co/odIZlOG1SS?ssr=true";
+        let before = legacy_post_link(
+            &library,
+            url,
+            "https://x.com/benspringwater/status/2102505743278829840",
+        );
+        let path = library.article_path(&before.id);
+        let contents = fs::read_to_string(&path).unwrap();
+        let mut reading = parse_reading(&contents).unwrap();
+        reading.metadata.lightweight = false;
+        fs::write(&path, crate::render_reading(&reading).unwrap()).unwrap();
+        assert!(
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &fixture())
+                .unwrap()
+                .is_none()
+        );
+
+        reading.metadata.lightweight = true;
+        reading.metadata.id = "b".repeat(64);
+        fs::write(&path, crate::render_reading(&reading).unwrap()).unwrap();
+        assert!(
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &fixture())
+                .unwrap()
+                .is_none()
+        );
+
+        let mut oversized = b"---\n".to_vec();
+        oversized.resize((SOURCE_FRONTMATTER_LIMIT + 64) as usize, b'a');
+        fs::write(&path, oversized).unwrap();
+        assert!(
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &fixture())
+                .unwrap()
+                .is_none()
         );
     }
 

@@ -85,8 +85,8 @@ pub enum XSourceError {
 /// Recognise an exact public post route on the supported X and Twitter hosts.
 ///
 /// Query parameters and fragments are share-time decoration and never enter
-/// identity. An optional trailing slash is accepted; media-viewer and other
-/// route suffixes are intentionally rejected.
+/// identity. An optional trailing slash and an exact photo/video viewer route
+/// for one of the post's four attachment positions are accepted.
 pub fn classify_x_post_url(raw_url: &str) -> Option<XPostReference> {
     let url = Url::parse(raw_url.trim()).ok()?;
     if !matches!(url.scheme(), "http" | "https")
@@ -106,7 +106,11 @@ pub fn classify_x_post_url(raw_url: &str) -> Option<XPostReference> {
     if segments.last() == Some(&"") {
         segments.pop();
     }
-    if segments.len() != 3 || segments[1] != "status" {
+    let post_route = segments.len() == 3;
+    let media_route = segments.len() == 5
+        && matches!(segments[3], "photo" | "video")
+        && matches!(segments[4], "1" | "2" | "3" | "4");
+    if !(post_route || media_route) || segments[1] != "status" {
         return None;
     }
 

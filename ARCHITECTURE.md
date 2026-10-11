@@ -122,6 +122,10 @@ every affected component.
   staging; the writer verifies every content address and commits all required assets before making
   the article file visible. Recognized-source failure is reported rather than silently writing a
   misleading lightweight link.
+- **Legacy X links:** exact post photo/video viewer routes resolve to the whole post. An existing
+  lightweight t.co reading may use its stored canonical X post URL as bounded, file-backed
+  evidence. Both upgrade the original URL-derived reading, preserving curation and existing
+  assets. New short links and unrelated pages' canonical hints remain ordinary links.
 - **Index:** local SQLite database with FTS5. Rebuildable; per-device; never synced.
 - **Tag persistence:** `tags` contains user labels; `machine_tags` contains image/text source
   entries with `source`, `source_fingerprint`, `analyzer_version`, and inferred `tags`;

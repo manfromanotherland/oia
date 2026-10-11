@@ -28,6 +28,14 @@ fn classifies_supported_post_urls_and_canonicalizes_aliases() {
             "https://www.twitter.com/benspringwater/status/2102505743278829840",
             "benspringwater",
         ),
+        (
+            "https://twitter.com/BenSpringwater/status/2102505743278829840/photo/2?ssr=true",
+            "benspringwater",
+        ),
+        (
+            "https://x.com/BenSpringwater/status/2102505743278829840/video/4/",
+            "benspringwater",
+        ),
     ];
 
     for (raw, expected_handle) in cases {
@@ -52,7 +60,12 @@ fn rejects_non_post_or_non_public_x_urls() {
         "https://mobile.x.com/ed/status/123",
         "https://x.com/ed",
         "https://x.com/ed/status/not-a-number",
-        "https://x.com/ed/status/123/photo/1",
+        "https://x.com/ed/status/123/photo/0",
+        "https://x.com/ed/status/123/photo/5",
+        "https://x.com/ed/status/123/photo/01",
+        "https://x.com/ed/status/123/video/not-a-number",
+        "https://x.com/ed/status/123/photo/1/extra",
+        "https://x.com/ed/status/123/analytics",
         "https://x.com/i/web/status/123",
         "https://x.com/too-long-for-an-x-handle/status/123",
         "https://user:password@x.com/ed/status/123",
