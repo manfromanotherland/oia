@@ -1603,7 +1603,7 @@ fn allowed_x_post_url(url: &Url) -> bool {
     safe_https_url(url)
         && url.host_str() == Some("x.com")
         && classify_x_post_url(url.as_str())
-            .is_some_and(|reference| reference.canonical_url == url.as_str())
+            .is_some_and(|reference| reference.canonical_url.eq_ignore_ascii_case(url.as_str()))
 }
 
 fn allowed_x_asset_url(url: &Url) -> bool {
@@ -2342,15 +2342,24 @@ mod tests {
 
     #[test]
     fn long_post_html_policy_allows_only_canonical_primary_post_routes() {
-        assert!(allowed_x_post_url(
-            &Url::parse("https://x.com/benspringwater/status/2102505743278829840").unwrap()
-        ));
+        for url in [
+            "https://x.com/benspringwater/status/2102505743278829840",
+            "https://x.com/BenSpringwater/status/2102505743278829840",
+            "https://x.com/BENSPRINGWATER/status/2102505743278829840",
+            "https://x.com/AnatoliKopadze/status/2070156017262793008",
+        ] {
+            assert!(allowed_x_post_url(&Url::parse(url).unwrap()), "{url}");
+        }
         for url in [
             "https://twitter.com/benspringwater/status/2102505743278829840",
+            "https://www.x.com/BenSpringwater/status/2102505743278829840",
             "https://x.com.evil.example/benspringwater/status/2102505743278829840",
             "https://x.com/benspringwater",
+            "https://x.com/BenSpringwater/Status/2102505743278829840",
+            "https://x.com/BenSpringwater/status/2102505743278829840/",
             "https://x.com/benspringwater/status/2102505743278829840/photo/1",
             "https://x.com/benspringwater/status/2102505743278829840?source=redirect",
+            "https://x.com/BenSpringwater/status/2102505743278829840#redirect",
             "http://x.com/benspringwater/status/2102505743278829840",
             "https://user:password@x.com/benspringwater/status/2102505743278829840",
         ] {
