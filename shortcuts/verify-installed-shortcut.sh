@@ -2,10 +2,10 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-candidate="${1:-$script_dir/Óia!.unsigned.shortcut}"
+candidate="${1:-$script_dir/Óia Capture.unsigned.shortcut}"
 metadata_script="$script_dir/installed-shortcut-metadata.applescript"
 runner_script="$script_dir/run-installed-shortcut.applescript"
-shortcut_name="${2:-Óia!}"
+shortcut_name="${2:-Óia Capture}"
 
 if [[ $# -gt 2 ]]; then
   printf 'Usage: %s [unsigned-shortcut] [shortcut-name]\n' "$0" >&2
@@ -44,7 +44,7 @@ if [[ "$match_count" != "1" ]]; then
   printf 'Expected one installed %s Shortcut; found %s.\n' "$shortcut_name" "$match_count" >&2
   exit 1
 fi
-if [[ "$accepts_input" != "true" ]]; then
+if [[ "$shortcut_name" == "Óia!" && "$accepts_input" != "true" ]]; then
   printf 'Installed %s no longer accepts Share Sheet input.\n' "$shortcut_name" >&2
   exit 1
 fi

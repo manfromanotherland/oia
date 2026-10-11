@@ -16,6 +16,7 @@ else { fatalError("Apple's local Shortcuts action registry is unavailable.") }
 let data = try Data(contentsOf: URL(fileURLWithPath: CommandLine.arguments[1]))
 let workflow = try PropertyListSerialization.propertyList(from: data, format: nil) as! [String: Any]
 let actions = workflow["WFWorkflowActions"] as! [[String: Any]]
+let isLauncher = workflow["WFWorkflowName"] as? String == "Óia!"
 var errors: [String] = []
 var groups: [String] = []
 var uuids = Set<String>()
@@ -43,6 +44,7 @@ for (index, serialized) in actions.enumerated() {
         $0.perform(NSSelectorFromString("objectForKey:"), with: "Key")?.takeUnretainedValue() as? String
     })
     let structural: Set<String> = ["UUID", "GroupingIdentifier", "WFControlFlowMode", "CustomOutputName"]
+    let legacyWorkflow: Set<String> = identifier == "is.workflow.actions.runworkflow" ? ["WFWorkflowName"] : []
     // Single-row If conditions use the legacy keys when serialized by Apple.
     let legacyIf: Set<String> = identifier == "is.workflow.actions.conditional"
         ? ["WFCondition", "WFInput", "WFConditionalActionString"] : []
@@ -55,7 +57,7 @@ for (index, serialized) in actions.enumerated() {
     if !missingVariables.isEmpty {
         errors.append("Action \(index): variable references lost during native decoding: \(missingVariables.sorted())")
     }
-    for key in parameters.keys where !keys.union(structural).union(legacyIf).contains(key) {
+    for key in parameters.keys where !keys.union(structural).union(legacyIf).union(legacyWorkflow).contains(key) {
         errors.append("Action \(index): unknown parameter \(key)")
     }
     _ = action.value(forKey: "parameters")
@@ -95,7 +97,9 @@ for (index, serialized) in actions.enumerated() {
             errors.append("Save File must use the configured folder and must not overwrite existing captures.")
         }
         if parameters["WFFolder"] != nil { errors.append("Reusable Shortcut contains a machine-specific destination.") }
-        if index == 0 {
+        if isLauncher {
+            // The launcher contract checker verifies the complete helper-output range.
+        } else if index == 0 {
             errors.append("Save File needs an explicitly named capture archive.")
         } else {
             let previous = actions[index - 1]
@@ -120,16 +124,20 @@ for (index, serialized) in actions.enumerated() {
     }
 }
 if !groups.isEmpty { errors.append("Unclosed control flow") }
-let questions = workflow["WFWorkflowImportQuestions"] as! [[String: Any]]
-if questions.count != 1 || questions.first?["ParameterKey"] as? String != "WFFolder" {
-    errors.append("The destination folder must be selected during import.")
+let questions = workflow["WFWorkflowImportQuestions"] as? [[String: Any]] ?? []
+if isLauncher {
+    if questions.count != 1 || questions.first?["ParameterKey"] as? String != "WFFolder" || questions.first?["ActionIndex"] as? Int != 5 {
+        errors.append("Fresh launcher setup must select the Save File destination.")
+    }
+} else {
+    if !questions.isEmpty { errors.append("Helper must not ask for a destination.") }
+    if actions.contains(where: { ["is.workflow.actions.documentpicker.save", "is.workflow.actions.notification"].contains($0["WFWorkflowActionIdentifier"] as? String ?? "") }) {
+        errors.append("Helper must return results without saving or notifying.")
+    }
+    if !(workflow["WFWorkflowTypes"] as? [String] ?? []).isEmpty { errors.append("Helper must not appear in the Share Sheet.") }
 }
-if let index = questions.first?["ActionIndex"] as? Int, actions.indices.contains(index),
-   actions[index]["WFWorkflowActionIdentifier"] as? String == "is.workflow.actions.documentpicker.save" {
-    // Keep setup pointed at Save File when the generated action count changes.
-} else { errors.append("The destination setup question does not point to Save File.") }
 if errors.isEmpty {
-    print("Validated \(actions.count) actions, action parameters, control flow, and destination setup.")
+    print("Validated \(actions.count) actions, action parameters, control flow, and workflow boundaries.")
     print("Signing and on-device Share Sheet execution remain separate checks.")
 } else {
     for error in errors { fputs(error + "\n", stderr) }

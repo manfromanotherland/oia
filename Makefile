@@ -10,8 +10,8 @@
 #   make check           # lint + test (fast pre-push gate)
 #   make ci              # lint + test + build
 #   make status          # git status for the monorepo
-#   make shortcut         # build, test, validate, and sign the iOS Shortcut
-#   make shortcut-install # release and verify the installed Shortcut marker
+#   make shortcut         # build, test, validate, and sign the capture helper
+#   make shortcut-install # release and verify the installed capture helper
 #   make COMPONENT=core test  # narrow a quality target to one component
 #
 # COMPONENT is optional for quality targets; leave it empty to hit all components.
@@ -56,8 +56,8 @@ check:  ## lint + test (fast pre-push gate)
 ci:     ## lint + test + build (full)
 	@$(RUN) ci $(COMPONENT)
 
-shortcut: ## Build, test, validate, and sign the installable iOS Shortcut
+shortcut: ## Build, test, validate, and sign the capture helper
 	@shortcuts/release-shortcut.sh
 
-shortcut-install: ## Release and verify the installed Shortcut marker
+shortcut-install: ## Release and verify the capture helper; preserve Óia!
 	@shortcuts/release-shortcut.sh --install

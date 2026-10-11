@@ -60,7 +60,10 @@ completion rechecks the source fingerprint before writing, so a result for an ol
 replace Tags for newer content. Machine Tags are added automatically, without a review step.
 
 The iOS **Óia!** Shortcut publishes sealed captures into `inbox/`
-inside the user's synced library. The Mac requests any missing iCloud bytes and
+inside the user's synced library. A permanent Óia! Shortcut retains the device's
+Inbox reference and calls the replaceable Óia Capture helper by name; the helper
+returns capture archives, while the permanent entry saves them and confirms success.
+The Mac requests any missing iCloud bytes and
 passes ready files to the shared Rust Inbox importer. Rust validates private
 snapshots, sends every URL-only capture through the same URL-save facade, and
 routes source-backed selected text through the shared quote/highlight logic.

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-// Builds the reviewable, unsigned source for the Óia! Shortcut.
+// Builds the reviewable Óia Capture helper. The permanent Óia! owns Save File.
 // Run through `make shortcut`; the release script supplies the source fingerprint.
 import Foundation
 
@@ -176,7 +176,7 @@ func captureMedia(_ input: Object, sourceURL: Object? = nil) {
 
 let shortcutInput: Object = ["Type": "ExtensionInput"]
 let repeatItem = variable("Repeat Item")
-action("comment", ["WFCommentActionText": "Share an image, video, text or link to Óia! Choose the inbox folder inside your iCloud Óia library during setup. Each item is saved as a complete archive with its capture type; Óia imports it on your Mac. The shared Rust engine resolves links, categories and selected-text highlights. Direct image links download the image. Instagram posts queue the selected slide for download on your Mac. No accounts."])
+action("comment", ["WFCommentActionText": "Óia Capture builds archives for the permanent Óia! Shortcut. Output contract v1: one or more named .cuttingscapture.zip files, followed by one confirmation text item. This helper never saves files or shows notifications. Keep the existing Óia! and its Inbox action when updating this helper."])
 let probeGroup = "0A1A0000-0000-4000-8000-000000000001"
 action("conditional", ["GroupingIdentifier": probeGroup, "WFControlFlowMode": 0,
     "WFCondition": 101, "WFInput": ["Type": "Variable", "Variable": attachment(shortcutInput)]],
@@ -189,6 +189,7 @@ action("conditional", ["GroupingIdentifier": probeGroup, "WFControlFlowMode": 2]
 action("comment", ["WFCommentActionText": "Official release marker: \(sourceFingerprint)"])
 action("comment", ["WFCommentActionText": "Release verification runs only when the Shortcut has no input."])
 let hasInput = beginIf(shortcutInput)
+set("Capture results", action("list", ["WFItems": [Any]()]))
 let repeatGroup = identifier()
 action("repeat.each", ["GroupingIdentifier": repeatGroup, "WFControlFlowMode": 0,
                        "WFInput": attachment(shortcutInput)])
@@ -313,9 +314,7 @@ let archive = action("makezip", ["WFInput": attachment(variable("Capture files")
 let captureFile = action("setitemname", ["WFInput": attachment(archive),
     "WFName": text(variable("Capture ID"), ".cuttingscapture.zip"),
     "WFDontIncludeFileExtension": false])
-let saveActionIndex = actions.count
-action("documentpicker.save", ["WFInput": attachment(captureFile), "WFAskWhereToSave": false,
-                                "WFSaveFileOverwrite": false])
+action("appendvariable", ["WFVariableName": "Capture results", "WFInput": attachment(captureFile)])
 action("repeat.each", ["GroupingIdentifier": repeatGroup, "WFControlFlowMode": 2])
 let inputCount = action("count", ["Input": attachment(shortcutInput), "WFCountType": "Items"])
 let inputCountText = action("gettext", ["WFTextActionText": text(inputCount)])
@@ -325,8 +324,8 @@ otherwise(singleSave)
 let pluralConfirmation = action("gettext", ["WFTextActionText": text(inputCount, " items saved to Inbox")])
 set("Notification copy", pluralConfirmation)
 endIf(singleSave)
-action("notification", ["WFNotificationActionTitle": text(variable("Notification copy")),
-                         "WFNotificationActionSound": false])
+action("appendvariable", ["WFVariableName": "Capture results", "WFInput": attachment(variable("Notification copy"))])
+action("output", ["WFOutput": text(variable("Capture results"))])
 otherwise(hasInput)
 action("alert", ["WFAlertActionTitle": "Óia!",
                   "WFAlertActionMessage": "Open an image, video, text or link. Tap Share, then choose Óia!",
@@ -334,7 +333,7 @@ action("alert", ["WFAlertActionTitle": "Óia!",
 endIf(hasInput)
 
 let workflow: Object = [
-    "WFWorkflowName": "Óia!",
+    "WFWorkflowName": "Óia Capture",
     "OiaShortcutProbeVersion": 2,
     "OiaShortcutFingerprint": sourceFingerprint,
     "WFWorkflowClientVersion": "2302.0.4",
@@ -342,7 +341,7 @@ let workflow: Object = [
     "WFWorkflowMinimumClientVersionString": "900",
     // Preserve the user's red heart across generated releases.
     "WFWorkflowIcon": ["WFWorkflowIconStartColor": 4282601983, "WFWorkflowIconGlyphNumber": 59754],
-    "WFWorkflowTypes": ["ActionExtension"],
+    "WFWorkflowTypes": [String](),
     "WFQuickActionSurfaces": [String](),
     "WFWorkflowHasShortcutInputVariables": true,
     "WFWorkflowHasOutputFallback": false,
@@ -350,8 +349,8 @@ let workflow: Object = [
         "WFStringContentItem", "WFRichTextContentItem", "WFImageContentItem", "WFAVAssetContentItem",
         "WFGenericFileContentItem"],
     "WFWorkflowOutputContentItemClasses": [String](),
-    "WFWorkflowImportQuestions": [["ActionIndex": saveActionIndex, "Category": "Parameter",
-        "ParameterKey": "WFFolder", "Text": "Choose the inbox folder inside your iCloud Óia library."]],
+    "OiaCaptureOutputVersion": 1,
+    "WFWorkflowImportQuestions": [Object](),
     "WFWorkflowActions": actions,
 ]
 let bytes = try PropertyListSerialization.data(fromPropertyList: workflow, format: .xml, options: 0)

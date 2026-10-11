@@ -294,9 +294,9 @@ struct NotificationGraph {
                 output = input.count
             case "gettext": output = try resolve(p["WFTextActionText"])
             case "setvariable": variables[p["WFVariableName"] as! String] = try resolve(p["WFInput"])
-            case "notification":
-                try require(conditions.isEmpty, "Notification summary has unclosed control flow")
-                return try (resolve(p["WFNotificationActionTitle"]) as? String).unwrap("Missing notification title")
+            case "appendvariable":
+                try require(conditions.isEmpty, "Confirmation summary has unclosed control flow")
+                return try (resolve(p["WFInput"]) as? String).unwrap("Missing confirmation text")
             default: throw Failure(description: "Unexpected action in notification graph: \(kind(action))")
             }
             outputs[p["UUID"] as! String] = output
@@ -512,19 +512,26 @@ do {
     try require(runner.variables["Save confirmation"] as? String == "Media saved to Inbox",
                 "Media confirmation is not contextual")
     print("PASS: text and media use contextual confirmations")
-    try require(workflow["WFWorkflowName"] as? String == "Óia!", "Shortcut name is stale")
-    let notifications = actions.filter { kind($0) == "notification" }
-    try require(notifications.count == 1, "The Shortcut must show one summary notification")
-    let notification = parameters(notifications[0])
-    try require(notification["WFNotificationActionBody"] == nil,
-                "The summary must not add a redundant notification body")
-    try require(containsVariable(notification["WFNotificationActionTitle"] as Any, named: "Notification copy"),
-                "The notification title must use the contextual summary")
+    try require(workflow["WFWorkflowName"] as? String == "Óia Capture", "Shortcut name is stale")
+    try require(!actions.contains { ["notification", "documentpicker.save"].contains(kind($0)) },
+                "The helper must leave saving and notifications to the permanent Shortcut")
+    try require((workflow["WFWorkflowTypes"] as? [String])?.isEmpty == true,
+                "Helper must stay out of the Share Sheet")
+    try require((workflow["WFWorkflowImportQuestions"] as? [Object])?.isEmpty == true,
+                "Helper must not ask for a destination")
+    try require(workflow["OiaCaptureOutputVersion"] as? Int == 1, "Missing helper output contract")
     let countIndex = try actions.firstIndex { kind($0) == "count" && parameters($0)["WFCountType"] as? String == "Items" }
         .unwrap("Multi-item shares must count their saved items")
-    let notificationIndex = try actions.firstIndex { kind($0) == "notification" }
-        .unwrap("Missing summary notification")
-    try require(countIndex < notificationIndex, "Item count must precede the summary notification")
+    let notificationIndex = try actions.firstIndex {
+        kind($0) == "appendvariable" && parameters($0)["WFVariableName"] as? String == "Capture results"
+            && containsVariable(parameters($0)["WFInput"] as Any, named: "Notification copy")
+    }.unwrap("Missing final confirmation item")
+    try require(countIndex < notificationIndex, "Item count must precede the summary")
+    let resultOutput = actions[notificationIndex + 1]
+    try require(kind(resultOutput) == "output" && containsVariable(parameters(resultOutput)["WFOutput"] as Any, named: "Capture results"),
+                "The helper must return archives followed by confirmation")
+    let archives = actions.filter { kind($0) == "appendvariable" && parameters($0)["WFVariableName"] as? String == "Capture results" }
+    try require(archives.count == 2, "Only the archive and final confirmation may enter the output list")
     let summaryGraph = Array(actions[countIndex...notificationIndex])
     var singleSummary = NotificationGraph(graph: summaryGraph, shortcutInput: ["image"])
     try require(singleSummary.title(saveConfirmation: "Image saved to Inbox") == "Image saved to Inbox",
@@ -532,7 +539,7 @@ do {
     var pluralSummary = NotificationGraph(graph: summaryGraph, shortcutInput: ["image", "link", "quote"])
     try require(pluralSummary.title(saveConfirmation: "Quote saved to Inbox") == "3 items saved to Inbox",
                 "Multi-item summary did not use its item count")
-    print("PASS: notification has one contextual title and no duplicate Óia line")
+    print("PASS: helper returns archives and one contextual confirmation without saving or notifying")
 } catch {
     failures += 1
     print("FAIL: Shortcut regression: \(error)")

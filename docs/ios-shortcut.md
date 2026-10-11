@@ -9,11 +9,12 @@ links into the `inbox` folder inside your iCloud library. You do not need an iOS
 1. Open Óia on your Mac. In Settings → Library, select **Open Inbox**.
    Check that this library is inside iCloud Drive and is visible in Files on your
    iPhone.
-2. Open [Óia!.shortcut](../shortcuts/%C3%93ia!.shortcut) in
-   Apple's Shortcuts app. Add the Shortcut and, when asked for its destination,
-   choose the **inbox** folder inside that same library.
-3. If you install on your Mac, enable Shortcuts iCloud Sync on both devices. The
-   Shortcut can then appear on your iPhone under the same Apple Account.
+2. For a fresh installation, add [Óia Capture.shortcut](../shortcuts/%C3%93ia%20Capture.shortcut),
+   then [Óia!.shortcut](../shortcuts/%C3%93ia!.shortcut). Choose the **inbox**
+   folder inside that same library when setting up Óia!. If Óia! already exists,
+   preserve it and migrate its actions in place; do not import the fresh template.
+3. If you install on your Mac, enable Shortcuts iCloud Sync on both devices. Both
+   shortcuts can then appear on your iPhone under the same Apple Account.
    You can also send the signed `.shortcut` file to your iPhone using AirDrop.
 4. On your iPhone, open the Shortcut's editor and confirm its final **Save File**
    action points to the right `inbox` folder, **Ask Where to Save** is off, and
@@ -30,15 +31,24 @@ and [running shortcuts from another app](https://support.apple.com/guide/shortcu
 The folder permission is yours to grant; the distributed Shortcut contains no
 personal paths or folder bookmarks.
 
-For repository updates, `make shortcut-install` builds, tests, validates, and
-signs the replacement, then verifies the installed **Óia!** against its expected
-official release marker. It will not open an import while an Óia Shortcut
-already exists, because doing so would create a numbered copy. For a stale
-release, the agent removes the old canonical Shortcut and any numbered copies
-once, reruns the install, completes Apple's import UI, and leaves the final
-**Save File** destination pointing to your library’s `inbox`.
-Updates preserve the installed Shortcut's appearance. The generated release uses
-the user's red heart icon and colour, covered by a regression check.
+## Updates preserve your setup
+
+**Óia!** is a permanent Share Sheet entry with your red heart, favourite
+placement and configured Inbox action. **Óia Capture** is its helper in the
+Shortcuts library; it stays out of the Share Sheet and needs no favourite or
+folder setup. Both sync through Shortcuts iCloud Sync.
+
+Óia! passes the original shared items to the helper using Run Shortcut. The
+helper returns one or more complete archive files followed by one contextual
+confirmation text item. Óia! saves only the archives to its existing Inbox and
+then displays that confirmation. The helper never saves files or shows a
+success notification itself.
+
+Future repository updates replace or edit only **Óia Capture**. The permanent
+entry resolves it by name through a Text variable, rather than storing the
+helper's installed identity. Its Inbox reference and favourite identity stay
+untouched. A new installation may need its folder selected on iOS once; a Mac
+folder selection is not proof that the reference works on an iPhone.
 
 ## What is kept
 
@@ -174,73 +184,55 @@ Close Óia before one test, then reopen it. The archives should remain in the
 Inbox until the import succeeds. Share an identical item again to check that it
 deduplicates and leaves no stale Inbox archive.
 
-## Release or update the Shortcut
-
-The signed file is the installable artifact. The unsigned XML and generator are
-kept alongside it so the workflow can be reviewed without importing it.
+## Release or update the helper
 
 ```sh
 make shortcut-install
 ```
 
-This builds the reviewable XML in a temporary directory, runs the regression and
-native-action validators, signs it, and publishes both artifacts only after every
-check passes. If the installed canonical release already matches, it exits
-without opening Shortcuts. If any stale **Óia!** or numbered **Óia! …** copy is
-installed, it refuses to import and prints the conflicts. The agent removes those
-copies once and reruns the command; only then does it open the signed file and
-wait for the **Add Shortcut** import. This prevents **Keep Both** and numbered
-copy churn rather than trying to clean it up after every import. The agent does
-not ask the user to inspect the editor or attest to the result.
+This builds, tests, validates and signs **Óia Capture**, then verifies its
+installed action count and side-effect-free release marker. If the installed
+helper matches, it exits without importing. If a stale helper exists, it refuses
+to import alongside it; update that helper in place or replace only that helper
+and rerun. The installer records Óia!'s identity, action count and Share Sheet
+support before and after installation and rejects unexpected changes.
 
-Signing is not installation. The generated workflow contains an early,
-side-effect-free version probe. Before running it, the verifier rejects every
-known unsafe release and checks the installed action count, so an older
-official workflow is never run as a probe. The current probe runs only when the
-Shortcut has no input; ordinary Share Sheet saves always have input. The
-verifier runs the installed Shortcut through Apple's background runner and
-compares its source-derived release marker with the signed candidate.
-A zero exit therefore means:
+`make shortcut` creates the signed helper artifact without installing it. The
+permanent eight-action template is built separately with
+`swift shortcuts/build-launcher.swift 'shortcuts/Óia!.unsigned.shortcut'`; sign it
+with Apple's `shortcuts sign` only for a fresh-install distribution. It is never
+an update package for an existing Óia!.
 
-1. Exactly one installed **Óia!** exists and accepts Share Sheet input.
-2. Its action count matches the candidate, so the version probe is safe to run.
-3. Its probe returns the candidate's SHA-256 release marker before any save or
-   notification action.
+For an existing monolithic Óia!, use Apple's editor to migrate in place:
 
-The marker proves which official generated release is running; Apple does not
-expose the installed action graph or the configured folder bookmark for hashing.
-The agent must therefore keep or select the known library `inbox` in the import
-UI. That setup responsibility is not delegated to the user.
+1. Export a backup file and record the installed Shortcut identity.
+2. Retain the configured Save File action, preserving its folder reference,
+   Ask Where to Save and overwrite settings.
+3. Replace the capture actions with the permanent template's eight-action flow:
+   Text helper name → Run Shortcut with original Shortcut Input → Count results →
+   subtract one → select archive range → existing Save File → get final
+   confirmation → Show Notification. Stop on absent Share Sheet input.
+4. Export the result and run `test-launcher.swift result.wflow backup.wflow`
+   against the decoded public export files. Verify the installed identity is
+   unchanged. Never delete or reimport the permanent entry.
 
-Use `make shortcut` when only a signed distributable is needed. It deliberately
-prints that the installed behavior remains unverified. Apple exposes no supported
-silent import API, so the small import UI step remains agent-operated. The preview
-opens in the background; after verification the agent closes Shortcuts and
-restores the app that was previously in use. iCloud propagation and device-only
-rendering are separate from this Mac-side installation proof and are checked only
-when a change specifically needs on-device acceptance.
+The helper uses output contract v1: archive files followed by one text item.
+Changes to this contract require coordinated in-place launcher migration; normal
+capture changes retain the contract and update only the helper. Named archives,
+checksums, manifests and Rust Inbox formats are unchanged.
 
-The generator uses only Foundation. The developer validator uses Apple's local
-Shortcuts action registry to check action identifiers, parameter names, enum
-values, retained variable references, If subjects, balanced control flow, and the
-destination import question. It also guards two native execution pitfalls:
-**Make Archive** can ignore its name field, so the archive is explicitly renamed;
-**Set Dictionary Value** unwraps a one-item List, so the attachments array is
-created by parsing JSON before setting the other manifest fields.
+The Foundation generators and native action validator check action identifiers,
+parameter names, enum values, variable references and control flow. Regression
+checks cover capture routing and launcher output wiring, including exclusion of
+the confirmation from the saved file range. `test-installed-helper.applescript`
+runs an offline multi-item check without writing to the Inbox.
 
-The validator does not install or run the Shortcut. Signing uses Apple's
-`shortcuts sign` helper and may require access outside a restricted terminal
-sandbox. A successful signature does not update an already installed Shortcut;
-the installed release-marker handshake above is the release gate.
-
-Before the direct-image-URL change, the generated workflow was also run in Mac Shortcuts with typed text, a URL,
-and a PNG. Two runs produced six archives with correct names and JSON types.
-The current Rust importer saved three items, recognized the other three as
-duplicates, and cleared only the successfully imported temporary Inbox copies.
-Replaying all six produced six duplicates and no extra items. The test verified
-the source URL, Unicode and line breaks, image display name, and identical source,
-archive, and imported-image checksums. Safari, Photos, video sharing, and iCloud
-delivery on iPhone still need the device checks above.
-
-The running Mac app's iCloud Inbox watcher also completed a duplicate handoff
-automatically after the file settled, without altering the existing reading.
+The migration was checked with native exports: the Inbox reference and red-heart
+metadata remained identical, accepted Share Sheet input types were unchanged,
+and the existing Shortcut identity remained intact. Native helper checks returned
+a valid version-4 text archive with Unicode content and a separate confirmation;
+a two-item run returned two archives and one plural confirmation. The permanent
+launcher also ran through its helper and saved valid archives to its original
+Inbox; a known existing quote retained its content identity and unchanged file.
+The test archives were moved out of the Inbox to temporary storage. These Mac
+checks do not establish iCloud propagation, iPhone favourites or device execution.

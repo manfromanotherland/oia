@@ -1,38 +1,35 @@
 # Shortcut workflow
 
-When any generated Shortcut behavior changes, the work is not complete when the
-`.shortcut` file is merely built or signed. The installed copy is a separate
-state and must be updated as part of the same task.
+Óia has two installed workflows. **Óia!** is the permanent Share Sheet entry;
+**Óia Capture** is the generated helper. Capture output contract v1 is one or
+more named `.cuttingscapture.zip` files followed by one confirmation text item.
+The helper owns capture; Óia! owns Inbox saving and the success notification.
 
-Preserve the installed Shortcut's icon, colour, and Inbox destination during
-updates. The current appearance is a **red heart**. Carry that appearance into
-the generated release and confirm it on the installed copy; appearance changes
-require a user request.
+Preserve the existing **Óia!** identity, icon, colour, favourite placement,
+accepted inputs and configured Inbox reference. Its appearance is a **red heart**.
+Edit this workflow in place when migration is required. Never delete, replace,
+rename or reimport it during updates. The signed Óia! artifact is a fresh-install
+template, not an update package.
 
-1. Run `make shortcut-install`. It builds, tests, validates, signs, and
-   publishes the replacement before checking the installed Shortcut. If the
-   canonical installed release already matches, it exits successfully without
-   opening Shortcuts. If any stale
-   **Óia!** or numbered **Óia! …** copy exists, it refuses to import, because
-   importing beside an existing copy is what creates another numbered copy.
-2. For a stale release, delete the canonical Shortcut and every numbered Óia
-   copy once, then immediately rerun `make shortcut-install`. The agent owns
-   Apple's unavoidable import UI: select **Add Shortcut** and keep or reselect
-   the configured library's `inbox` response. Never use **Keep Both**, never
-   import under a temporary numbered name, and never delegate editor inspection
-   or version checking to the user.
-3. Let the installed verifier finish. A zero exit means the installed action
-   count matched and its side-effect-free probe returned the candidate's
-   source-derived release marker. This proves the official generated version,
-   not a byte-for-byte hash of Apple's private installed graph. Opening the
-   preview, signing, or seeing one same-name tile is not completion.
-4. Confirm with `shortcuts list` that exactly one canonical **Óia!** remains.
-   Close only the Shortcuts windows opened for the import. If Shortcuts was not
-   already open, quit it. Restore the app that was frontmost before the import;
-   do not leave Shortcuts occupying the user's screen.
+1. Run `make shortcut-install` for capture updates. It builds, tests, validates,
+   signs and verifies **Óia Capture** only. A matching installed helper exits
+   without opening Shortcuts. A stale helper blocks import alongside itself.
+2. Update the helper in place or replace only **Óia Capture**, then rerun the
+   installer. The permanent workflow resolves the helper through a Text action
+   containing its name, so it does not depend on the helper's installed UUID.
+   Keep the helper out of the Share Sheet. Leave exactly one workflow of each
+   name; never choose Keep Both or create numbered copies.
+3. Completion requires a verified installed helper marker and unchanged Óia!
+   metadata. The installer compares the permanent workflow's installed identity,
+   action count and Share Sheet support before and after helper installation.
+4. For a launcher migration, export backup and result files through Apple's UI.
+   Run `test-launcher.swift` against the decoded public exports to verify the
+   output wiring, identical Inbox bookmark, icon and accepted inputs. Check the
+   installed UUID separately. Preserve the existing Save File action's settings;
+   only its input should change to the helper's archive range.
+5. Close only windows opened for this task and restore the previous foreground.
+   iCloud propagation, favourite placement and iPhone execution require device
+   evidence; a verified Mac install does not establish them.
 
-Apple exposes no supported silent import or replace API. Keep the UI step small
-and agent-operated, but do not bypass it by editing Shortcuts' private encrypted
-store. iCloud device propagation is separate from the verified Mac install;
-only request an iPhone acceptance run when the task specifically requires
-device-only behavior to be observed.
+Apple exposes no supported silent import or replacement API. Use its native
+editor/import UI; keep the private encrypted Shortcuts store untouched.

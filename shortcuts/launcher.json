@@ -1,0 +1,185 @@
+{
+  "WFWorkflowMinimumClientVersionString": "1113",
+  "WFWorkflowMinimumClientVersion": 1113,
+  "WFWorkflowIcon": {
+    "WFWorkflowIconStartColor": 4282601983,
+    "WFWorkflowIconGlyphNumber": 59754
+  },
+  "WFWorkflowClientVersion": "5037.0.19",
+  "WFWorkflowActions": [
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.gettext",
+      "WFWorkflowActionParameters": {
+        "UUID": "03FBFE8F-F570-436D-BFAC-894A99E5B971",
+        "WFTextActionText": "Óia Capture"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.runworkflow",
+      "WFWorkflowActionParameters": {
+        "WFInput": {
+          "Value": {
+            "Type": "ExtensionInput"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "WFWorkflow": {
+          "Value": {
+            "OutputUUID": "03FBFE8F-F570-436D-BFAC-894A99E5B971",
+            "Type": "ActionOutput",
+            "OutputName": "Text"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "UUID": "D01022D9-F1A9-4EA6-98C8-02143F416485",
+        "WFWorkflowName": {
+          "Value": {
+            "OutputUUID": "03FBFE8F-F570-436D-BFAC-894A99E5B971",
+            "Type": "ActionOutput",
+            "OutputName": "Text"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        }
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.count",
+      "WFWorkflowActionParameters": {
+        "Input": {
+          "Value": {
+            "OutputUUID": "D01022D9-F1A9-4EA6-98C8-02143F416485",
+            "Type": "ActionOutput",
+            "OutputName": "Shortcut Result"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "UUID": "ADF9F71A-3328-4E2B-9CDA-2AAE03627074"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.math",
+      "WFWorkflowActionParameters": {
+        "WFInput": {
+          "Value": {
+            "OutputUUID": "ADF9F71A-3328-4E2B-9CDA-2AAE03627074",
+            "Type": "ActionOutput",
+            "OutputName": "Count"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "WFMathOperation": "-",
+        "UUID": "FD8E1E2F-7B8D-4CDE-9EF5-05421B3172A0",
+        "WFMathOperand": "1"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.getitemfromlist",
+      "WFWorkflowActionParameters": {
+        "WFInput": {
+          "Value": {
+            "OutputUUID": "D01022D9-F1A9-4EA6-98C8-02143F416485",
+            "Type": "ActionOutput",
+            "OutputName": "Shortcut Result"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "WFItemSpecifier": "Items in Range",
+        "UUID": "5D6D6FF9-1A50-4A48-B4BE-1604C09FA429",
+        "WFItemRangeStart": "1",
+        "WFItemRangeEnd": {
+          "Value": {
+            "OutputUUID": "FD8E1E2F-7B8D-4CDE-9EF5-05421B3172A0",
+            "Type": "ActionOutput",
+            "OutputName": "Calculation Result"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        }
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.documentpicker.save",
+      "WFWorkflowActionParameters": {
+        "WFInput": {
+          "Value": {
+            "OutputUUID": "5D6D6FF9-1A50-4A48-B4BE-1604C09FA429",
+            "Type": "ActionOutput",
+            "OutputName": "Item from List"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "WFAskWhereToSave": false,
+        "WFSaveFileOverwrite": false,
+        "UUID": "AC43476B-59A6-4912-B24A-744ECC4A0665"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.getitemfromlist",
+      "WFWorkflowActionParameters": {
+        "WFInput": {
+          "Value": {
+            "OutputUUID": "D01022D9-F1A9-4EA6-98C8-02143F416485",
+            "Type": "ActionOutput",
+            "OutputName": "Shortcut Result"
+          },
+          "WFSerializationType": "WFTextTokenAttachment"
+        },
+        "WFItemSpecifier": "Last Item",
+        "UUID": "CAF7C7EC-E975-41F0-AD3F-685FD6DF4939"
+      }
+    },
+    {
+      "WFWorkflowActionIdentifier": "is.workflow.actions.notification",
+      "WFWorkflowActionParameters": {
+        "WFNotificationActionBody": {
+          "Value": {
+            "string": "￼",
+            "attachmentsByRange": {
+              "{0, 1}": {
+                "OutputUUID": "CAF7C7EC-E975-41F0-AD3F-685FD6DF4939",
+                "Type": "ActionOutput",
+                "OutputName": "Item from List"
+              }
+            }
+          },
+          "WFSerializationType": "WFTextTokenString"
+        },
+        "UUID": "ACB4A523-2F7A-4097-9388-699C441078C8",
+        "WFNotificationActionSound": false,
+        "WFNotificationActionTitle": ""
+      }
+    }
+  ],
+  "WFWorkflowHasOutputFallback": false,
+  "WFWorkflowOutputContentItemClasses": [],
+  "WFWorkflowNoInputBehavior": {
+    "Name": "WFWorkflowNoInputBehaviorShowError",
+    "Parameters": {}
+  },
+  "WFWorkflowInputContentItemClasses": [
+    "WFSafariWebPageContentItem",
+    "WFArticleContentItem",
+    "WFURLContentItem",
+    "WFStringContentItem",
+    "WFRichTextContentItem",
+    "WFImageContentItem",
+    "WFAVAssetContentItem",
+    "WFGenericFileContentItem"
+  ],
+  "WFWorkflowImportQuestions": [
+    {
+      "ActionIndex": 5,
+      "Category": "Parameter",
+      "ParameterKey": "WFFolder",
+      "Text": "Choose the inbox folder inside your iCloud Óia library on the device used for saving."
+    }
+  ],
+  "WFQuickActionSurfaces": [],
+  "WFWorkflowTypes": [
+    "ActionExtension",
+    "Watch",
+    "WFWorkflowTypeShowInSearch"
+  ],
+  "WFWorkflowHasShortcutInputVariables": true,
+  "WFWorkflowName": "Óia!",
+  "OiaLauncherVersion": 1
+}
