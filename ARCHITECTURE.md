@@ -62,17 +62,21 @@ replace Tags for newer content. Machine Tags are added automatically, without a 
 The iOS **Óia!** Shortcut publishes sealed captures into `inbox/`
 inside the user's synced library. The Mac requests any missing iCloud bytes and
 passes ready files to the shared Rust Inbox importer. Rust validates private
-snapshots, sends URL-only captures through the same URL-save facade, verifies durable results, and
-removes only unchanged successful inputs. It then yields to a single index
+snapshots, sends every URL-only capture through the same URL-save facade, and
+routes source-backed selected text through the shared quote/highlight logic.
+Version-3 captures declare `url`, `selection`, `text`, or `media` as their input
+type; Rust determines the saved category. Earlier ordinary captures remain
+readable. Rust verifies durable readings, assets, and highlight sidecars before
+removing unchanged successful inputs. It then yields to a single index
 reconcile. Inbox processing starts after the existing board is published and
 runs only while the Mac app is open. See [the capture contract](docs/inbox-format.md)
 and [Shortcut setup](docs/ios-shortcut.md).
 
 Version-2 Inbox captures explicitly request one Instagram post/carousel item.
 The app opts into a Rust adapter that validates the URL/index and launches the
-bundled Instaloader transport script in a per-device Python environment. Only
-this explicit request path performs network retrieval; the default core Inbox
-entry point and ordinary file imports remain offline. The resulting private
+bundled Instaloader transport script in a per-device Python environment.
+URL saves may also retrieve recognized public sources and optional category
+metadata/artwork. Supplied media and non-URL text imports remain offline. The resulting private
 media file passes through the same byte validation, durable import and safe
 request cleanup as supplied media. No hosted service or background daemon is
 introduced.

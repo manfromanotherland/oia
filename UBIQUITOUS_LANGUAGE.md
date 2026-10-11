@@ -66,7 +66,7 @@ host, and macOS app.
 | Asset | A local image or video stored in the reading's own `assets/` folder (`articles/<prefix>/<id>/assets/`) and linked from the body with a relative `assets/<file>` path. |
 | Original HTML | Optional raw HTML snapshot stored as `original.html` inside the reading folder for future reprocessing. |
 | Highlight | A saved selected text passage for one reading. Highlights are stored in the reading folder, separate from the article file. |
-| Featured highlight | The passage selected to represent an article on its board card. Browser highlight saves feature the most recently selected passage while retaining the article and all its highlights. |
+| Featured highlight | The passage selected to represent an article on its board card. Browser and Shortcut highlight saves feature the most recently selected passage while retaining the article and all its highlights. |
 | Highlight file | The `highlights.md` file inside a reading folder (`articles/<prefix>/<id>/highlights.md`) that stores that reading's saved highlights. |
 | Legacy note file | A `note.md` sidecar written by an older client or importer. The current macOS app does not display or mutate it, but preserves it when present. |
 | Reading id | Deterministic lowercase-hex SHA-256 content address. Web articles hash the normalized origin URL; web image/video cards hash kind + normalized origin + media identity; web quotes hash normalized origin + normalized selected Markdown; source-less app saves derive identity from their content. It names the reading folder and frontmatter `id`. |

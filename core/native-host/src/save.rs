@@ -69,6 +69,8 @@ fn handle_in_library_with_source_resolver(
         let special_request = UrlSaveRequest {
             url: req.metadata.url.clone(),
             title_hint: Some(req.metadata.title.clone()),
+            canonical_url_hint: Some(req.metadata.canonical_url.clone()),
+            site_hint: req.metadata.site.clone(),
             saved_at: Some(req.metadata.saved_at.clone()),
         };
         match resolve_source(library, &special_request) {

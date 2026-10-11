@@ -12,11 +12,13 @@ never append to or overwrite a published capture. One ZIP keeps metadata and
 payloads together even when an external sync service delivers files out of order.
 No companion manifest or completion marker is needed outside the archive.
 
-The archive contains a root `manifest.json` and any referenced attachment files:
+The archive contains a root `manifest.json` and any referenced attachment files.
+The current Shortcut writes version 3 for ordinary captures:
 
 ```json
 {
-  "version": 1,
+  "version": 3,
+  "capture_type": "selection",
   "capture_id": "unique-transport-identifier",
   "captured_at": "2026-09-10T12:00:00Z",
   "origin": {
@@ -25,7 +27,35 @@ The archive contains a root `manifest.json` and any referenced attachment files:
     "canonical_url": "https://example.com/canonical",
     "site_name": "Example"
   },
-  "text": "Optional selected text",
+  "text": "Selected text"
+}
+```
+
+`version`, `capture_type`, `capture_id` (nonempty, at most 128 bytes), and RFC3339
+`captured_at` are required. The type describes what the sharing app supplied,
+not the eventual reading kind or category. Rust owns URL recognition, metadata
+classification and selected-text routing, as it does for browser saves.
+
+| `capture_type` | Required payload | Import behavior |
+|---|---|---|
+| `url` | `origin.url`, or an exact HTTP(S) URL in `text`; no attachments or other text | Uses the shared URL-save facade, including recognized public source retrieval and metadata classification. Books, movies, music and products receive supported category metadata, covers and prices. Other URLs remain lightweight links. |
+| `selection` | Nonempty `text` (at most 64 KiB) and `origin.url`; no attachments | Uses the shared selection router: text enclosed in matching quotation marks becomes a quote; other passages become attached highlights. |
+| `text` | Nonempty `text`; no source URL or attachments | A standalone quote, unless the entire text is an HTTP(S) URL, in which case it uses the URL-save facade. |
+| `media` | One or more `attachments`; no text | Imports the shared files with their available origin metadata. |
+
+Unknown types and incompatible payload/type combinations are rejected and
+retained in Inbox. Producers must not guess `book`, `movie`, `tweet` or
+`highlight` as a capture type. That decision belongs to the shared Rust engine.
+Capture time is normalized to the library's fixed-width UTC date representation.
+
+A media manifest contains its file references and checksums:
+
+```json
+{
+  "version": 3,
+  "capture_type": "media",
+  "capture_id": "unique-transport-identifier",
+  "captured_at": "2026-09-10T12:00:00Z",
   "attachments": [
     {
       "path": "payload.jpg",
@@ -36,23 +66,32 @@ The archive contains a root `manifest.json` and any referenced attachment files:
 }
 ```
 
-`version`, `capture_id` (nonempty, at most 128 bytes), and RFC3339 `captured_at`
-are required. Other fields are optional. The example checksum is descriptive;
-producers supply the actual SHA-256. The shipped Shortcut always hashes media;
-the importer also accepts ZIP producers that omit the optional byte count/hash,
-using the ZIP sizes and CRC validation. Capture time is normalized to the
-library's fixed-width UTC date representation.
+The example checksum is descriptive; producers supply the actual SHA-256. The
+shipped Shortcut always hashes media; the importer also accepts ZIP producers
+that omit the optional byte count/hash, using the ZIP sizes and CRC validation.
 
 `capture_id` identifies transport only. Normal content-addressed reading ids
 still control deduplication. A source must be HTTP(S); local paths never become
 an origin. A canonical URL is metadata and does not replace the visited URL.
 
-At least one attachment, nonempty text, or source URL is required. Attachments
-become media/text readings; nonempty text becomes a quote, except an exact
-HTTP(S) URL uses the shared URL-save facade when no different page origin is
-given. A recognized public source becomes a complete local article; every other
-source-only capture becomes a lightweight link. Generic page extraction never
-occurs in the Inbox path. Available source title/site/canonical data is retained.
+Generic full-page extraction does not occur in the Inbox path. Available source
+title/site/canonical data is retained. The Shortcut uses Safari's supplied page
+selection; it does not run a DOM extractor or duplicate Rust's category
+logic. The browser can additionally report `<q>`/`<blockquote>` enclosure;
+Shortcuts supplies no such DOM evidence.
+
+## Legacy ordinary captures (version 1)
+
+Version 1 remains supported with the same metadata, text and attachment fields,
+without `capture_type`. Rust infers media from attachments, a selection from text
+with a page origin, standalone text from text alone, and a URL save from an
+origin alone. An exact HTTP(S) URL in text still uses the URL-save facade when
+no different page origin is given. Legacy captures therefore use the updated
+shared save behavior after the Mac app is updated.
+
+Version-1/2-only readers reject version 3 and retain the archive. Update the Mac
+app before installing the new Shortcut; there is no fallback that could save a
+selection as the wrong reading kind.
 
 ## Instagram requests (version 2)
 
@@ -72,7 +111,8 @@ attachments or text, and never falls back to a link. Version-1-only readers reje
 and retain it. Rust validates the HTTPS Instagram post/reel URL, interprets the
 one-based `img_index` (missing means 1), rejects ambiguous/invalid indices, and
 removes tracking parameters from the saved origin. The native app opts into the
-external downloader; the ordinary `process_inbox` entry point remains offline.
+external downloader. URL captures also use the shared source/category retrieval
+path; supplied media and non-URL text import without network access.
 
 Instaloader runs in a per-device Python environment, outside the library. It
 fetches exactly the selected node, uses video bytes rather than a poster for a
@@ -82,8 +122,7 @@ the resulting media through the normal importer and verifies the saved asset
 before consuming the unchanged request. The original share time is preserved.
 No account sessions, browser cookies, CDN URLs, or credentials are stored in the
 request or saved card. Network/authentication failures and missing slide indices
-stay in Inbox as issues; **Check Inbox** retries them. Other file imports remain
-offline. See [setup](ios-shortcut.md#instagram).
+stay in Inbox as issues; **Check Inbox** retries them. See [setup](ios-shortcut.md#instagram).
 
 ## Validation and consumption
 

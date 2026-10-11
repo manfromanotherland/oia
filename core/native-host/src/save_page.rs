@@ -73,6 +73,8 @@ fn handle_in_library_with_source_resolver(
     let source_request = UrlSaveRequest {
         url: request.metadata.url.clone(),
         title_hint: Some(request.metadata.title.clone()),
+        canonical_url_hint: Some(request.metadata.canonical_url.clone()),
+        site_hint: request.metadata.site.clone(),
         saved_at: Some(request.metadata.saved_at.clone()),
     };
     let source_fallback = match resolve_source(library, &source_request) {

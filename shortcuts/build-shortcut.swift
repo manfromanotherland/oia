@@ -57,7 +57,7 @@ func set(_ name: String, _ value: Object) {
     action("setvariable", ["WFVariableName": name, "WFInput": attachment(value)])
 }
 
-func field(_ name: String, _ value: Object, in dictionary: String = "Manifest") {
+func field(_ name: String, _ value: Any, in dictionary: String = "Manifest") {
     let updated = action("setvalueforkey", ["WFDictionary": attachment(variable(dictionary)),
                                            "WFDictionaryKey": name,
                                            "WFDictionaryValue": text(value)])
@@ -106,7 +106,7 @@ func setTextSaveConfirmation(_ input: Object) {
     endIf(isLink)
 }
 
-// A version-2 request deliberately contains no v1 link fallback. Older apps
+// A version-2 request deliberately contains no ordinary link fallback. Older apps
 // retain the unsupported archive rather than silently saving the wrong kind.
 func beginInstagram(_ input: Object) -> String {
     let matched = action("text.match", ["text": text(input),
@@ -146,7 +146,7 @@ func captureMedia(_ input: Object, sourceURL: Object? = nil) {
     // the array from JSON instead, then add the other fields without touching it.
     // Attachment itself is serialized by Shortcuts, so its values remain escaped.
     let mediaManifest = action("gettext", ["WFTextActionText": text(
-        "{\"version\":1,\"attachments\":[", variable("Attachment"), "]}")])
+        "{\"version\":3,\"capture_type\":\"media\",\"attachments\":[", variable("Attachment"), "]}")])
     set("Manifest", action("detect.dictionary", ["WFInput": attachment(mediaManifest)]))
     field("capture_id", variable("Capture ID"))
     field("captured_at", variable("Captured at"))
@@ -155,7 +155,7 @@ func captureMedia(_ input: Object, sourceURL: Object? = nil) {
 
 let shortcutInput: Object = ["Type": "ExtensionInput"]
 let repeatItem = variable("Repeat Item")
-action("comment", ["WFCommentActionText": "Share an image, video, text or link to Óia! Choose the inbox folder inside your iCloud Óia library during setup. Each item is saved as a complete archive; Óia imports it on your Mac. Direct image links download the image. Instagram posts queue the selected slide for download on your Mac; other links stay lightweight. No accounts."])
+action("comment", ["WFCommentActionText": "Share an image, video, text or link to Óia! Choose the inbox folder inside your iCloud Óia library during setup. Each item is saved as a complete archive with its capture type; Óia imports it on your Mac. The shared Rust engine resolves links, categories and selected-text highlights. Direct image links download the image. Instagram posts queue the selected slide for download on your Mac. No accounts."])
 let probeGroup = "0A1A0000-0000-4000-8000-000000000001"
 action("conditional", ["GroupingIdentifier": probeGroup, "WFControlFlowMode": 0,
     "WFCondition": 101, "WFInput": ["Type": "Variable", "Variable": attachment(shortcutInput)]],
@@ -178,7 +178,7 @@ set("Captured at", date)
 let random = action("number.random", ["WFRandomNumberMinimum": 1, "WFRandomNumberMaximum": 999999999999])
 let seed = action("gettext", ["WFTextActionText": text(date, "-", random, "-", variable("Repeat Index"))])
 set("Capture ID", action("hash", ["WFInput": attachment(seed), "WFHashType": "SHA256"]))
-json(["version": 1], named: "Manifest")
+json(["version": 3, "capture_type": "url"], named: "Manifest")
 field("capture_id", variable("Capture ID"))
 field("captured_at", variable("Captured at"))
 set("Capture files", action("list", ["WFItems": [Any]()]))
@@ -198,7 +198,8 @@ let selection = action("properties.safariwebpage", ["WFInput": attachment(repeat
 // A whole-page share has no selection. Set Dictionary Value rejects a missing
 // value on iOS; omit the optional text field so this remains a lightweight link.
 let hasSelection = beginIf(selection)
-setSaveConfirmation("Quote saved to Inbox")
+setSaveConfirmation("Selection saved to Inbox")
+field("capture_type", "selection")
 field("text", selection)
 otherwise(hasSelection)
 let safariInstagram = beginInstagram(pageURL)
@@ -235,13 +236,17 @@ otherwise(url)
 let plain = beginIf(itemType, equals: "Text")
 let textInstagram = beginInstagram(repeatItem)
 setTextSaveConfirmation(repeatItem)
+field("capture_type", "text")
 field("text", repeatItem)
 endIf(textInstagram)
 otherwise(plain)
 let rich = beginIf(itemType, equals: "Rich Text")
 let richText = action("detect.text", ["WFInput": attachment(repeatItem)])
+let richInstagram = beginInstagram(richText)
 setTextSaveConfirmation(richText)
+field("capture_type", "text")
 field("text", richText)
+endIf(richInstagram)
 otherwise(rich)
 
 setSaveConfirmation(text(itemType, " saved to Inbox"))

@@ -5,8 +5,9 @@
 //! External writers publish ordinary files or sealed `.cuttingscapture.zip`
 //! archives. We work from a private, bounded snapshot, keep failures in place,
 //! and only remove the unchanged input after verifying the saved reading.
-//! Ordinary imports are offline. Version-2 Instagram requests require an explicit
-//! downloader supplied by the native app; no index writes occur here.
+//! URL imports share the bounded source/category resolver. Version-2 Instagram
+//! requests require an explicit downloader supplied by the native app; no index
+//! writes occur here.
 
 use std::{
     collections::HashSet,
@@ -26,10 +27,10 @@ use time::{format_description::well_known::Rfc3339, OffsetDateTime, UtcOffset};
 
 use crate::{
     begin_browser_video_import, import_image_with_options, import_reading,
-    import_text_with_options, import_video_file_with_options, parse_reading, save_link_capture,
-    save_special_url, save_url, BrowserVideoImportInput, ImportOptions, ImportedReadingState,
-    LibraryRoot, ReadingKind, SaveDisposition, SaveInput, SaveLinkInput, SaveOutcome,
-    UrlSaveRequest, MAX_BROWSER_VIDEO_BYTES,
+    import_text_with_options, import_video_file_with_options, parse_reading, save_selection,
+    save_url, selection_kind, BrowserVideoImportInput, ImportOptions, ImportedReadingState,
+    LibraryRoot, ReadingKind, SaveDisposition, SaveInput, SaveOutcome, SelectionKind,
+    SelectionSaveInput, UrlSaveRequest, MAX_BROWSER_VIDEO_BYTES,
 };
 
 const QUIET_PERIOD: Duration = Duration::from_secs(2);
@@ -37,6 +38,12 @@ const MAX_SMALL_BYTES: u64 = 40 * 1024 * 1024;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_CAPTURE_BYTES: u64 = MAX_BROWSER_VIDEO_BYTES + 2 * MAX_MANIFEST_BYTES;
 const MAX_ARCHIVE_ENTRIES: usize = 128;
+
+type UrlSaver<'a> = dyn Fn(&LibraryRoot, UrlSaveRequest) -> Result<SaveOutcome> + 'a;
+
+fn save_inbox_url(library: &LibraryRoot, request: UrlSaveRequest) -> Result<SaveOutcome> {
+    Ok(save_url(library, request)?)
+}
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct InboxReport {
@@ -87,6 +94,16 @@ fn process_inbox_with_resolver_at(
     deferred_names: &[String],
     now: SystemTime,
     resolver: Option<&crate::instagram::Resolver<'_>>,
+) -> Result<InboxReport> {
+    process_inbox_with_savers_at(library, deferred_names, now, resolver, &save_inbox_url)
+}
+
+fn process_inbox_with_savers_at(
+    library: &LibraryRoot,
+    deferred_names: &[String],
+    now: SystemTime,
+    resolver: Option<&crate::instagram::Resolver<'_>>,
+    url_saver: &UrlSaver<'_>,
 ) -> Result<InboxReport> {
     let inbox = library.inbox_dir();
     match fs::symlink_metadata(&inbox) {
@@ -150,7 +167,13 @@ fn process_inbox_with_resolver_at(
         }
         let mut outcomes = Vec::new();
         let result = if name.to_ascii_lowercase().ends_with(".cuttingscapture.zip") {
-            import_capture(library, &mut snapshot.file, &mut outcomes, resolver)
+            import_capture(
+                library,
+                &mut snapshot.file,
+                &mut outcomes,
+                resolver,
+                url_saver,
+            )
         } else {
             import_payload(
                 library,
@@ -158,6 +181,7 @@ fn process_inbox_with_resolver_at(
                 name,
                 &Origin::default(),
                 None,
+                url_saver,
             )
             .map(|outcome| outcomes.push(outcome))
         };
@@ -464,12 +488,66 @@ struct Manifest {
     version: u32,
     capture_id: String,
     captured_at: String,
+    capture_type: Option<CaptureType>,
     #[serde(default)]
     origin: Origin,
     text: Option<String>,
     instagram_url: Option<String>,
     #[serde(default)]
     attachments: Vec<Attachment>,
+}
+
+/// Capture intent is distinct from the core's inferred book/movie/quote category.
+#[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+enum CaptureType {
+    Url,
+    Selection,
+    Text,
+    Media,
+}
+
+fn validate_capture_type(manifest: &Manifest, origin_url: Option<&str>) -> Result<()> {
+    if manifest.version != 3 {
+        return Ok(());
+    }
+    let capture_type = manifest
+        .capture_type
+        .context("Capture version 3 requires a capture_type.")?;
+    let text = manifest.text.as_deref().map(str::trim).unwrap_or("");
+    ensure!(
+        text.len() as u64 <= MAX_SMALL_BYTES,
+        "Text must be 40 MiB or smaller."
+    );
+    match capture_type {
+        CaptureType::Url => {
+            let text_url = (!text.is_empty()).then(|| http_url(text)).transpose()?;
+            ensure!(
+                manifest.attachments.is_empty()
+                    && (origin_url.is_some() || text_url.is_some())
+                    && text_url
+                        .as_deref()
+                        .is_none_or(|url| origin_url.is_none_or(|origin| origin == url)),
+                "A URL capture must contain one source URL and no other payloads."
+            );
+        }
+        CaptureType::Selection => ensure!(
+            origin_url.is_some()
+                && !text.is_empty()
+                && text.len() <= crate::MAX_SELECTION_TEXT_BYTES
+                && manifest.attachments.is_empty(),
+            "A selection capture requires a source URL and 1–65536 bytes of selected text."
+        ),
+        CaptureType::Text => ensure!(
+            origin_url.is_none() && !text.is_empty() && manifest.attachments.is_empty(),
+            "A text capture requires source-less text and no attachments."
+        ),
+        CaptureType::Media => ensure!(
+            !manifest.attachments.is_empty() && text.is_empty(),
+            "A media capture requires attachments and no additional text."
+        ),
+    }
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -496,6 +574,7 @@ fn import_capture(
     snapshot: &mut NamedTempFile,
     outcomes: &mut Vec<SaveOutcome>,
     resolver: Option<&crate::instagram::Resolver<'_>>,
+    url_saver: &UrlSaver<'_>,
 ) -> Result<()> {
     snapshot.rewind()?;
     let mut archive =
@@ -550,7 +629,7 @@ fn import_capture(
         serde_json::from_slice(&bytes).context("The capture manifest is invalid.")?
     };
     ensure!(
-        matches!(manifest.version, 1 | 2),
+        matches!(manifest.version, 1..=3),
         "This capture format is not supported."
     );
     ensure!(
@@ -605,6 +684,7 @@ fn import_capture(
             &media.name,
             &origin,
             Some(&saved_at),
+            url_saver,
         )?);
         return Ok(());
     }
@@ -613,6 +693,9 @@ fn import_capture(
         "Instagram requests require capture version 2."
     );
     let origin_url = manifest.origin.url()?;
+    // Validate the whole typed manifest before importing any of its payloads.
+    // A mismatched type must never save one item and discard the rest.
+    validate_capture_type(&manifest, origin_url.as_deref())?;
     ensure!(
         manifest.attachments.len() <= 64,
         "The capture contains too many attachments."
@@ -673,6 +756,7 @@ fn import_capture(
             name,
             &manifest.origin,
             Some(&saved_at),
+            url_saver,
         )?);
     }
     if let Some(text) = manifest
@@ -685,6 +769,10 @@ fn import_capture(
             text,
             &manifest.origin,
             Some(&saved_at),
+            (manifest.version == 3)
+                .then_some(manifest.capture_type)
+                .flatten(),
+            url_saver,
         )?);
     } else if outcomes.is_empty() {
         outcomes.push(import_text_capture(
@@ -692,6 +780,10 @@ fn import_capture(
             "",
             &manifest.origin,
             Some(&saved_at),
+            (manifest.version == 3)
+                .then_some(manifest.capture_type)
+                .flatten(),
+            url_saver,
         )?);
     }
     Ok(())
@@ -703,6 +795,7 @@ fn import_payload(
     name: &str,
     origin: &Origin,
     saved_at: Option<&str>,
+    url_saver: &UrlSaver<'_>,
 ) -> Result<SaveOutcome> {
     let extension = Path::new(name)
         .extension()
@@ -861,7 +954,7 @@ fn import_payload(
             if extension == "url" || extension == "webloc" {
                 http_url(&text)?;
             }
-            import_text_capture(library, &text, origin, saved_at)?
+            import_text_capture(library, &text, origin, saved_at, None, url_saver)?
         }
         _ => bail!("This file type is not supported. Use an image, video, UTF-8 text, or link."),
     };
@@ -873,6 +966,8 @@ fn import_text_capture(
     text: &str,
     origin: &Origin,
     saved_at: Option<&str>,
+    capture_type: Option<CaptureType>,
+    url_saver: &UrlSaver<'_>,
 ) -> Result<SaveOutcome> {
     ensure!(
         text.len() as u64 <= MAX_SMALL_BYTES,
@@ -884,85 +979,82 @@ fn import_text_capture(
     let text = text.trim().trim_start_matches('\u{feff}');
     let origin_url = origin.url()?;
     let text_url = http_url(text).ok();
-    let is_link = match &origin_url {
-        Some(url) => text.is_empty() || text_url.as_ref() == Some(url),
-        None => text_url.is_some(),
-    };
-    let outcome = if let Some(url) = origin_url {
-        if is_link {
-            let request = UrlSaveRequest {
-                url: url.clone(),
-                title_hint: Some(origin.title(&url)),
-                saved_at: Some(saved_at.clone()),
-            };
-            if let Some(outcome) = save_special_url(library, &request)? {
-                outcome
-            } else {
-                save_link_capture(
-                    library,
-                    SaveLinkInput {
-                        url: url.clone(),
-                        canonical_url: origin.canonical_url(&url),
-                        title: origin.title(&url),
-                        author: None,
-                        site: origin.site(&url),
-                        saved_at,
-                        images: vec![],
-                        preview_url: None,
-                        favicon_url: None,
-                        theme_color: None,
-                        product: None,
-                        link_category: None,
-                        excerpt: None,
-                        lang: None,
-                    },
-                )?
-            }
-        } else {
-            let text = text.replace("\r\n", "\n").replace('\r', "\n");
-            let identity = text.split_whitespace().collect::<Vec<_>>().join(" ");
-            import_reading(
-                library,
-                SaveInput {
-                    quote_identity_markdown: Some(identity.clone()),
-                    kind: ReadingKind::Quote,
-                    lightweight: false,
+    let is_link = capture_type != Some(CaptureType::Selection)
+        && match &origin_url {
+            Some(url) => text.is_empty() || text_url.as_ref() == Some(url),
+            None => text_url.is_some(),
+        };
+    if is_link {
+        let url = origin_url
+            .or(text_url)
+            .context("A URL capture has no URL.")?;
+        let outcome = url_saver(library, origin_url_request(origin, &url, &saved_at))?;
+        verify_saved(library, &outcome, SavedContent::Link)?;
+        return Ok(outcome);
+    }
+    let outcome = if let Some(mut url) = origin_url {
+        let text = text.replace("\r\n", "\n").replace('\r', "\n");
+        ensure!(
+            text.len() <= crate::MAX_SELECTION_TEXT_BYTES,
+            "A selection must contain 1–65536 bytes of text."
+        );
+        let kind = selection_kind(&text, None);
+        if kind == SelectionKind::Highlight {
+            // Resolve the same URL category/source as any other ingress before
+            // saving its passage. A provider alias can select an existing
+            // canonical identity; attach to that reading rather than making
+            // another article at the submitted alias URL.
+            let resolved = url_saver(library, origin_url_request(origin, &url, &saved_at))?;
+            verify_saved(library, &resolved, SavedContent::Link)?;
+            url = crate::read_metadata(&library.article_path(&resolved.id))?.url;
+        }
+        // No DOM is available in the Shortcut. Core interprets enclosing quote
+        // marks; all other source-backed text is a highlight. A lightweight
+        // placeholder cannot replace a previously captured article body.
+        let outcome = save_selection(
+            library,
+            SelectionSaveInput {
+                capture: SaveInput {
+                    quote_identity_markdown: None,
+                    kind: ReadingKind::Article,
+                    lightweight: true,
                     url: url.clone(),
                     media_url: None,
                     canonical_url: origin.canonical_url(&url),
-                    title: origin.title("Saved quote"),
+                    title: origin.title(&url),
                     author: None,
                     site: origin.site(&url),
                     saved_at,
-                    markdown: text
-                        .lines()
-                        .map(|line| format!("> {line}"))
-                        .collect::<Vec<_>>()
-                        .join("\n"),
+                    markdown: String::new(),
                     images: vec![],
                     preview_url: None,
                     favicon_url: None,
                     theme_color: None,
                     product: None,
                     link_category: None,
-                    excerpt: Some(identity.chars().take(600).collect()),
-                    word_count: Some(identity.split_whitespace().count() as u32),
+                    excerpt: None,
+                    word_count: None,
                     lang: None,
                 },
-                ImportedReadingState::default(),
-            )?
-        }
-    } else if let Some(url) = text_url {
-        save_url(
-            library,
-            UrlSaveRequest {
-                url,
-                title_hint: origin.title.clone(),
-                saved_at: Some(saved_at),
+                selected_text: text.clone(),
+                context: None,
             },
-        )?
+        )?;
+        verify_saved(
+            library,
+            &outcome,
+            if kind == SelectionKind::Quote {
+                SavedContent::QuoteText(&text)
+            } else {
+                SavedContent::Highlight {
+                    text: &text,
+                    url: &url,
+                }
+            },
+        )?;
+        outcome
     } else {
-        import_text_with_options(
+        let outcome = import_text_with_options(
             library,
             text,
             ImportOptions {
@@ -970,18 +1062,21 @@ fn import_text_capture(
                 saved_at: Some(saved_at),
                 ..ImportOptions::default()
             },
-        )?
+        )?;
+        verify_saved(library, &outcome, SavedContent::QuoteText(text))?;
+        outcome
     };
-    verify_saved(
-        library,
-        &outcome,
-        if is_link {
-            SavedContent::Link
-        } else {
-            SavedContent::QuoteText(text)
-        },
-    )?;
     Ok(outcome)
+}
+
+fn origin_url_request(origin: &Origin, url: &str, saved_at: &str) -> UrlSaveRequest {
+    UrlSaveRequest {
+        url: url.to_string(),
+        title_hint: origin.title.clone(),
+        canonical_url_hint: Some(origin.canonical_url(url)),
+        site_hint: origin.site(url),
+        saved_at: Some(saved_at.to_string()),
+    }
 }
 
 fn http_url(value: &str) -> Result<String> {
@@ -1065,6 +1160,7 @@ fn complete_iso_boxes(reader: &mut (impl Read + Seek)) -> Result<bool> {
 enum SavedContent<'a> {
     MediaHash(&'a str),
     QuoteText(&'a str),
+    Highlight { text: &'a str, url: &'a str },
     Link,
 }
 
@@ -1134,6 +1230,33 @@ fn verify_saved(
                     && crate::url_id(&reading.metadata.url).is_ok_and(|id| id == outcome.id),
                 "The saved link has an unexpected source. The Inbox copy was kept."
             );
+        }
+        SavedContent::Highlight { text, url } => {
+            ensure!(
+                reading.metadata.kind == ReadingKind::Article
+                    && reading.metadata.url == url
+                    && crate::url_id(url).is_ok_and(|id| id == outcome.id),
+                "The saved highlight has an unexpected source. The Inbox copy was kept."
+            );
+            let mut sidecar = open_regular_file(&library.highlights_path(&outcome.id))
+                .context("The saved highlights are unavailable. The Inbox copy was kept.")?;
+            let before = sidecar.metadata()?;
+            let highlights = crate::list_highlights(library, &outcome.id)?;
+            ensure!(
+                highlights.iter().any(|highlight| {
+                    highlight.text == text.trim()
+                        && reading.metadata.featured_highlight_id.as_deref()
+                            == Some(highlight.id.as_str())
+                }) && same_file_contents(
+                    &before,
+                    &fs::symlink_metadata(library.highlights_path(&outcome.id))?
+                ),
+                "The saved highlight has different or incomplete text. The Inbox copy was kept."
+            );
+            // Pin and flush the sidecar as well as article.md before allowing
+            // the at-least-once archive to disappear.
+            copy_hashed(&mut sidecar, &mut io::sink(), MAX_SMALL_BYTES)?;
+            sidecar.sync_all()?;
         }
         SavedContent::MediaHash(hash) => {
             let valid_identity = if reading.metadata.kind == ReadingKind::Video
@@ -1227,7 +1350,39 @@ mod tests {
     }
 
     fn process(library: &LibraryRoot) -> InboxReport {
-        process_inbox_at(library, &[], SystemTime::now() + Duration::from_secs(60)).unwrap()
+        process_inbox_with_savers_at(
+            library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &save_offline_url,
+        )
+        .unwrap()
+    }
+
+    fn save_offline_url(library: &LibraryRoot, request: UrlSaveRequest) -> Result<SaveOutcome> {
+        Ok(crate::save_link_capture(
+            library,
+            crate::SaveLinkInput {
+                canonical_url: request
+                    .canonical_url_hint
+                    .unwrap_or_else(|| request.url.clone()),
+                title: request.title_hint.unwrap_or_else(|| request.url.clone()),
+                author: None,
+                site: request.site_hint,
+                saved_at: request.saved_at.unwrap_or_else(crate::time::now_utc_iso),
+                link_category: crate::parse_link_metadata("", &request.url)
+                    .map(|metadata| metadata.category),
+                url: request.url,
+                images: vec![],
+                preview_url: None,
+                favicon_url: None,
+                theme_color: None,
+                product: None,
+                excerpt: None,
+                lang: None,
+            },
+        )?)
     }
 
     fn readings(library: &LibraryRoot) -> Vec<crate::Reading> {
@@ -1569,7 +1724,7 @@ mod tests {
             let (_temp, library) = library();
             let mut manifest = manifest();
             manifest["origin"] = json!({"url":"https://example.com/source"});
-            manifest["text"] = json!("Selected words from the original page");
+            manifest["text"] = json!("“Selected words from the original page”");
             archive(&library, &manifest, &[]);
             assert_eq!(process(&library).saved, 1);
             let mut reading = readings(&library).pop().unwrap();
@@ -1599,14 +1754,22 @@ mod tests {
             if sourced {
                 manifest["origin"] = json!({"url":"https://example.com/source"});
             }
-            manifest["text"] = json!("First line\n\n> literal marker\n>> two markers");
+            manifest["text"] = json!(if sourced {
+                "“First line\n\n> literal marker\n>> two markers”"
+            } else {
+                "First line\n\n> literal marker\n>> two markers"
+            });
             archive(&library, &manifest, &[]);
             assert_eq!(process(&library).saved, 1);
             let mut reading = readings(&library).pop().unwrap();
             reading.metadata.title = "My edited title".to_string();
             let changed = crate::render_reading(&reading).unwrap();
             fs::write(library.article_path(&reading.metadata.id), &changed).unwrap();
-            manifest["text"] = json!("First line  > literal marker\t>> two markers");
+            manifest["text"] = json!(if sourced {
+                "“First line  > literal marker\t>> two markers”"
+            } else {
+                "First line  > literal marker\t>> two markers"
+            });
             let source = archive(&library, &manifest, &[]);
 
             let report = process(&library);
@@ -1724,7 +1887,14 @@ mod tests {
         let mut snapshot = Snapshot::read(&path, &fs::metadata(&path).unwrap())
             .unwrap()
             .unwrap();
-        import_capture(&library, &mut snapshot.file, &mut Vec::new(), None).unwrap();
+        import_capture(
+            &library,
+            &mut snapshot.file,
+            &mut Vec::new(),
+            None,
+            &save_offline_url,
+        )
+        .unwrap();
         let SourceClaim::Claimed(name) = snapshot
             .claim_source(
                 &directory,
@@ -1852,7 +2022,7 @@ mod tests {
     }
 
     #[test]
-    fn safari_selection_becomes_quote_with_origin_not_a_link() {
+    fn legacy_safari_selection_becomes_highlight_on_the_source_article() {
         let (_temp, library) = library();
         let mut manifest = manifest();
         manifest["origin"] = json!({"url":"https://example.com/source", "title":"Article"});
@@ -1860,11 +2030,323 @@ mod tests {
         archive(&library, &manifest, &[]);
         assert_eq!(process(&library).saved, 1);
         let reading = readings(&library).pop().unwrap();
-        assert_eq!(reading.metadata.kind, ReadingKind::Quote);
+        assert_eq!(reading.metadata.kind, ReadingKind::Article);
         assert_eq!(reading.metadata.url, "https://example.com/source");
+        assert!(reading.metadata.lightweight);
+        let highlights = crate::list_highlights(&library, &reading.metadata.id).unwrap();
+        assert_eq!(highlights.len(), 1);
+        assert_eq!(highlights[0].text, "A selected thought\nwith another line.");
+        assert_eq!(
+            reading.metadata.featured_highlight_id.as_deref(),
+            Some(highlights[0].id.as_str())
+        );
+    }
+
+    #[test]
+    fn url_and_text_url_captures_use_one_saver_and_preserve_categories() {
+        for version in [1, 3] {
+            for text_input in [false, true] {
+                let (_temp, library) = library();
+                let mut manifest = manifest();
+                manifest["version"] = json!(version);
+                let url = "https://www.goodreads.com/book/show/12345-title";
+                if text_input {
+                    manifest["text"] = json!(url);
+                    manifest["capture_type"] = json!("text");
+                } else {
+                    manifest["origin"] = json!({"url":url, "title":"Shared book"});
+                    manifest["capture_type"] = json!("url");
+                }
+                let path = archive(&library, &manifest, &[]);
+                let requests = std::cell::RefCell::new(Vec::new());
+                let saver = |library: &LibraryRoot, request: UrlSaveRequest| {
+                    requests.borrow_mut().push(request.clone());
+                    save_offline_url(library, request)
+                };
+                let report = process_inbox_with_savers_at(
+                    &library,
+                    &[],
+                    SystemTime::now() + Duration::from_secs(60),
+                    None,
+                    &saver,
+                )
+                .unwrap();
+                assert_eq!(report.saved, 1, "{report:?}");
+                assert!(!path.exists());
+                assert_eq!(requests.borrow().len(), 1);
+                let reading = readings(&library).pop().unwrap();
+                assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+                assert_eq!(reading.metadata.url, crate::normalize_url(url).unwrap());
+                if !text_input {
+                    assert_eq!(reading.metadata.title, "Shared book");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn typed_selection_preserves_article_and_features_stable_passage_ids() {
+        let (_temp, library) = library();
+        let url = "https://example.com/source";
+        let saved = save_offline_url(&library, UrlSaveRequest::new(url)).unwrap();
+        let path = library.article_path(&saved.id);
+        let mut reading = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+        reading.body = "Original captured article body.\n\nKeep this text.".into();
+        reading.metadata.lightweight = false;
+        reading.metadata.title = "My edited title".into();
+        reading.metadata.tags = vec!["kept".into()];
+        reading.metadata.favorite = true;
+        reading.metadata.link_category = Some("movie".into());
+        fs::write(&path, crate::render_reading(&reading).unwrap()).unwrap();
+        let reading = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+        let before = reading.metadata.clone();
+        let mut manifest = manifest();
+        manifest["version"] = json!(3);
+        manifest["capture_type"] = json!("selection");
+        manifest["origin"] = json!({"url":url, "title":"Replacement title"});
+        for text in ["First passage.", "Second passage.", "First passage."] {
+            manifest["text"] = json!(text);
+            let archive = archive(&library, &manifest, &[]);
+            let report = process(&library);
+            assert_eq!(report.saved, 1, "{report:?}");
+            assert!(!archive.exists());
+        }
+        assert_eq!(readings(&library).len(), 1);
+        let updated = parse_reading(&fs::read_to_string(path).unwrap()).unwrap();
+        assert_eq!(updated.body, reading.body);
+        assert_eq!(updated.metadata.title, before.title);
+        assert_eq!(updated.metadata.tags, before.tags);
+        assert_eq!(updated.metadata.favorite, before.favorite);
+        assert_eq!(updated.metadata.saved_at, before.saved_at);
+        assert_eq!(updated.metadata.link_category, before.link_category);
+        assert_eq!(updated.metadata.source_hash, before.source_hash);
+        let highlights = crate::list_highlights(&library, &saved.id).unwrap();
+        assert_eq!(highlights.len(), 2);
+        assert_eq!(
+            updated.metadata.featured_highlight_id.as_deref(),
+            Some(highlights[0].id.as_str())
+        );
+    }
+
+    #[test]
+    fn selection_type_keeps_selected_url_as_a_highlight() {
+        let (_temp, library) = library();
+        let mut manifest = manifest();
+        manifest["version"] = json!(3);
+        manifest["capture_type"] = json!("selection");
+        manifest["origin"] = json!({"url":"https://example.com/source"});
+        manifest["text"] = json!("https://example.com/source");
+        archive(&library, &manifest, &[]);
+        assert_eq!(process(&library).saved, 1);
+        let reading = readings(&library).pop().unwrap();
+        assert_eq!(
+            crate::list_highlights(&library, &reading.metadata.id).unwrap()[0].text,
+            "https://example.com/source"
+        );
+    }
+
+    #[test]
+    fn highlight_uses_resolved_alias_identity_without_an_extra_article() {
+        let (_temp, library) = library();
+        let mut manifest = manifest();
+        manifest["version"] = json!(3);
+        manifest["capture_type"] = json!("selection");
+        manifest["origin"] = json!({"url":"https://example.com/alias"});
+        manifest["text"] = json!("Selected passage");
+        let path = archive(&library, &manifest, &[]);
+        let saver = |library: &LibraryRoot, mut request: UrlSaveRequest| {
+            assert_eq!(request.url, "https://example.com/alias");
+            request.url = "https://example.com/canonical".into();
+            save_offline_url(library, request)
+        };
+        let report = process_inbox_with_savers_at(
+            &library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &saver,
+        )
+        .unwrap();
+        assert_eq!(report.saved, 1, "{report:?}");
+        assert!(!path.exists());
+        let saved = readings(&library);
+        assert_eq!(saved.len(), 1);
+        assert_eq!(saved[0].metadata.url, "https://example.com/canonical");
+        assert_eq!(
+            crate::list_highlights(&library, &saved[0].metadata.id).unwrap()[0].text,
+            "Selected passage"
+        );
+    }
+
+    #[test]
+    fn highlight_verification_requires_matching_source_text_and_featured_id() {
+        let (_temp, library) = library();
+        let url = "https://example.com/source";
+        let outcome = import_text_capture(
+            &library,
+            "Selected passage",
+            &Origin {
+                url: Some(url.into()),
+                ..Origin::default()
+            },
+            None,
+            Some(CaptureType::Selection),
+            &save_offline_url,
+        )
+        .unwrap();
+        assert!(verify_saved(
+            &library,
+            &outcome,
+            SavedContent::Highlight {
+                text: "Selected passage",
+                url,
+            }
+        )
+        .is_ok());
+        for (text, source) in [
+            ("Other passage", url),
+            ("Selected passage", "https://example.com/other"),
+        ] {
+            assert!(verify_saved(
+                &library,
+                &outcome,
+                SavedContent::Highlight { text, url: source }
+            )
+            .is_err());
+        }
+        let path = library.article_path(&outcome.id);
+        let mut reading = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+        reading.metadata.featured_highlight_id = Some("missing-highlight".into());
+        fs::write(&path, crate::render_reading(&reading).unwrap()).unwrap();
+        assert!(verify_saved(
+            &library,
+            &outcome,
+            SavedContent::Highlight {
+                text: "Selected passage",
+                url,
+            }
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn typed_quoted_selection_saves_quote_without_url_retrieval() {
+        let (_temp, library) = library();
+        let mut manifest = manifest();
+        manifest["version"] = json!(3);
+        manifest["capture_type"] = json!("selection");
+        manifest["origin"] = json!({"url":"https://example.com/source"});
+        manifest["text"] = json!("“A quoted thought\non two lines.”");
+        let path = archive(&library, &manifest, &[]);
+        let saver = |_: &LibraryRoot, _: UrlSaveRequest| -> Result<SaveOutcome> {
+            panic!("A quoted selection must remain offline")
+        };
+        let report = process_inbox_with_savers_at(
+            &library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &saver,
+        )
+        .unwrap();
+        assert_eq!(report.saved, 1, "{report:?}");
+        assert!(!path.exists());
+        let reading = readings(&library).pop().unwrap();
+        assert_eq!(reading.metadata.kind, ReadingKind::Quote);
+        assert_eq!(
+            reading.metadata.id,
+            crate::quote_id(
+                "https://example.com/source",
+                "“A quoted thought\non two lines.”"
+            )
+            .unwrap()
+        );
         assert!(reading
             .body
-            .contains("> A selected thought\n> with another line."));
+            .contains("> “A quoted thought\n> on two lines.”"));
+    }
+
+    #[test]
+    fn typed_capture_mismatches_retain_archive_without_saving_payloads() {
+        let cases = [
+            json!({"text":"hello"}),
+            json!({"capture_type":"book", "text":"hello"}),
+            json!({"capture_type":"url", "origin":{"url":"https://example.com/source"}, "text":"selected prose"}),
+            json!({"capture_type":"url", "origin":{"url":"https://example.com/source"}, "text":"https://example.com/different"}),
+            json!({"capture_type":"url", "origin":{"url":"https://example.com/source"}, "attachments":[{"path":"image.png"}]}),
+            json!({"capture_type":"selection", "text":"no source"}),
+            json!({"capture_type":"selection", "origin":{"url":"https://example.com/source"}, "text":"a".repeat(crate::MAX_SELECTION_TEXT_BYTES + 1)}),
+            json!({"capture_type":"text", "origin":{"url":"https://example.com/source"}, "text":"unexpected source"}),
+            json!({"capture_type":"media", "text":"other payload", "attachments":[{"path":"image.png"}]}),
+        ];
+        for case in cases {
+            let (_temp, library) = library();
+            let mut manifest = manifest();
+            manifest["version"] = json!(3);
+            for (key, value) in case.as_object().unwrap() {
+                manifest[key] = value.clone();
+            }
+            let bytes = png();
+            let payloads = if manifest["attachments"].is_array() {
+                vec![("image.png", bytes.as_slice())]
+            } else {
+                vec![]
+            };
+            let path = archive(&library, &manifest, &payloads);
+            let report = process(&library);
+            assert_eq!(report.issues.len(), 1, "{report:?}");
+            assert_eq!(report.saved + report.duplicates, 0);
+            assert!(path.exists());
+            assert!(readings(&library).is_empty());
+        }
+    }
+
+    #[test]
+    fn typed_media_still_accepts_supported_text_file_attachments() {
+        let (_temp, library) = library();
+        let mut manifest = manifest();
+        manifest["version"] = json!(3);
+        manifest["capture_type"] = json!("media");
+        manifest["attachments"] = json!([{"path":"note.txt"}]);
+        let path = archive(&library, &manifest, &[("note.txt", b"A shared text file")]);
+        assert_eq!(process(&library).saved, 1);
+        assert!(!path.exists());
+        assert_eq!(readings(&library)[0].metadata.kind, ReadingKind::Quote);
+    }
+
+    #[test]
+    fn url_resolution_and_highlight_sidecar_failures_retain_typed_archives() {
+        for fail_resolution in [false, true] {
+            let (_temp, library) = library();
+            let url = "https://example.com/source";
+            let mut manifest = manifest();
+            manifest["version"] = json!(3);
+            manifest["capture_type"] = json!("selection");
+            manifest["origin"] = json!({"url":url});
+            manifest["text"] = json!("Selected passage");
+            if !fail_resolution {
+                let saved = save_offline_url(&library, UrlSaveRequest::new(url)).unwrap();
+                fs::create_dir(library.highlights_path(&saved.id)).unwrap();
+            }
+            let path = archive(&library, &manifest, &[]);
+            let saver = |library: &LibraryRoot, request: UrlSaveRequest| {
+                if fail_resolution {
+                    bail!("fixture source retrieval failed")
+                }
+                save_offline_url(library, request)
+            };
+            let report = process_inbox_with_savers_at(
+                &library,
+                &[],
+                SystemTime::now() + Duration::from_secs(60),
+                None,
+                &saver,
+            )
+            .unwrap();
+            assert_eq!(report.issues.len(), 1, "{report:?}");
+            assert!(path.exists());
+            assert_eq!(report.saved + report.duplicates, 0);
+        }
     }
 
     #[test]

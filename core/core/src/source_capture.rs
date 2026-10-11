@@ -30,10 +30,9 @@ use crate::x_source::{
     parse_syndication_payload_with_note_html, syndication_url,
 };
 use crate::{
-    find_by_url, import_link_with_options, parse_reading, save_source_capture,
-    ExpectedArticleState, ImportOptions, LibraryRoot, Metadata, ReadingKind, SaveDisposition,
-    SaveError, SaveInput, SaveOutcome, SourceAttachment, SourceCaptureInput, SourceProfile,
-    StagedSourceAsset,
+    find_by_url, parse_reading, save_source_capture, ExpectedArticleState, LibraryRoot, Metadata,
+    ReadingKind, SaveDisposition, SaveError, SaveInput, SaveOutcome, SourceAttachment,
+    SourceCaptureInput, SourceProfile, StagedSourceAsset,
 };
 
 const METADATA_LIMIT: u64 = 2 * 1024 * 1024;
@@ -53,6 +52,10 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 pub struct UrlSaveRequest {
     pub url: String,
     pub title_hint: Option<String>,
+    /// Origin metadata supplied by a thin capture client. It never replaces
+    /// the shared URL-derived identity or a provider's verified metadata.
+    pub canonical_url_hint: Option<String>,
+    pub site_hint: Option<String>,
     pub saved_at: Option<String>,
 }
 
@@ -61,6 +64,8 @@ impl UrlSaveRequest {
         Self {
             url: url.into(),
             title_hint: None,
+            canonical_url_hint: None,
+            site_hint: None,
             saved_at: None,
         }
     }
@@ -351,45 +356,36 @@ fn save_ordinary_url_with(
         link: crate::parse_link_metadata("", &request.url),
         product: None,
     });
-    if detected.link.is_some() || detected.product.is_some() {
-        let artwork = detected
-            .link
-            .as_ref()
-            .and_then(|link| link.image_url.as_deref())
-            .and_then(|url| fetch_artwork(url).ok());
-        let preview_url = artwork.as_ref().map(|image| image.url.clone());
-        return Ok(crate::save_link_capture(
-            library,
-            crate::SaveLinkInput {
-                url: request.url.clone(),
-                canonical_url: request.url.clone(),
-                title: detected
-                    .link
-                    .as_ref()
-                    .and_then(|link| link.title.clone())
-                    .or(request.title_hint)
-                    .unwrap_or_else(|| request.url.clone()),
-                author: None,
-                site: None,
-                saved_at: request.saved_at.unwrap_or_else(crate::time::now_utc_iso),
-                images: artwork.into_iter().collect(),
-                preview_url,
-                favicon_url: None,
-                theme_color: None,
-                product: detected.product,
-                link_category: detected.link.map(|link| link.category),
-                excerpt: None,
-                lang: None,
-            },
-        )?);
-    }
-    Ok(import_link_with_options(
+    let artwork = detected
+        .link
+        .as_ref()
+        .and_then(|link| link.image_url.as_deref())
+        .and_then(|url| fetch_artwork(url).ok());
+    let preview_url = artwork.as_ref().map(|image| image.url.clone());
+    Ok(crate::save_link_capture(
         library,
-        &request.url,
-        ImportOptions {
-            title: request.title_hint,
-            saved_at: request.saved_at,
-            ..ImportOptions::default()
+        crate::SaveLinkInput {
+            url: request.url.clone(),
+            canonical_url: request
+                .canonical_url_hint
+                .unwrap_or_else(|| request.url.clone()),
+            title: detected
+                .link
+                .as_ref()
+                .and_then(|link| link.title.clone())
+                .or(request.title_hint)
+                .unwrap_or_else(|| request.url.clone()),
+            author: None,
+            site: request.site_hint,
+            saved_at: request.saved_at.unwrap_or_else(crate::time::now_utc_iso),
+            images: artwork.into_iter().collect(),
+            preview_url,
+            favicon_url: None,
+            theme_color: None,
+            product: detected.product,
+            link_category: detected.link.map(|link| link.category),
+            excerpt: None,
+            lang: None,
         },
     )?)
 }
@@ -1890,6 +1886,93 @@ mod tests {
     }
 
     #[test]
+    fn url_metadata_hints_survive_optional_retrieval_failures() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        for url in [
+            "https://example.com/page?utm_source=share",
+            "https://www.waterstones.com/book/title/author/9781840919356",
+        ] {
+            let mut request = UrlSaveRequest::new(url);
+            request.title_hint = Some("Shared page title".into());
+            request.canonical_url_hint = Some("https://example.com/canonical".into());
+            request.site_hint = Some("Shared publication".into());
+            request.saved_at = Some("2026-10-11T12:34:56.000Z".into());
+            let outcome = save_ordinary_url_with(
+                &library,
+                request,
+                |_| anyhow::bail!("offline"),
+                |_| anyhow::bail!("cover unavailable"),
+            )
+            .unwrap();
+            let reading =
+                parse_reading(&fs::read_to_string(library.article_path(&outcome.id)).unwrap())
+                    .unwrap();
+            assert_eq!(outcome.id, crate::url_id(url).unwrap());
+            assert_eq!(reading.metadata.title, "Shared page title");
+            assert_eq!(
+                reading.metadata.canonical_url,
+                "https://example.com/canonical"
+            );
+            assert_eq!(reading.metadata.site.as_deref(), Some("Shared publication"));
+            assert_eq!(reading.metadata.saved_at, "2026-10-11T12:34:56.000Z");
+            assert!(reading.metadata.lightweight);
+        }
+    }
+
+    #[test]
+    fn url_resave_enriches_an_uncategorized_article_without_replacing_its_content() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://example.com/book";
+        let original = crate::save_capture(&library, full_article(url)).unwrap();
+        let before =
+            parse_reading(&fs::read_to_string(library.article_path(&original.id)).unwrap())
+                .unwrap();
+        let html = r#"<script type="application/ld+json">{"@type":"Book","name":"Catalog title","image":"/cover.png"}</script>"#;
+        let cover = hex::decode("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b49444154789c636000020000050001a5f645400000000049454e44ae426082").unwrap();
+        let mut request = UrlSaveRequest::new(url);
+        request.title_hint = Some("Shared page title".into());
+        request.saved_at = Some("2026-10-11T12:34:56.000Z".into());
+        let saved = save_ordinary_url_with(
+            &library,
+            request,
+            |_| {
+                Ok(crate::DetectedPageMetadata {
+                    link: crate::parse_link_metadata(html, url),
+                    product: None,
+                })
+            },
+            |url| {
+                Ok(crate::ImageBytes {
+                    url: url.into(),
+                    content_type: "image/png".into(),
+                    bytes: cover.clone(),
+                })
+            },
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert_eq!(saved.id, original.id);
+        assert_eq!(reading.body, before.body);
+        assert_eq!(reading.metadata.title, before.metadata.title);
+        assert_eq!(reading.metadata.saved_at, before.metadata.saved_at);
+        assert!(!reading.metadata.lightweight);
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(reading.metadata.product, before.metadata.product);
+        assert_eq!(
+            fs::read(
+                library
+                    .reading_dir(&saved.id)
+                    .join(reading.metadata.preview_asset.unwrap())
+            )
+            .unwrap(),
+            cover
+        );
+    }
+
+    #[test]
     fn one_page_snapshot_persists_category_product_price_and_local_artwork() {
         let directory = tempfile::tempdir().unwrap();
         let library = LibraryRoot::new(directory.path()).unwrap();
@@ -1943,6 +2026,8 @@ mod tests {
             &UrlSaveRequest {
                 url: raw_url.into(),
                 title_hint: None,
+                canonical_url_hint: None,
+                site_hint: None,
                 saved_at: Some("2026-09-23T09:00:00.000Z".into()),
             },
             &fixture(),

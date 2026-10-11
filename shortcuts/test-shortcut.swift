@@ -50,7 +50,8 @@ let start = try actions.firstIndex { action in
     guard kind(action) == "gettext", let text = parameters(action)["WFTextActionText"] as? String,
           let bytes = text.data(using: .utf8),
           let dictionary = try? JSONSerialization.jsonObject(with: bytes) as? Object else { return false }
-    return dictionary.count == 1 && dictionary["version"] as? Int == 1
+    return dictionary.count == 2 && dictionary["version"] as? Int == 3
+        && dictionary["capture_type"] as? String == "url"
 }.unwrap("Missing per-item manifest initialization")
 let safariIf = try actions.firstIndex {
     kind($0) == "conditional" && parameters($0)["WFConditionalActionString"] as? String == "Safari Web Page"
@@ -292,6 +293,7 @@ let cases: [(String, [String?])] = [
     ("whole page: absent selection", [nil]),
     ("whole page: empty selection", [""]),
     ("selected text preserved", [selectedText]),
+    ("selected URL remains a selection", ["https://example.com/selected-link"]),
     ("repeat items do not retain prior selection", [selectedText, nil, "", "A different selection"]),
 ]
 var failures = 0
@@ -305,13 +307,15 @@ for (name, selections) in cases {
             let origin = manifest["origin"] as? Object
             try require(origin?["url"] as? String == fixture.url, "Source URL was lost or stale")
             try require(origin?["title"] as? String == fixture.title, "Source title was lost or stale")
-            try require(manifest["version"] as? Int == 1 && manifest["capture_id"] as? String == "fixture-\(index)"
+            try require(manifest["version"] as? Int == 3 && manifest["capture_id"] as? String == "fixture-\(index)"
                         && manifest["captured_at"] as? String == "2026-09-18T12:00:00Z", "Capture metadata was lost or stale")
             if let selection, !selection.isEmpty {
+                try require(manifest["capture_type"] as? String == "selection", "Safari selection lost its explicit capture type")
                 try require(manifest["text"] as? String == selection, "Selected quote text was lost or changed")
-                try require(runner.variables["Save confirmation"] as? String == "Quote saved to Inbox",
+                try require(runner.variables["Save confirmation"] as? String == "Selection saved to Inbox",
                             "Selected text confirmation is not contextual")
             } else {
+                try require(manifest["capture_type"] as? String == "url", "Whole-page share retained a prior selection type")
                 try require(manifest["text"] == nil, "Whole-page link retained a text field")
                 try require(runner.variables["Save confirmation"] as? String == "Link saved to Inbox",
                             "Whole-page link confirmation is not contextual")
@@ -357,18 +361,18 @@ do {
     print("PASS: installed-version probe returns before capture side effects")
 } catch { failures += 1; print("FAIL: installed-version probe: \(error)") }
 do {
-    for type in ["URL", "Text", "Safari Web Page"] {
+    for type in ["URL", "Text", "Rich Text", "Safari Web Page"] {
         var runner = SafariGraph()
         let url = "https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2&stkn=tracking"
         let manifest = try runner.capture(SafariFixture(url: url, title: "Post", selection: nil, type: type), index: 0)
         try require(manifest["version"] as? Int == 2 && manifest["instagram_url"] as? String == url,
                     "Instagram slide must survive as an explicit version-2 request: \(type)")
-        try require(manifest["text"] == nil && manifest["origin"] == nil && manifest["attachments"] == nil && runner.downloads.isEmpty,
+        try require(manifest["capture_type"] == nil && manifest["text"] == nil && manifest["origin"] == nil && manifest["attachments"] == nil && runner.downloads.isEmpty,
                     "Instagram must not download on iPhone or silently become a link")
         try require(runner.variables["Save confirmation"] as? String == "Instagram media queued in Inbox",
                     "Instagram confirmation must describe the queued handoff")
     }
-    print("PASS: Instagram URL, text and Safari shares queue the selected slide")
+    print("PASS: Instagram URL, plain/rich text and Safari shares queue the selected slide")
 } catch { failures += 1; print("FAIL: Instagram request: \(error)") }
 let urlCases: [(String, Bool)] = [
     ("https://media.houseandgarden.co.uk/photos/67879b979514423c41c6e4ea/master/w_1280,c_limit/11-13-24-HG-Anna-Hambro011.jpg", true),
@@ -386,6 +390,8 @@ do {
         runner.downloads = []
         runner.payloads = []
         let manifest = try runner.capture(SafariFixture(url: url, title: "", selection: nil, type: "URL"), index: index)
+        try require(manifest["version"] as? Int == 3 && manifest["capture_type"] as? String == (isImage ? "media" : "url"),
+                    "URL branch did not describe its actual payload type: \(url)")
         try require((manifest["origin"] as? Object)?["url"] as? String == url, "Shared URL was lost")
         try require(runner.downloads == (isImage ? [url] : []), "Wrong download decision: \(url)")
         try require(runner.payloads == (isImage ? ["payload.jpg"] : []), "Image bytes were not attached: \(url)")
@@ -407,17 +413,21 @@ do {
     print("PASS: non-image response stops capture")
     runner.downloads = []
     let local = try runner.capture(SafariFixture(url: "local-image", title: "", selection: nil, type: "Image"), index: 0)
+    try require(local["version"] as? Int == 3 && local["capture_type"] as? String == "media", "Local image lost its explicit media type")
     try require((local["attachments"] as? [Object])?.count == 1 && runner.downloads.isEmpty, "Local image capture regressed")
     try require(runner.variables["Save confirmation"] as? String == "Image saved to Inbox",
                 "Local image confirmation is not contextual")
     print("PASS: local images retain attachments without downloading")
-    _ = try runner.capture(SafariFixture(url: "A thought worth keeping", title: "", selection: nil, type: "Text"), index: 0)
+    let plain = try runner.capture(SafariFixture(url: "A thought worth keeping", title: "", selection: nil, type: "Text"), index: 0)
+    try require(plain["version"] as? Int == 3 && plain["capture_type"] as? String == "text", "Plain text lost its explicit text type")
     try require(runner.variables["Save confirmation"] as? String == "Quote saved to Inbox",
                 "Plain text confirmation is not contextual")
-    _ = try runner.capture(SafariFixture(url: "https://example.com/from-text", title: "", selection: nil, type: "Rich Text"), index: 0)
+    let rich = try runner.capture(SafariFixture(url: "https://example.com/from-text", title: "", selection: nil, type: "Rich Text"), index: 0)
+    try require(rich["version"] as? Int == 3 && rich["capture_type"] as? String == "text", "Rich text URL must preserve its transport type for Rust to resolve")
     try require(runner.variables["Save confirmation"] as? String == "Link saved to Inbox",
                 "A URL supplied as text must use the link confirmation")
-    _ = try runner.capture(SafariFixture(url: "local-video", title: "", selection: nil, type: "Media"), index: 0)
+    let media = try runner.capture(SafariFixture(url: "local-video", title: "", selection: nil, type: "Media"), index: 0)
+    try require(media["version"] as? Int == 3 && media["capture_type"] as? String == "media", "Video lost its explicit media type")
     try require(runner.variables["Save confirmation"] as? String == "Media saved to Inbox",
                 "Media confirmation is not contextual")
     print("PASS: text and media use contextual confirmations")
