@@ -755,14 +755,22 @@ impl Database {
         changed_paths: Vec<String>,
     ) -> Result<Option<u32>, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
-        let ids = crate::scanner::reading_ids_for_changed_paths(&lib, &changed_paths);
-        let Some(ids) = ids.filter(|_| self.scan_initialized.load(Ordering::Acquire)) else {
+        let _update = self.reconciliation.lock().unwrap();
+        if !self.scan_initialized.load(Ordering::Acquire) {
+            return Ok(None);
+        }
+        let expanded = crate::scanner::expand_shard_changes(
+            &lib,
+            &changed_paths,
+            &self.last_scan.lock().unwrap(),
+        )
+        .map_err(e)?;
+        let Some(ids) = crate::scanner::reading_ids_for_changed_paths(&lib, &expanded) else {
             return Ok(None);
         };
         if ids.is_empty() {
             return Ok(Some(0));
         }
-        let _update = self.reconciliation.lock().unwrap();
         self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
         let new_scan = crate::scanner::scan_reading_ids(&lib, &ids).map_err(e)?;
         let diffs = {
@@ -1082,7 +1090,7 @@ impl Database {
     ) -> Result<FfiImportResult, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
         let outcome = crate::save_url(&lib, crate::UrlSaveRequest::new(url)).map_err(e)?;
-        self.sync(library_path)?;
+        self.index_imported_reading(&lib, &outcome.id)?;
         Ok(outcome.into())
     }
 
@@ -1095,7 +1103,7 @@ impl Database {
     ) -> Result<FfiImportResult, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
         let outcome = crate::import_text(&lib, &text, title.as_deref()).map_err(e)?;
-        self.sync(library_path)?;
+        self.index_imported_reading(&lib, &outcome.id)?;
         Ok(outcome.into())
     }
 
@@ -1110,7 +1118,7 @@ impl Database {
     ) -> Result<FfiImportResult, CoreError> {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
         let outcome = crate::import_image(&lib, bytes, &content_type, &title).map_err(e)?;
-        self.sync(library_path)?;
+        self.index_imported_reading(&lib, &outcome.id)?;
         Ok(outcome.into())
     }
 
@@ -1126,7 +1134,7 @@ impl Database {
         let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
         let outcome = crate::import_video_file(&lib, Path::new(&file_path), &content_type, &title)
             .map_err(e)?;
-        self.sync(library_path)?;
+        self.index_imported_reading(&lib, &outcome.id)?;
         Ok(outcome.into())
     }
 
@@ -1400,6 +1408,36 @@ impl Database {
 }
 
 impl Database {
+    /// A completed import already knows its reading identity. Publish only that
+    /// file; the watcher and full recovery scans reconcile other writers later.
+    /// Do not mark a partial snapshot initialized on a newly opened database.
+    fn index_imported_reading(&self, library: &LibraryRoot, id: &str) -> Result<(), CoreError> {
+        let _update = self.reconciliation.lock().unwrap();
+        self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+        let readings = crate::scanner::scan_reading_ids(
+            library,
+            &std::collections::HashSet::from([id.to_string()]),
+        )
+        .map_err(e)?;
+        let diffs: Vec<_> = if readings.is_empty() {
+            vec![crate::ScanDiff::Removed(id.to_string())]
+        } else {
+            readings
+                .iter()
+                .cloned()
+                .map(crate::ScanDiff::Added)
+                .collect()
+        };
+        {
+            let conn = self.conn.lock().unwrap();
+            crate::apply_diffs(&conn, &diffs).map_err(e)?;
+        }
+        let mut previous = self.last_scan.lock().unwrap();
+        previous.retain(|reading| reading.id != id);
+        previous.extend(readings);
+        Ok(())
+    }
+
     fn begin_reconciliation(
         &self,
         library_path: String,
@@ -1613,6 +1651,144 @@ mod tests {
         assert_eq!(rows[0].url, "https://example.com/from-ios");
         assert!(rows[0].lightweight);
         assert_eq!(database.sync(library_path).unwrap(), 0);
+    }
+
+    #[test]
+    #[ignore = "large-library save timing harness"]
+    fn large_library_save_timing() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let library_path = library_dir.path().display().to_string();
+        for i in 0..128u32 {
+            let mut bytes = vec![0u8; 1024 * 1024];
+            bytes[..4].copy_from_slice(&i.to_le_bytes());
+            crate::import_image(&library, bytes, "image/png", "Existing image").unwrap();
+        }
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        database.sync(library_path.clone()).unwrap();
+        let start = std::time::Instant::now();
+        database
+            .import_image(
+                library_path.clone(),
+                b"new image".to_vec(),
+                "image/png".into(),
+                "New image".into(),
+            )
+            .unwrap();
+        eprintln!(
+            "128 MiB library: image import + index {:?}",
+            start.elapsed()
+        );
+        let saved =
+            crate::import_text(&library, "extension-equivalent external save", None).unwrap();
+        let start = std::time::Instant::now();
+        database
+            .sync_paths(
+                library_path,
+                vec![
+                    library.article_path(&saved.id).display().to_string(),
+                    library
+                        .reading_dir(&saved.id)
+                        .parent()
+                        .unwrap()
+                        .display()
+                        .to_string(),
+                ],
+            )
+            .unwrap();
+        eprintln!(
+            "128 MiB library: external save path sync {:?}",
+            start.elapsed()
+        );
+    }
+
+    #[test]
+    fn importing_into_a_reopened_index_keeps_full_recovery_pending() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let db_path = index_dir.path().join("index.db").display().to_string();
+        let database = Database::open(db_path.clone()).unwrap();
+        let stale = database
+            .import_text(library_path.clone(), "Stale".into(), None)
+            .unwrap();
+        database.sync(library_path.clone()).unwrap();
+        drop(database);
+        std::fs::remove_dir_all(library.reading_dir(&stale.id)).unwrap();
+        let database = Database::open(db_path).unwrap();
+        let fresh = database
+            .import_link(library_path.clone(), "https://example.com/fresh".into())
+            .unwrap();
+        assert!(database
+            .get_reading_row(fresh.id.clone())
+            .unwrap()
+            .is_some());
+        assert!(database
+            .get_reading_row(stale.id.clone())
+            .unwrap()
+            .is_some());
+        assert!(!database.scan_initialized.load(Ordering::Acquire));
+        database.sync(library_path).unwrap();
+        assert!(database.get_reading_row(stale.id).unwrap().is_none());
+        assert!(database.get_reading_row(fresh.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn imports_do_not_rescan_unrelated_readings() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        let existing = database
+            .import_text(
+                library_path.clone(),
+                "Existing body".into(),
+                Some("Before".into()),
+            )
+            .unwrap();
+        database.sync(library_path.clone()).unwrap();
+        let article = library.article_path(&existing.id);
+        std::fs::write(
+            &article,
+            std::fs::read_to_string(&article)
+                .unwrap()
+                .replace("Before", "External edit"),
+        )
+        .unwrap();
+        let start = std::time::Instant::now();
+        let imported = database
+            .import_image(
+                library_path.clone(),
+                b"new image".to_vec(),
+                "image/png".into(),
+                "New image".into(),
+            )
+            .unwrap();
+        eprintln!("image import + index: {:?}", start.elapsed());
+        assert!(database.get_reading_row(imported.id).unwrap().is_some());
+        assert_eq!(
+            database
+                .get_reading_row(existing.id.clone())
+                .unwrap()
+                .unwrap()
+                .title,
+            "Before",
+            "saving one image must not read every unrelated file before publishing it"
+        );
+        database.sync(library_path).unwrap();
+        assert_eq!(
+            database
+                .get_reading_row(existing.id)
+                .unwrap()
+                .unwrap()
+                .title,
+            "External edit"
+        );
     }
 
     #[test]
@@ -1945,6 +2121,8 @@ mod tests {
                 Some("Second".into()),
             )
             .unwrap();
+        // The app completes its initial scan before processing watcher events.
+        database.sync(library_path.clone()).unwrap();
         let article = library.article_path(&first.id);
         std::fs::write(
             &article,
@@ -1975,6 +2153,85 @@ mod tests {
     }
 
     #[test]
+    fn shard_event_indexes_an_external_save_without_a_file_event() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        database.sync(library_path.clone()).unwrap();
+        let saved = crate::import_text(&library, "External save", Some("New card")).unwrap();
+        let shard = library
+            .reading_dir(&saved.id)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        assert_eq!(
+            database
+                .sync_paths_if_precise(library_path, vec![shard.display().to_string()])
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            database.get_reading_row(saved.id).unwrap().unwrap().title,
+            "New card"
+        );
+    }
+
+    #[test]
+    fn shard_events_do_not_force_a_full_library_scan() {
+        let library_dir = tempfile::TempDir::new().unwrap();
+        let index_dir = tempfile::TempDir::new().unwrap();
+        let library_path = library_dir.path().display().to_string();
+        let library = LibraryRoot::new(library_dir.path()).unwrap();
+        let database =
+            Database::open(index_dir.path().join("index.db").display().to_string()).unwrap();
+        let saved = database
+            .import_text(library_path.clone(), "body".into(), Some("Before".into()))
+            .unwrap();
+        database.sync(library_path.clone()).unwrap();
+        let article = library.article_path(&saved.id);
+        std::fs::write(
+            &article,
+            std::fs::read_to_string(&article)
+                .unwrap()
+                .replace("Before", "After"),
+        )
+        .unwrap();
+        let shard = library
+            .reading_dir(&saved.id)
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        assert_eq!(
+            database
+                .sync_paths_if_precise(
+                    library_path.clone(),
+                    vec![shard.display().to_string(), article.display().to_string()]
+                )
+                .unwrap(),
+            Some(1)
+        );
+        assert_eq!(
+            database
+                .get_reading_row(saved.id.clone())
+                .unwrap()
+                .unwrap()
+                .title,
+            "After"
+        );
+        std::fs::remove_dir_all(library.reading_dir(&saved.id)).unwrap();
+        assert_eq!(
+            database
+                .sync_paths_if_precise(library_path, vec![shard.display().to_string()])
+                .unwrap(),
+            Some(1)
+        );
+        assert!(database.get_reading_row(saved.id).unwrap().is_none());
+    }
+
+    #[test]
     fn precise_path_api_defers_ambiguous_events_to_a_full_scan() {
         let library_dir = tempfile::TempDir::new().unwrap();
         let index_dir = tempfile::TempDir::new().unwrap();
@@ -1985,6 +2242,8 @@ mod tests {
         let saved = database
             .import_text(library_path.clone(), "body".into(), Some("Before".into()))
             .unwrap();
+        // The app completes its initial scan before processing watcher events.
+        database.sync(library_path.clone()).unwrap();
         let article = library.article_path(&saved.id);
         std::fs::write(
             &article,

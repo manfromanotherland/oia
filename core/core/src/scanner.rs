@@ -88,6 +88,50 @@ pub(crate) fn reading_directories(library: &LibraryRoot) -> Result<Vec<PathBuf>>
     Ok(directories)
 }
 
+/// FSEvents reports a reading's two-character shard as well as its files when
+/// folders are created or removed. Expand just that shard, including snapshot
+/// IDs so deletions are reconciled. Root/unknown events still require recovery.
+pub(crate) fn expand_shard_changes(
+    library: &LibraryRoot,
+    paths: &[String],
+    previous: &[ScannedReading],
+) -> Result<Vec<String>> {
+    let mut expanded = Vec::new();
+    for path in paths {
+        let Some(relative) = Path::new(path).strip_prefix(library.articles_dir()).ok() else {
+            expanded.push(path.clone());
+            continue;
+        };
+        let parts: Vec<_> = relative.components().collect();
+        let shard = match parts.as_slice() {
+            [Component::Normal(value)] => value.to_str().filter(|value| {
+                value.len() == 2 && value.bytes().all(|byte| byte.is_ascii_alphanumeric())
+            }),
+            _ => None,
+        };
+        let Some(shard) = shard else {
+            expanded.push(path.clone());
+            continue;
+        };
+        expanded.extend(
+            previous
+                .iter()
+                .filter(|reading| reading.id.starts_with(shard))
+                .map(|reading| library.reading_dir(&reading.id).display().to_string()),
+        );
+        let directory = library.articles_dir().join(shard);
+        if is_real_directory(&directory) {
+            for entry in std::fs::read_dir(directory)? {
+                let entry = entry?;
+                if entry.file_type()?.is_dir() {
+                    expanded.push(entry.path().display().to_string());
+                }
+            }
+        }
+    }
+    Ok(expanded)
+}
+
 /// Resolve precise file events into reading folders. Ancestor/root/unknown
 /// events deliberately request a full scan; no event can create a path escape.
 pub(crate) fn reading_ids_for_changed_paths(
