@@ -148,7 +148,7 @@ private struct ListView: View {
             Image(systemName: checkbox == .checked ? "checkmark.square" : "square")
         } else if ordered {
             Text("\(startIndex + index).")
-                .monospacedDigit()
+                .font(Font(AppKitInline.listMarkerFont(theme: theme, ordered: true)))
         } else {
             Text(theme.bullet(depth: depth))
         }
@@ -225,8 +225,8 @@ private struct MarkdownTableView: View {
                         Text(uppercase(InlineRenderer.attributed(
                             cell, theme: theme, context: .emphasized(theme, weight: .bold)
                         )))
-                            .textSelection(.enabled)
-                            .gridColumnAlignment(alignment(index))
+                        .textSelection(.enabled)
+                        .gridColumnAlignment(alignment(index))
                     }
                 }
                 .padding(.vertical, theme.bodySize * 0.3)

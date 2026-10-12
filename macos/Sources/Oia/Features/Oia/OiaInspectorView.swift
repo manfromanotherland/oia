@@ -157,7 +157,7 @@ struct OiaInspectorView: View {
     }
 
     private func sectionTitle(_ text: String) -> some View {
-        Text(text).font(.system(size: 12, weight: .semibold))
+        Text(text).font(InspectorTypography.sectionHeading)
     }
 
     private var currentInspector: ReadingInspector? {

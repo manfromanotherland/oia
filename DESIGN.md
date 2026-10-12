@@ -232,7 +232,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - Ordinary articles reuse the existing native Markdown reader. Social-post articles use a native
   post detail with selectable text and every ordered local attachment. Images show the local asset aspect-fit.
   Videos show the local poster and source/media actions without silently downloading a stream.
-  Quotes show the full selected text natively.
+  Quotes show the full selected text natively. Short quotes use centered 34 pt Georgia Italic.
+  Quotes longer than 480 visible characters or containing multiple paragraphs use leading-aligned
+  24 pt Georgia Italic in a 680 pt measure; leading, quotation marks, and surrounding spacing scale
+  together with the smaller text.
 - Metadata lives in the full-height leading Inspector, shown by default and toggled from the
   titlebar. Its visibility is a per-device preference. The sidebar scrolls within short windows.
   Delete sits below the content and requires confirmation. macOS 15 uses system material, and
@@ -257,8 +260,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   perceptual shade similarity. Cached swatches are part of the board snapshot so the section
   appears at its final height when opening a card; readings without colours omit it immediately.
   The inspector still checks the local asset in the background and discards stale swatches.
-- **Details** always shows Finder-style labeled rows for the save date and, when available,
-  reading time, local media duration, dimensions, codecs, color profile, format, size, author,
+- **Details** always shows Finder-style labeled rows using regular secondary labels and regular
+  primary values. Tags, Colours, and Details share the same 12 pt semibold section-heading style.
+  The rows show the save date and, when available, reading time, local media duration,
+  dimensions, codecs, color profile, format, size, author,
   and origin. Media facts come from the local file and unavailable facts are omitted. Article
   preview file facts are labeled as previews. Internal asset schemes and hashed filenames never
   appear. The source appears once as a hostname followed by ↗; its complete URL is available on

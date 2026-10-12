@@ -425,12 +425,20 @@ extension OiaCardTextMetrics {
     }
 
     static let quoteDetailFont = makeGeorgiaQuoteFont(ofSize: quoteDetailPointSize)
+    static let longQuoteDetailPointSize: CGFloat = 24
+    static let longQuoteDetailScale = longQuoteDetailPointSize / quoteDetailPointSize
+    static let longQuoteDetailFont = makeGeorgiaQuoteFont(ofSize: longQuoteDetailPointSize)
 
     static let quoteDetailMarkFont =
         makeQuoteFont(
             ofSize: quoteMarkBasePointSize * quoteDetailPointSize / quotePointSize(for: .extraLarge),
             opticalSize: 6
         )
+
+    static let longQuoteDetailMarkFont = makeQuoteFont(
+        ofSize: quoteMarkBasePointSize * longQuoteDetailPointSize / quotePointSize(for: .extraLarge),
+        opticalSize: 6
+    )
 
     static func quotePointSize(for cardSize: CardSize) -> CGFloat {
         switch cardSize {

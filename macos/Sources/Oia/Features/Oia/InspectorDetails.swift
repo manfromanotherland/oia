@@ -16,7 +16,7 @@ struct InspectorSource: View {
             }
             .buttonStyle(.plain)
             .foregroundStyle(.primary)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 12))
             .help(url.absoluteString)
             .contextMenu {
                 Button("Copy source URL") {
@@ -25,7 +25,7 @@ struct InspectorSource: View {
                 }
             }
         } else {
-            Text("Saved locally").font(.system(size: 12, weight: .semibold))
+            Text("Saved locally").font(.system(size: 12))
         }
     }
 }
@@ -38,7 +38,7 @@ struct InspectorDetails: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Details")
-                .font(.system(size: 14, weight: .semibold))
+                .font(InspectorTypography.sectionHeading)
                 .padding(.bottom, 7)
 
             fact("Saved", ReadingDateTime.localized(row.savedAt))
@@ -82,7 +82,8 @@ struct InspectorDetails: View {
                 fieldLabel(label)
                 Spacer(minLength: 0)
                 Text(value)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.primary)
                     .multilineTextAlignment(.trailing)
                     .textSelection(.enabled)
             }
@@ -102,14 +103,14 @@ struct InspectorDetails: View {
 
     private func fieldLabel(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 12, weight: .semibold))
+            .font(.system(size: 12))
             .foregroundStyle(.secondary)
     }
 
     private static func duration(_ milliseconds: UInt64) -> String {
-        let seconds = milliseconds / 1_000 + (milliseconds % 1_000 >= 500 ? 1 : 0)
-        let hours = seconds / 3_600
-        let minutes = (seconds % 3_600) / 60
+        let seconds = milliseconds / 1000 + (milliseconds % 1000 >= 500 ? 1 : 0)
+        let hours = seconds / 3600
+        let minutes = (seconds % 3600) / 60
         let remaining = seconds % 60
         if hours > 0 {
             return String(format: "%02llu:%02llu:%02llu", hours, minutes, remaining)

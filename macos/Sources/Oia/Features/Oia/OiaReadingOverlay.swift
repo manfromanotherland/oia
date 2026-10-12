@@ -299,19 +299,22 @@ private struct OiaQuoteDetailView: View {
     @State private var bodyText: String?
 
     var body: some View {
+        let quote = attributedQuote
+        let isLong = quote.characters.prefix(481).count > 480 || String(quote.characters).contains("\n\n")
+        let scale = isLong ? OiaCardTextMetrics.longQuoteDetailScale : 1
         ScrollView {
-            VStack(alignment: .center, spacing: 32) {
-                quoteMark("“")
+            VStack(alignment: .center, spacing: 32 * scale) {
+                quoteMark("“", isLong: isLong)
 
-                Text(attributedQuote)
-                    .font(Font(OiaCardTextMetrics.quoteDetailFont))
+                Text(quote)
+                    .font(Font(isLong ? OiaCardTextMetrics.longQuoteDetailFont : OiaCardTextMetrics.quoteDetailFont))
                     .foregroundStyle(.secondary)
-                    .lineSpacing(OiaCardTextMetrics.quoteDetailLineSpacing)
-                    .multilineTextAlignment(.center)
+                    .lineSpacing(OiaCardTextMetrics.quoteDetailLineSpacing * scale)
+                    .multilineTextAlignment(isLong ? .leading : .center)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity)
 
-                quoteMark("”")
+                quoteMark("”", isLong: isLong)
 
                 if let site = row.displaySite {
                     Text(site)
@@ -319,10 +322,10 @@ private struct OiaQuoteDetailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .frame(maxWidth: 720)
+            .frame(maxWidth: isLong ? 680 : 720)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 70)
-            .padding(.vertical, 90)
+            .padding(.horizontal, 70 * scale)
+            .padding(.vertical, 90 * scale)
         }
         .background(OiaTheme.cardTint(for: row.id))
         .task(id: contentLoadID) {
@@ -334,9 +337,9 @@ private struct OiaQuoteDetailView: View {
         }
     }
 
-    private func quoteMark(_ mark: String) -> some View {
+    private func quoteMark(_ mark: String, isLong: Bool) -> some View {
         Text(mark)
-            .font(Font(OiaCardTextMetrics.quoteDetailMarkFont))
+            .font(Font(isLong ? OiaCardTextMetrics.longQuoteDetailMarkFont : OiaCardTextMetrics.quoteDetailMarkFont))
             .foregroundStyle(.tertiary)
             .accessibilityHidden(true)
     }

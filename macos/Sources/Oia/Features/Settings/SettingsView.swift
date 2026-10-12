@@ -91,8 +91,8 @@ private struct TypographySettingsTab: View {
             // to the chosen leading, inside a column scaled to the chosen measure.
             // Enough lines to make both the wrap width and the leading visible.
             Text(Self.previewText)
-                .font(.custom(previewFontName, size: readerFontSize.points))
-                .lineSpacing(readerFontSize.points * readerLineHeight.extraLeadingMultiple)
+                .font(previewTheme.bodyFont)
+                .lineSpacing(previewTheme.lineSpacing)
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: previewWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -115,12 +115,9 @@ private struct TypographySettingsTab: View {
         readerWidth.points * 0.45
     }
 
-    private var previewFontName: String {
-        switch readerFont {
-        case .system: "-apple-system"
-        case .serif: ReaderFont.serifFamilyName
-        case .mono: "Menlo"
-        }
+    private var previewTheme: MarkdownTheme {
+        MarkdownTheme(font: readerFont, fontSize: readerFontSize,
+                      width: readerWidth, lineHeight: readerLineHeight)
     }
 }
 

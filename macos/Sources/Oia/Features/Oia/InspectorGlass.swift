@@ -2,6 +2,10 @@
 
 import SwiftUI
 
+enum InspectorTypography {
+    static let sectionHeading = Font.system(size: 12, weight: .semibold)
+}
+
 struct InspectorPill: View {
     let title: String
     var symbol: String?

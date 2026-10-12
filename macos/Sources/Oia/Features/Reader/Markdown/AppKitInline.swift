@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import AppKit
+import CoreText
 import Markdown
 import SwiftUI
 
@@ -124,6 +125,20 @@ enum AppKitInline {
         return NSAttributedString(string: string, attributes: attrs)
     }
 
+    /// Share the selected reader face and tabular numerals across both list renderers.
+    static func listMarkerFont(theme: MarkdownTheme, ordered: Bool) -> NSFont {
+        let font = makeFont(size: theme.bodySize, weight: .regular,
+                            design: theme.design, bold: false, italic: false)
+        guard ordered else { return font }
+        let descriptor = font.fontDescriptor.addingAttributes([
+            .featureSettings: [[
+                NSFontDescriptor.FeatureKey.typeIdentifier: kNumberSpacingType,
+                NSFontDescriptor.FeatureKey.selectorIdentifier: kMonospacedNumbersSelector
+            ]]
+        ])
+        return NSFont(descriptor: descriptor, size: theme.bodySize) ?? font
+    }
+
     /// Use an explicit Palatino face for Serif. Other choices retain their system
     /// designs and symbolic traits so nested emphasis composes.
     static func makeFont(size: CGFloat, weight: Font.Weight, design: Font.Design,
@@ -131,7 +146,7 @@ enum AppKitInline {
     {
         if case .serif = design,
            let serif = NSFont(name: ReaderFont.serifFaceName(weight: weight, bold: bold, italic: italic),
-                                size: size)
+                              size: size)
         {
             return serif
         }

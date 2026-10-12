@@ -95,7 +95,7 @@ enum MarkdownTextRun {
                let paragraph = blocks[index + 1] as? Paragraph
             {
                 emitted = [runInParagraph(heading, paragraph: paragraph,
-                                         theme: theme, ctx: ctx)]
+                                          theme: theme, ctx: ctx)]
                 index += 2
             } else {
                 emitted = emit(block, theme: theme, ctx: ctx)
@@ -212,8 +212,8 @@ enum MarkdownTextRun {
             headingParagraph(heading, theme: theme, ctx: ctx).content)
         content.append(NSAttributedString(string: " ", attributes: [
             .font: AppKitInline.makeFont(size: theme.bodySize, weight: .regular,
-                                          design: theme.design, bold: false,
-                                          italic: ctx.italic),
+                                         design: theme.design, bold: false,
+                                         italic: ctx.italic),
             .foregroundColor: ctx.color
         ]))
         content.append(AppKitInline.attributed(paragraph, size: theme.bodySize,
@@ -254,10 +254,7 @@ enum MarkdownTextRun {
             ])
         }
         let glyph = ordered ? "\(number)." : theme.bullet(depth: depth)
-        let font = ordered
-            ? NSFont.monospacedDigitSystemFont(ofSize: theme.bodySize, weight: .regular)
-            : AppKitInline.makeFont(size: theme.bodySize, weight: .regular,
-                                    design: theme.design, bold: false, italic: false)
+        let font = AppKitInline.listMarkerFont(theme: theme, ordered: ordered)
         return NSAttributedString(string: glyph, attributes: [
             .font: font,
             .foregroundColor: NSColor.secondaryLabelColor

@@ -45,13 +45,13 @@ struct FullArticleCardText: View {
             }
 
             Text(row.displaySite ?? "Saved locally")
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .lineLimit(1)
 
             if let readingTime = row.readingTimeLabel {
                 Spacer(minLength: 4)
                 Text("\(readingTime) read")
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .fixedSize()
             }
         }

@@ -169,8 +169,8 @@ struct ArticleDetailView: View {
                 ArticleHeaderView(row: row, theme: theme)
                 VStack(alignment: .leading, spacing: 0) {
                     Text(excerpt)
+                        .font(theme.font.swiftUIFont(size: theme.bodySize, italic: true))
                         .foregroundStyle(.secondary)
-                        .italic()
                         .lineSpacing(theme.lineSpacing)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
