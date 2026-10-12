@@ -2,125 +2,55 @@
 
 import SwiftUI
 
-/// Adds user Tags to a fixed snapshot of cards while allowing several names
-/// to be entered without reopening the board's tag editor.
+/// Edits a frozen board selection using the Inspector's tag controls.
 struct BoardTagEditor: View {
-    let rows: [ReadingRow]
-    let librarySession: UInt64
-
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @State private var editing: BoardTagEditingSession
     @State private var query = ""
-    @State private var isAdding = false
-    @State private var feedback: String?
-    @State private var addedTags: [String] = []
+    @State private var tagPendingRemoval: BoardTagEditorState.Tag?
+    @State private var showsTagRemovalConfirmation = false
     @FocusState private var isFocused: Bool
 
-    private var targetIDs: [String] {
-        rows.map(\.id)
-    }
-
-    private var trimmedQuery: String {
-        query.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    /// The selection can change while a write refreshes the board. Resolve only
-    /// the captured targets, retaining their snapshots if a filter hides them.
-    private var currentRows: [ReadingRow] {
-        let current = Dictionary(uniqueKeysWithValues: appState.readings.map { ($0.id, $0) })
-        return rows.map { current[$0.id] ?? $0 }
-    }
-
-    private var commonUserTags: [String] {
-        let targets = currentRows
-        guard let first = targets.first else { return [] }
-        return first.tags.filter { tag in
-            targets.allSatisfy { row in
-                row.tags.contains { ExactTagIdentity.matches($0, tag) }
-                    && !row.machineTags.contains { ExactTagIdentity.matches($0, tag) }
-            }
-        }
-    }
-
-    private var suggestions: [BoardSearchToken] {
-        BoardSearchSuggestions(
-            text: query,
-            tagCandidates: appState.filters.searchTagCandidates,
-            selectedTokens: commonUserTags.map { BoardSearchToken(kind: .tag, value: $0) },
-            includeVisualToken: false
-        ).tagTokens
-    }
-
-    private var lengthError: String? {
-        guard !TagRules.isWithinLength(trimmedQuery) else { return nil }
-        return "Tags can be at most \(TagRules.maxLength) characters."
+    init(rows: [ReadingRow], librarySession: UInt64) {
+        // A new sheet request owns its target snapshots for its whole lifetime.
+        _editing = State(initialValue: BoardTagEditingSession(rows: rows, librarySession: librarySession))
     }
 
     private var canAdd: Bool {
-        !rows.isEmpty && !trimmedQuery.isEmpty && lengthError == nil && !isAdding
-            && librarySession == appState.librarySessionGeneration
+        let tag = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !tag.isEmpty && TagRules.isWithinLength(tag)
+            && !editing.state.targetIDs.isEmpty
+            && editing.state.librarySession == appState.librarySessionGeneration
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Add tags")
-                    .font(.headline)
-                    .accessibilityAddTraits(.isHeader)
-                Text(rows.count == 1 ? "1 card selected" : "\(rows.count) cards selected")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
+            Text("Add tags")
+                .font(.headline)
+                .accessibilityAddTraits(.isHeader)
 
-            TextField("Add a tag…", text: $query)
-                .textFieldStyle(.roundedBorder)
-                .autocorrectionDisabled()
-                .focused($isFocused)
-                .textInputSuggestions {
-                    ForEach(suggestions) { token in
-                        Label(token.displayValue, systemImage: "tag")
-                            .textInputCompletion(token.value)
-                    }
-                }
-                .onSubmit(addTag)
-                .accessibilityLabel("Add a tag")
-                .accessibilityHint(
-                    "Type a tag or choose a suggestion, then press Return to add it to the selected cards."
-                )
-                .accessibilityIdentifier(A11y.BoardTags.input)
+            TagNameInput(
+                query: $query,
+                candidates: appState.filters.searchTagCandidates,
+                userTags: editing.state.commonUserTags,
+                isFocused: $isFocused,
+                accessibilityIdentifier: A11y.BoardTags.input,
+                errorAccessibilityIdentifier: A11y.BoardTags.inputError,
+                onSubmit: addTag
+            )
 
-            Text("Existing tags will be kept.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            if !addedTags.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Added tags")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+            if !editing.state.tags.isEmpty {
+                ScrollView {
                     FlowLayout(spacing: 6) {
-                        ForEach(addedTags, id: \.self) { tag in
-                            InspectorTagSummaryPill(title: tag)
-                                .accessibilityIdentifier(A11y.BoardTags.tag(tag))
+                        ForEach(editing.state.tags) { tag in
+                            tagPill(tag)
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-            }
-
-            if let lengthError {
-                Text(lengthError)
-                    .font(.caption)
-                    .foregroundStyle(.red)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier(A11y.BoardTags.inputError)
-            }
-
-            if let feedback {
-                Text(feedback)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityIdentifier(A11y.BoardTags.feedback)
+                .scrollBounceBehavior(.basedOnSize)
+                .frame(maxHeight: 240)
             }
 
             HStack {
@@ -137,35 +67,77 @@ struct BoardTagEditor: View {
         .frame(width: 320)
         .accessibilityIdentifier(A11y.BoardTags.editor)
         .onExitCommand { dismiss() }
-        .task { isFocused = true }
+        .task {
+            editing.updateRows(appState.readings, librarySession: appState.librarySessionGeneration)
+            isFocused = true
+        }
+        .onChange(of: appState.readings) { _, rows in
+            editing.updateRows(rows, librarySession: appState.librarySessionGeneration)
+        }
+        .confirmationDialog(
+            "Remove this tag?",
+            isPresented: $showsTagRemovalConfirmation,
+            presenting: tagPendingRemoval
+        ) { tag in
+            Button("Remove tag", role: .destructive) {
+                editing.removeTag(tag.name, using: appState)
+                tagPendingRemoval = nil
+            }
+            Button("Cancel", role: .cancel) { tagPendingRemoval = nil }
+        } message: { tag in
+            Text("“\(tag.name)” will be removed from \(removalTargets) and won’t be added back automatically.")
+        }
+    }
+
+    private var removalTargets: String {
+        editing.state.targetIDs.count == 1 ? "this item" : "the selected cards"
+    }
+
+    private func tagPill(_ tag: BoardTagEditorState.Tag) -> some View {
+        InspectorTagPill(
+            title: tag.name,
+            symbol: tag.isMachine ? "sparkles" : "tag",
+            removeAccessibilityIdentifier: A11y.BoardTags.removeTag(tag.name),
+            onSearch: { search(tag.name) },
+            onRemove: { requestRemoval(tag) }
+        )
+        .accessibilityLabel("\(tag.name), \(tag.isMachine ? "machine tag" : "your tag")")
+        .accessibilityIdentifier(A11y.BoardTags.tag(tag.name))
+        .contextMenu {
+            if tag.isMachine {
+                Button("Make this my tag", systemImage: "tag") {
+                    editing.addTag(tag.name, using: appState)
+                }
+            }
+            Button("Remove tag", systemImage: "xmark", role: .destructive) {
+                requestRemoval(tag)
+            }
+        }
     }
 
     private func addTag() {
         guard canAdd else { return }
-        let tag = trimmedQuery
-        let ids = targetIDs
+        let tag = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        editing.addTag(tag, using: appState)
         query = ""
-        feedback = nil
-        isAdding = true
         isFocused = true
-        Task {
-            let addedCount = await appState.addTag(tag, to: ids)
-            if addedCount == 0 {
-                feedback = "Unable to add “\(tag)”. Try again."
-                if query.isEmpty {
-                    query = tag
-                }
-            } else if addedCount < ids.count {
-                feedback = "Added “\(tag)” to \(addedCount) of \(ids.count) cards."
-            } else {
-                if !addedTags.contains(where: { ExactTagIdentity.matches($0, tag) }) {
-                    addedTags.append(tag)
-                }
-                feedback = ids.count == 1
-                    ? "Added “\(tag)” to 1 card."
-                    : "Added “\(tag)” to \(addedCount) cards."
-            }
-            isAdding = false
+    }
+
+    private func requestRemoval(_ tag: BoardTagEditorState.Tag) {
+        tagPendingRemoval = tag
+        showsTagRemovalConfirmation = true
+    }
+
+    private func search(_ tag: String) {
+        let nextTokens = [BoardSearchToken(kind: .tag, value: tag)]
+        let searchChanged = !appState.searchQuery.isEmpty
+            || BoardSearchCriteria(tokens: appState.searchTokens) != BoardSearchCriteria(tokens: nextTokens)
+        appState.activeScope = .all
+        appState.searchQuery = ""
+        appState.searchTokens = nextTokens
+        if !searchChanged {
+            appState.searchDidChange()
         }
+        dismiss()
     }
 }

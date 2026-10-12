@@ -191,10 +191,15 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   zoom commands.
 - The card context menu's **Add Tag…** action and `⌘⇧T` open an **Add tags** dialog for the
   selected cards. The board toolbar has no tag control.
-  Its inline field uses the same library Tag suggestions as the Inspector. Return or **Add Tag**
+  Its inline field uses the same library Tag suggestions as the Inspector; clicking a suggestion
+  completes the field. Return or **Add Tag**
   adds one user Tag to every target, preserving each card's existing Tags and avoiding duplicates.
-  The dialog retains its target cards while background refreshes run, shows added Tags as pills,
-  and remains open for additional names until **Done** or Escape. It never removes Tags.
+  The dialog retains its target cards while background refreshes run and remains open for
+  additional names until **Done** or Escape. With one card selected, it shows every user and
+  machine Tag. With several selected, it shows the names added during that dialog session.
+  These Tags use the Inspector's same pills, hover removal control, label search, machine ownership
+  action, and removal confirmation. Edits appear immediately; ordered background writes and
+  authoritative row reloads reconcile their stored state, including cards hidden by a tag filter.
 - Delete applies to every selected card after one explicit confirmation. Commands that only make
   sense for one reading, such as opening its source, are unavailable while several cards are
   selected. `⌘Delete` requests the same confirmed permanent deletion.

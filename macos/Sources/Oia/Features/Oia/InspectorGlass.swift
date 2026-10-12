@@ -46,6 +46,7 @@ struct InspectorPill: View {
 struct InspectorTagPill: View {
     let title: String
     let symbol: String
+    var removeAccessibilityIdentifier: String?
     var onSearch: () -> Void
     var onRemove: () -> Void
 
@@ -64,7 +65,7 @@ struct InspectorTagPill: View {
             .buttonStyle(.plain)
             .help("Remove \(title) tag")
             .accessibilityLabel("Remove \(title) tag")
-            .accessibilityIdentifier(A11y.Inspector.removeTag(title))
+            .accessibilityIdentifier(removeAccessibilityIdentifier ?? A11y.Inspector.removeTag(title))
 
             Button(action: onSearch) {
                 Text(title).lineLimit(1).truncationMode(.middle).frame(maxWidth: 232)
@@ -84,34 +85,7 @@ struct InspectorTagPill: View {
     }
 }
 
-/// A read-only acknowledgement of a Tag added from the board. Its capsule
-/// shares the inspector's presentation without offering search or removal.
-struct InspectorTagSummaryPill: View {
-    let title: String
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(systemName: "tag")
-                .font(.system(size: 10, weight: .semibold))
-                .frame(width: 12, height: 12)
-            Text(title)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .frame(maxWidth: 232)
-        }
-        .font(.system(size: 12, weight: .medium))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .modifier(InspectorTagGlass(isInteractive: false))
-        .fixedSize(horizontal: true, vertical: false)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(title) tag")
-    }
-}
-
 private struct InspectorTagGlass: ViewModifier {
-    var isInteractive = true
-
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
@@ -120,7 +94,7 @@ private struct InspectorTagGlass: ViewModifier {
             content.background(Color(nsColor: .controlBackgroundColor), in: shape)
                 .overlay(shape.strokeBorder(.primary.opacity(0.08)))
         } else if #available(macOS 26.0, *) {
-            content.glassEffect(isInteractive ? .regular.interactive() : .regular, in: shape)
+            content.glassEffect(.regular.interactive(), in: shape)
         } else {
             content.background(.regularMaterial, in: shape)
                 .overlay(shape.strokeBorder(.primary.opacity(0.08)))
