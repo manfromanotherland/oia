@@ -189,9 +189,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   media asset, falling back to the source-of-truth `article.md`; Quick Look never receives a remote
   origin URL. Pinching changes the same five card-size levels as the toolbar and existing keyboard
   zoom commands.
-- The toolbar's **Add Tag…** action sits immediately before Search at the trailing edge and
-  moves left with the native search field as it expands. It and `⌘⇧T` open an **Add tags** dialog
-  for the selected cards.
+- The card context menu's **Add Tag…** action and `⌘⇧T` open an **Add tags** dialog for the
+  selected cards. The board toolbar has no tag control.
   Its inline field uses the same library Tag suggestions as the Inspector. Return or **Add Tag**
   adds one user Tag to every target, preserving each card's existing Tags and avoiding duplicates.
   The dialog retains its target cards while background refreshes run, shows added Tags as pills,

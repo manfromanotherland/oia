@@ -219,32 +219,7 @@ extension OiaLibraryView {
             ToolbarItem(placement: .principal) {
                 boardFilterPicker
             }
-
-            if #available(macOS 26.0, *) {
-                ToolbarSpacer(.flexible, placement: .automatic)
-                ToolbarItem(placement: .automatic) {
-                    boardTagButton
-                }
-                // Replace the separately placed system search item so it
-                // shares the tag action's trailing toolbar section.
-                DefaultToolbarItem(kind: .search, placement: .automatic)
-            } else {
-                ToolbarItemGroup {
-                    Spacer()
-                    boardTagButton
-                }
-            }
         }
-    }
-
-    private var boardTagButton: some View {
-        Button(action: requestEditSelectedTags) {
-            Label("Add Tag…", systemImage: "tag")
-        }
-        .disabled(appState.selectedRows.isEmpty || appState.isDeleting)
-        .help("Add tags to selected cards (\(ShortcutCatalog.editTags.display))")
-        .accessibilityValue("\(appState.selectedRows.count) cards selected")
-        .accessibilityIdentifier(A11y.List.addTag)
     }
 
     private var boardFilterPicker: some View {
