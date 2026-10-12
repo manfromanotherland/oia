@@ -8,7 +8,7 @@
 //! Shortcut, native messaging, and native clients cannot drift.
 
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     fs::{self, File, OpenOptions},
     io::{BufRead, BufReader, Read, Seek, Write},
     path::{Path, PathBuf},
@@ -131,6 +131,23 @@ trait SourceProvider: Sync {
     fn descriptor(&self) -> ProviderDescriptor;
     fn classify(&self, url: &str) -> Option<SourceReference>;
     fn metadata_url(&self, reference: &SourceReference) -> Result<String, String>;
+    fn matches_identity(
+        &self,
+        reference: &SourceReference,
+        source_id: &str,
+        _canonical_url: &str,
+    ) -> bool {
+        reference.source_id == source_id
+    }
+    fn matches_saved_origin(&self, _: &SourceReference, _: &Metadata) -> bool {
+        false
+    }
+    fn resolves_aliases_from_metadata(&self) -> bool {
+        false
+    }
+    fn possible_alias(&self, _: &SourceReference, _: &Metadata) -> bool {
+        false
+    }
     fn metadata_refinement(&self, _: &[u8]) -> Result<Option<MetadataRefinement>, String> {
         Ok(None)
     }
@@ -231,8 +248,119 @@ impl SourceProvider for XSourceProvider {
     }
 }
 
+struct BlueskySourceProvider;
+
+impl SourceProvider for BlueskySourceProvider {
+    fn descriptor(&self) -> ProviderDescriptor {
+        ProviderDescriptor {
+            source_type: "social_post",
+            provider: "bluesky",
+            site_name: "Bluesky",
+            metadata_url_policy: allowed_bluesky_metadata_url,
+            asset_url_policy: allowed_bluesky_asset_url,
+        }
+    }
+
+    fn classify(&self, url: &str) -> Option<SourceReference> {
+        crate::bluesky_source::classify_bluesky_post_url(url).map(|reference| SourceReference {
+            source_id: reference.source_id,
+            canonical_url: reference.canonical_url,
+        })
+    }
+
+    fn metadata_url(&self, reference: &SourceReference) -> Result<String, String> {
+        let post = crate::bluesky_source::classify_bluesky_post_url(&reference.canonical_url)
+            .filter(|post| post.source_id == reference.source_id)
+            .ok_or_else(|| "the recognized Bluesky identity was invalid".to_string())?;
+        Ok(crate::bluesky_source::post_thread_url(&post))
+    }
+
+    fn matches_identity(
+        &self,
+        reference: &SourceReference,
+        source_id: &str,
+        canonical_url: &str,
+    ) -> bool {
+        crate::bluesky_source::matches_bluesky_identity(
+            &reference.source_id,
+            source_id,
+            canonical_url,
+        )
+    }
+
+    fn matches_saved_origin(&self, reference: &SourceReference, metadata: &Metadata) -> bool {
+        let Some(origin) = self.classify(&metadata.url) else {
+            return false;
+        };
+        metadata.source_profile.as_ref().is_some_and(|profile| {
+            // A repaired post keeps its original URL-derived id even after
+            // its author's handle changes. The saved DID profile binds that
+            // historical origin to the current canonical post.
+            (if origin.source_id.starts_with("at://did:") {
+                origin.source_id == profile.source_id
+            } else {
+                origin.source_id.rsplit('/').next() == profile.source_id.rsplit('/').next()
+            }) && profile_matches_source(
+                profile,
+                self,
+                &SourceReference {
+                    source_id: profile.source_id.clone(),
+                    canonical_url: metadata.canonical_url.clone(),
+                },
+                &metadata.canonical_url,
+            ) && self.matches_identity(reference, &profile.source_id, &metadata.canonical_url)
+        })
+    }
+
+    fn resolves_aliases_from_metadata(&self) -> bool {
+        true
+    }
+
+    fn possible_alias(&self, reference: &SourceReference, metadata: &Metadata) -> bool {
+        self.classify(&metadata.url).is_some_and(|origin| {
+            origin.source_id.rsplit('/').next() == reference.source_id.rsplit('/').next()
+        })
+    }
+
+    fn parse_metadata(&self, payload: &[u8], _: Option<&[u8]>) -> Result<ResolvedSource, String> {
+        let payload = std::str::from_utf8(payload)
+            .map_err(|_| "the provider returned non-UTF-8 metadata".to_string())?;
+        let post = crate::bluesky_source::parse_post_thread_payload(payload)
+            .map_err(|error| error.to_string())?;
+        Ok(ResolvedSource {
+            source_id: post.source_id,
+            canonical_url: post.canonical_url,
+            text: post.text,
+            display_name: post.display_name,
+            handle: post.handle,
+            published_at: post.published_at,
+            avatar_url: post.avatar_url,
+            attachments: post
+                .attachments
+                .into_iter()
+                .map(|attachment| ResolvedSourceAttachment {
+                    kind: match attachment.kind {
+                        crate::bluesky_source::AttachmentKind::Image => {
+                            ResolvedAttachmentKind::Image
+                        }
+                        crate::bluesky_source::AttachmentKind::Video => {
+                            ResolvedAttachmentKind::Video
+                        }
+                    },
+                    url: attachment.url,
+                    poster_url: attachment.poster_url,
+                    width: attachment.width,
+                    height: attachment.height,
+                    alt: attachment.alt,
+                })
+                .collect(),
+        })
+    }
+}
+
 static X_PROVIDER: XSourceProvider = XSourceProvider;
-static SOURCE_PROVIDERS: [&'static dyn SourceProvider; 1] = [&X_PROVIDER];
+static BLUESKY_PROVIDER: BlueskySourceProvider = BlueskySourceProvider;
+static SOURCE_PROVIDERS: [&'static dyn SourceProvider; 2] = [&X_PROVIDER, &BLUESKY_PROVIDER];
 
 struct RecognizedSource<'a> {
     provider: &'a dyn SourceProvider,
@@ -468,6 +596,7 @@ fn save_special_url_with_providers(
     };
 
     let matches = scan_source_matches(library, source.provider, &source.reference)?;
+    let observed = matches.observed;
     let existing_source = matches.source.and_then(|candidate| {
         existing_source_from_candidate(library, source.provider, &source.reference, candidate)
     });
@@ -478,7 +607,7 @@ fn save_special_url_with_providers(
         }
     }
 
-    let identity = if let Some(existing) = existing_source {
+    let mut identity = if let Some(existing) = existing_source {
         IdentitySelection::SaveAsExisting {
             url: existing.url,
             expected_article: ExpectedArticleState::Sha256(existing.article_sha256),
@@ -548,7 +677,10 @@ fn save_special_url_with_providers(
         .provider
         .parse_metadata(&payload, refinement_payload.as_deref())
         .map_err(SaveUrlError::Retrieval)?;
-    if post.source_id != source.reference.source_id {
+    if !source
+        .provider
+        .matches_identity(&source.reference, &post.source_id, &post.canonical_url)
+    {
         return Err(SaveUrlError::Retrieval(
             "the provider returned a different post identifier".into(),
         ));
@@ -559,6 +691,58 @@ fn save_special_url_with_providers(
         )));
     }
 
+    // Providers such as Bluesky resolve a share-time handle to a stable DID.
+    // Reconcile that verified identity before creating a new reading, so a
+    // DID share upgrades a legacy handle article and renamed handles still
+    // find their existing post instead of creating another card.
+    if matches!(identity, IdentitySelection::New)
+        && source.provider.resolves_aliases_from_metadata()
+    {
+        let resolved = SourceReference {
+            source_id: post.source_id.clone(),
+            canonical_url: post.canonical_url.clone(),
+        };
+        let matches = scan_source_matches(library, source.provider, &resolved)?;
+        if let Some(existing) = matches.source.and_then(|candidate| {
+            existing_source_from_candidate(library, source.provider, &resolved, candidate)
+        }) {
+            if source_assets_complete(library, &existing) {
+                return Ok(Some(duplicate_outcome(library, existing.id)));
+            }
+            identity = IdentitySelection::SaveAsExisting {
+                url: existing.url,
+                expected_article: ExpectedArticleState::Sha256(existing.article_sha256),
+            };
+        } else {
+            identity = select_identity(
+                library,
+                &post.canonical_url,
+                source.provider,
+                &resolved,
+                matches.legacy,
+            )?;
+            if let IdentitySelection::Duplicate(id) = identity {
+                return Ok(Some(duplicate_outcome(library, id)));
+            }
+        }
+        if let IdentitySelection::SaveAsExisting {
+            ref url,
+            ref expected_article,
+        } = identity
+        {
+            let id =
+                crate::url_id(url).map_err(|error| SaveError::InvalidRequest(error.to_string()))?;
+            let unchanged = match expected_article {
+                ExpectedArticleState::Sha256(hash) => observed.get(&id) == Some(hash),
+                _ => false,
+            };
+            if !unchanged {
+                return Ok(Some(duplicate_outcome(library, id)));
+            }
+        }
+    }
+
+    let source_id = post.source_id.clone();
     let canonical_url = post.canonical_url.clone();
     let (identity_url, expected_article) = match identity {
         IdentitySelection::SaveAsExisting {
@@ -608,7 +792,7 @@ fn save_special_url_with_providers(
         version: 1,
         source_type: descriptor.source_type.into(),
         provider: descriptor.provider.into(),
-        source_id: source.reference.source_id,
+        source_id,
         author_handle: prepared.handle,
         published_at: Some(prepared.published_at),
         avatar_asset: prepared.avatar_asset,
@@ -689,7 +873,7 @@ fn identity_for_existing_url(
         return Ok(Some(IdentitySelection::Duplicate(id)));
     }
     let replaceable = metadata.source_profile.as_ref().is_none_or(|profile| {
-        profile_matches_identity(profile, provider.descriptor(), &reference.source_id)
+        profile_matches_source(profile, provider, reference, &metadata.canonical_url)
     });
     Ok(Some(if replaceable {
         IdentitySelection::SaveAsExisting {
@@ -722,6 +906,9 @@ struct ArticleCandidate {
 struct SourceMatches {
     source: Option<ArticleCandidate>,
     legacy: Option<ArticleCandidate>,
+    /// Only plausible unresolved aliases are hashed, before network retrieval.
+    /// A later identity resolution may upgrade them only if these bytes still match.
+    observed: HashMap<String, String>,
 }
 
 struct ArticleSnapshot {
@@ -757,15 +944,25 @@ fn scan_source_matches(
             let Ok(metadata) = read_source_metadata(&article) else {
                 continue;
             };
-            if !valid_article_identity(library, &reading.path(), &metadata)
-                || !origin_matches(provider, reference, &metadata)
-            {
+            if !valid_article_identity(library, &reading.path(), &metadata) {
+                continue;
+            }
+            if provider.possible_alias(reference, &metadata) {
+                if let Ok(snapshot) = article_snapshot(&article) {
+                    if valid_article_identity(library, &reading.path(), &snapshot.metadata) {
+                        matches
+                            .observed
+                            .insert(snapshot.metadata.id, snapshot.article_sha256);
+                    }
+                }
+            }
+            if !origin_matches(provider, reference, &metadata) {
                 continue;
             }
 
             let is_source = !metadata.lightweight
                 && metadata.source_profile.as_ref().is_some_and(|profile| {
-                    valid_matching_profile(profile, provider.descriptor(), &reference.source_id)
+                    valid_profile_for_source(profile, provider, reference, &metadata.canonical_url)
                 });
             let is_legacy = metadata.source_profile.is_none();
             let candidate = ArticleCandidate {
@@ -807,7 +1004,7 @@ fn existing_source_from_candidate(
         return None;
     }
     let profile = metadata.source_profile.filter(|profile| {
-        valid_matching_profile(profile, provider.descriptor(), &reference.source_id)
+        valid_profile_for_source(profile, provider, reference, &metadata.canonical_url)
     })?;
     Some(ExistingSource {
         id: metadata.id,
@@ -842,13 +1039,44 @@ fn origin_matches(
     reference: &SourceReference,
     metadata: &Metadata,
 ) -> bool {
-    provider
-        .classify(&metadata.url)
-        .is_some_and(|candidate| candidate.source_id == reference.source_id)
+    provider.classify(&metadata.url).is_some_and(|candidate| {
+        candidate.source_id == reference.source_id
+            || provider.matches_identity(&candidate, &reference.source_id, &reference.canonical_url)
+    }) || provider.matches_saved_origin(reference, metadata)
         || (provider.descriptor().provider == "x"
             && saved_x_shortlink_canonical(metadata)
                 .and_then(|canonical| provider.classify(canonical))
                 .is_some_and(|candidate| candidate.source_id == reference.source_id))
+}
+
+fn profile_matches_source(
+    profile: &SourceProfile,
+    provider: &dyn SourceProvider,
+    reference: &SourceReference,
+    canonical_url: &str,
+) -> bool {
+    let descriptor = provider.descriptor();
+    profile
+        .source_type
+        .eq_ignore_ascii_case(descriptor.source_type)
+        && profile.provider.eq_ignore_ascii_case(descriptor.provider)
+        && provider.matches_identity(reference, &profile.source_id, canonical_url)
+}
+
+fn valid_profile_for_source(
+    profile: &SourceProfile,
+    provider: &dyn SourceProvider,
+    reference: &SourceReference,
+    canonical_url: &str,
+) -> bool {
+    profile.version > 0
+        && profile_matches_source(profile, provider, reference, canonical_url)
+        && !profile.author_handle.trim().is_empty()
+        && profile.attachments.iter().all(|attachment| {
+            !attachment.kind.trim().is_empty()
+                && attachment.width != Some(0)
+                && attachment.height != Some(0)
+        })
 }
 
 fn profile_matches_identity(
@@ -1434,7 +1662,7 @@ impl SourceRetriever for HttpRetriever {
             .send()
             .map_err(|error| error.to_string())?;
         validate_response(&response, allowed_url, limit)?;
-        let content_type = response
+        let mut content_type = response
             .headers()
             .get(CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
@@ -1442,7 +1670,10 @@ impl SourceRetriever for HttpRetriever {
             .map(str::trim)
             .map(str::to_ascii_lowercase)
             .ok_or_else(|| "the provider media response had no content type".to_string())?;
-        if !role.accepts(&content_type) {
+        let opaque_bluesky_poster = matches!(role, AssetRole::Image)
+            && content_type == "application/octet-stream"
+            && allowed_bluesky_video_poster_url(response.url());
+        if !role.accepts(&content_type) && !opaque_bluesky_poster {
             return Err(format!(
                 "the provider returned {content_type} for an unsupported media role"
             ));
@@ -1480,6 +1711,19 @@ impl SourceRetriever for HttpRetriever {
             file.sync_all().map_err(|error| error.to_string())?;
             drop(file);
             let mut validation_file = File::open(destination).map_err(|error| error.to_string())?;
+            if opaque_bluesky_poster {
+                let mut signature = [0_u8; 3];
+                validation_file
+                    .read_exact(&mut signature)
+                    .map_err(|error| error.to_string())?;
+                if signature != [0xff, 0xd8, 0xff] {
+                    return Err("the Bluesky thumbnail was not a JPEG image".into());
+                }
+                validation_file
+                    .rewind()
+                    .map_err(|error| error.to_string())?;
+                content_type = "image/jpeg".into();
+            }
             let valid_media = match role {
                 AssetRole::Image => {
                     crate::media_dimensions::image_dimensions(&mut validation_file).is_some()
@@ -1606,6 +1850,37 @@ fn allowed_x_asset_url(url: &Url) -> bool {
     safe_https_url(url) && matches!(url.host_str(), Some("pbs.twimg.com" | "video.twimg.com"))
 }
 
+fn allowed_bluesky_metadata_url(url: &Url) -> bool {
+    safe_https_url(url)
+        && url.host_str() == Some("public.api.bsky.app")
+        && url.path() == "/xrpc/app.bsky.feed.getPostThread"
+}
+
+fn allowed_bluesky_asset_url(url: &Url) -> bool {
+    if !safe_https_url(url) {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    matches!(host, "cdn.bsky.app" | "video.bsky.app")
+        || allowed_bluesky_video_poster_url(url)
+        || ((host == "bsky.social" || host.ends_with(".host.bsky.network"))
+            && url.path() == "/xrpc/com.atproto.sync.getBlob")
+}
+
+fn allowed_bluesky_video_poster_url(url: &Url) -> bool {
+    if !safe_https_url(url) || url.host_str() != Some("video.cdn.bsky.app") {
+        return false;
+    }
+    let segments: Vec<_> = url.path_segments().into_iter().flatten().collect();
+    segments.len() == 4
+        && segments[0] == "hls"
+        && segments[1].starts_with("did:")
+        && !segments[2].is_empty()
+        && segments[3] == "thumbnail.jpg"
+}
+
 fn safe_https_url(url: &Url) -> bool {
     url.scheme() == "https"
         && url.port().is_none()
@@ -1619,6 +1894,305 @@ mod tests {
 
     use super::*;
     use crate::{import_link, parse_reading, read_metadata};
+
+    #[test]
+    fn recognizes_bluesky_post_as_a_social_link() {
+        let source = recognize_source(
+            &SOURCE_PROVIDERS,
+            "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i",
+        )
+        .expect("Bluesky posts must use the social-post capture path");
+        assert_eq!(source.provider.descriptor().provider, "bluesky");
+        assert_eq!(source.provider.descriptor().source_type, "social_post");
+    }
+
+    fn bluesky_fixture() -> FixtureRetriever {
+        let metadata = include_bytes!("../tests/fixtures/bluesky-post-video.json").to_vec();
+        let post = crate::bluesky_source::parse_post_thread_payload(
+            std::str::from_utf8(&metadata).unwrap(),
+        )
+        .unwrap();
+        let mut assets = HashMap::new();
+        assets.insert(post.avatar_url, ("image/jpeg", b"bluesky avatar".to_vec()));
+        for attachment in post.attachments {
+            assets.insert(attachment.url, ("video/mp4", b"bluesky movie".to_vec()));
+            if let Some(poster) = attachment.poster_url {
+                assets.insert(poster, ("image/jpeg", b"bluesky poster".to_vec()));
+            }
+        }
+        FixtureRetriever {
+            metadata,
+            refinement: None,
+            assets,
+        }
+    }
+
+    #[test]
+    fn bluesky_resave_upgrades_the_article_with_local_video_and_preserves_curation() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+        let original = crate::save_capture(&library, full_article(url)).unwrap();
+        let mut metadata = read_metadata(&library.article_path(&original.id)).unwrap();
+        metadata.tags = vec!["Inspiration".into()];
+        let saved_at = metadata.saved_at.clone();
+        crate::write_reading(&library, metadata, "Browser article extraction".into()).unwrap();
+
+        let saved = save_special_url_with(&library, &UrlSaveRequest::new(url), &bluesky_fixture())
+            .unwrap()
+            .unwrap();
+        assert_eq!(saved.id, original.id);
+        assert_eq!(saved.disposition, SaveDisposition::Upgraded);
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert!(!reading.metadata.lightweight);
+        assert_eq!(reading.metadata.tags, vec!["Inspiration"]);
+        assert_eq!(reading.metadata.saved_at, saved_at);
+        assert!(reading.body.contains("Anyone remember the newsreader app"));
+        assert_eq!(reading.metadata.excerpt.as_deref(), Some("Anyone remember the newsreader app, Paper?\n\nStarted prototyping an atproto take on it using @standard.site records"));
+        assert!(reading.body.contains(ATTACHMENT_MARKER));
+        let profile = reading.metadata.source_profile.unwrap();
+        assert_eq!(profile.source_type, "social_post");
+        assert_eq!(profile.provider, "bluesky");
+        assert_eq!(
+            profile.source_id,
+            "at://did:plc:e5zplwgiznavptdxhx5n2zlp/app.bsky.feed.post/3muu5higixs2i"
+        );
+        assert_eq!(profile.attachments.len(), 1);
+        let video = &profile.attachments[0];
+        assert_eq!(video.kind, "video");
+        assert_eq!(video.width, Some(1258));
+        assert_eq!(video.height, Some(2232));
+        assert_eq!(
+            fs::read(library.reading_dir(&saved.id).join(&video.asset)).unwrap(),
+            b"bluesky movie"
+        );
+        assert_eq!(
+            fs::read(
+                library
+                    .reading_dir(&saved.id)
+                    .join(video.poster_asset.as_ref().unwrap())
+            )
+            .unwrap(),
+            b"bluesky poster"
+        );
+        assert!(library
+            .reading_dir(&saved.id)
+            .join(profile.avatar_asset.unwrap())
+            .is_file());
+
+        // A DID URL and a handle URL identify the same saved post. Complete
+        // captures can deduplicate without fetching the provider again.
+        let did_url =
+            "https://bsky.app/profile/did:plc:e5zplwgiznavptdxhx5n2zlp/post/3muu5higixs2i";
+        let unavailable = FixtureRetriever {
+            metadata: vec![],
+            refinement: None,
+            assets: HashMap::new(),
+        };
+        let duplicate =
+            save_special_url_with(&library, &UrlSaveRequest::new(did_url), &unavailable)
+                .unwrap()
+                .unwrap();
+        assert_eq!(duplicate.id, saved.id);
+        assert_eq!(duplicate.disposition, SaveDisposition::Duplicate);
+        assert_eq!(find_saved_url(&library, did_url).unwrap(), Some(saved.id));
+    }
+
+    #[test]
+    fn missing_bluesky_video_keeps_the_previous_article_unchanged() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+        let original = crate::save_capture(&library, full_article(url)).unwrap();
+        let before = fs::read(library.article_path(&original.id)).unwrap();
+        let mut retriever = bluesky_fixture();
+        retriever
+            .assets
+            .retain(|_, (content_type, _)| *content_type != "video/mp4");
+        assert!(matches!(
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &retriever),
+            Err(SaveUrlError::Retrieval(_))
+        ));
+        assert_eq!(
+            fs::read(library.article_path(&original.id)).unwrap(),
+            before
+        );
+        assert_eq!(
+            fs::read_dir(library.assets_dir(&original.id))
+                .unwrap()
+                .count(),
+            0
+        );
+    }
+
+    #[test]
+    fn a_bluesky_did_share_upgrades_the_existing_handle_article() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let handle_url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+        let did_url =
+            "https://bsky.app/profile/did:plc:e5zplwgiznavptdxhx5n2zlp/post/3muu5higixs2i";
+        let original = crate::save_capture(&library, full_article(handle_url)).unwrap();
+        let saved =
+            save_special_url_with(&library, &UrlSaveRequest::new(did_url), &bluesky_fixture())
+                .unwrap()
+                .unwrap();
+        assert_eq!(saved.id, original.id);
+        assert_eq!(saved.disposition, SaveDisposition::Upgraded);
+        assert_eq!(
+            read_metadata(&library.article_path(&saved.id))
+                .unwrap()
+                .source_profile
+                .unwrap()
+                .provider,
+            "bluesky"
+        );
+    }
+
+    #[test]
+    fn a_renamed_bluesky_handle_repairs_and_finds_the_original_did_reading() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+        let original =
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &bluesky_fixture())
+                .unwrap()
+                .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&original.id)).unwrap())
+                .unwrap();
+        let video = reading
+            .metadata
+            .source_profile
+            .as_ref()
+            .unwrap()
+            .attachments[0]
+            .asset
+            .clone();
+        fs::remove_file(library.reading_dir(&original.id).join(&video)).unwrap();
+        let new_url = url.replace("montoulieu.dev", "newhandle.dev");
+        let mut retriever = bluesky_fixture();
+        let mut payload: serde_json::Value = serde_json::from_slice(&retriever.metadata).unwrap();
+        payload["thread"]["post"]["author"]["handle"] = serde_json::json!("newhandle.dev");
+        retriever.metadata = serde_json::to_vec(&payload).unwrap();
+        let repaired = save_special_url_with(&library, &UrlSaveRequest::new(&new_url), &retriever)
+            .unwrap()
+            .unwrap();
+        assert_eq!(repaired.id, original.id);
+        let metadata = read_metadata(&library.article_path(&original.id)).unwrap();
+        assert_eq!(metadata.url, url);
+        assert_eq!(metadata.canonical_url, new_url);
+        assert!(library.reading_dir(&original.id).join(video).is_file());
+        let did_url =
+            "https://bsky.app/profile/did:plc:e5zplwgiznavptdxhx5n2zlp/post/3muu5higixs2i";
+        assert_eq!(
+            find_saved_url(&library, did_url).unwrap(),
+            Some(original.id.clone())
+        );
+        assert_eq!(
+            find_saved_url(&library, &new_url).unwrap(),
+            Some(original.id)
+        );
+    }
+
+    #[test]
+    fn bluesky_identity_resolution_never_overwrites_concurrent_article_writes() {
+        for existing_before_fetch in [false, true] {
+            let directory = tempfile::tempdir().unwrap();
+            let library = LibraryRoot::new(directory.path()).unwrap();
+            let handle_url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+            let did_url =
+                "https://bsky.app/profile/did:plc:e5zplwgiznavptdxhx5n2zlp/post/3muu5higixs2i";
+            if existing_before_fetch {
+                crate::save_capture(&library, full_article(handle_url)).unwrap();
+            }
+            let retriever = MutatingRetriever {
+                inner: bluesky_fixture(),
+                during_metadata_fetch: Box::new(|| {
+                    let created = crate::save_capture(&library, full_article(handle_url)).unwrap();
+                    let mut metadata = read_metadata(&library.article_path(&created.id)).unwrap();
+                    metadata.tags = vec!["Changed during retrieval".into()];
+                    crate::write_reading(&library, metadata, "Concurrent browser capture".into())
+                        .unwrap();
+                }),
+            };
+            let saved = save_special_url_with(&library, &UrlSaveRequest::new(did_url), &retriever)
+                .unwrap()
+                .unwrap();
+            assert_eq!(saved.disposition, SaveDisposition::Duplicate);
+            let reading =
+                parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap())
+                    .unwrap();
+            assert_eq!(reading.body, "Concurrent browser capture\n");
+            assert_eq!(reading.metadata.tags, vec!["Changed during retrieval"]);
+            assert!(reading.metadata.source_profile.is_none());
+        }
+    }
+
+    #[test]
+    fn an_explicit_bluesky_did_origin_cannot_borrow_another_authors_profile() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://bsky.app/profile/montoulieu.dev/post/3muu5higixs2i";
+        let saved = save_special_url_with(&library, &UrlSaveRequest::new(url), &bluesky_fixture())
+            .unwrap()
+            .unwrap();
+        let mut reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        reading.metadata.url =
+            "https://bsky.app/profile/did:plc:aaaaaaaaaaaaaaaaaaaaaaaa/post/3muu5higixs2i".into();
+        reading.metadata.id = crate::url_id(&reading.metadata.url).unwrap();
+        crate::write_reading(&library, reading.metadata, reading.body).unwrap();
+        fs::remove_dir_all(library.reading_dir(&saved.id)).unwrap();
+        let did_url =
+            "https://bsky.app/profile/did:plc:e5zplwgiznavptdxhx5n2zlp/post/3muu5higixs2i";
+        assert_eq!(find_saved_url(&library, did_url).unwrap(), None);
+    }
+
+    #[test]
+    fn a_bluesky_response_for_another_author_cannot_replace_the_requested_post() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://bsky.app/profile/another.bsky.social/post/3muu5higixs2i";
+        assert!(matches!(
+            save_special_url_with(&library, &UrlSaveRequest::new(url), &bluesky_fixture()),
+            Err(SaveUrlError::Retrieval(_))
+        ));
+        assert!(find_by_url(&library, url).unwrap().is_none());
+    }
+
+    #[test]
+    fn bluesky_blob_redirects_stay_on_first_party_https_hosts() {
+        for allowed in [
+            "https://bsky.social/xrpc/com.atproto.sync.getBlob?did=did:plc:example&cid=example",
+            "https://enoki.us-east.host.bsky.network/xrpc/com.atproto.sync.getBlob?did=did:plc:example&cid=example",
+            "https://cdn.bsky.app/img/feed_fullsize/plain/example",
+            "https://video.bsky.app/watch/example/thumbnail.jpg",
+            "https://video.cdn.bsky.app/hls/did:plc:example/cid/thumbnail.jpg",
+        ] {
+            assert!(allowed_bluesky_asset_url(&Url::parse(allowed).unwrap()), "{allowed}");
+        }
+        for rejected in [
+            "http://bsky.social/xrpc/com.atproto.sync.getBlob",
+            "https://host.bsky.network.evil.example/xrpc/com.atproto.sync.getBlob",
+            "https://bsky.social.evil.example/xrpc/com.atproto.sync.getBlob",
+            "https://127.0.0.1/xrpc/com.atproto.sync.getBlob",
+            "https://custom-pds.example/xrpc/com.atproto.sync.getBlob",
+            "https://bsky.social/other-endpoint",
+            "https://user@cdn.bsky.app/img/feed_fullsize/plain/example",
+            "https://cdn.bsky.app:444/img/feed_fullsize/plain/example",
+            "https://video.cdn.bsky.app/hls/did:plc:example/cid/playlist.m3u8",
+            "https://video.cdn.bsky.app/other/did:plc:example/cid/thumbnail.jpg",
+            "https://video.cdn.bsky.app/hls/not-a-did/cid/thumbnail.jpg",
+            "https://video.cdn.bsky.app.evil.example/hls/did:plc:example/cid/thumbnail.jpg",
+        ] {
+            assert!(
+                !allowed_bluesky_asset_url(&Url::parse(rejected).unwrap()),
+                "{rejected}"
+            );
+        }
+    }
 
     struct FixtureRetriever {
         metadata: Vec<u8>,

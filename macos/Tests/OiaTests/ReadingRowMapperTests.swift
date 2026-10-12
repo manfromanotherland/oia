@@ -8,7 +8,7 @@ import XCTest
 final class ReadingRowMapperTests: XCTestCase {
     /// An FFI row with a distinct value in every field, so a miswired assignment
     /// (say `url` ← `canonicalUrl`) surfaces as a mismatch.
-    private func sampleFfiRow() -> FfiReadingRow {
+    func sampleFfiRow() -> FfiReadingRow {
         FfiReadingRow(
             id: "01JREADING000000000000000000",
             title: "The Title",

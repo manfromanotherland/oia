@@ -127,7 +127,7 @@ every affected component.
 - **Responsibility:** owns the library format and all logic — validate and write extension or
   URL-only saves, scan and index the library, full-text search, user and machine Tags, highlights,
   and reconcile changes that arrive via sync. The provider registry currently recognizes public X
-  post URLs;
+  and Bluesky post URLs;
   its seam is provider-neutral so additional social and video sources can be added independently.
 - **Shape:** a core library crate reused by the other native pieces (the macOS app and the native
   messaging host both link it). Not a long-running daemon.
@@ -146,6 +146,13 @@ every affected component.
   reads inert serialized data, verifies the post and note identities and the preview prefix,
   and accepts only unambiguous complete text. Missing or conflicting text remains a capture
   error; successful saves retain syndication's verified author and media.
+- **Bluesky posts:** exact `bsky.app/profile/<handle-or-did>/post/<record-key>` routes use the
+  unauthenticated public AppView. The adapter verifies the returned author and record identity,
+  retains the stable DID-based AT URI in the source profile, and saves image attachments and
+  original MP4 video blobs locally, with their posters. Blob requests start at `bsky.social` and
+  may redirect only to Bluesky-operated `*.host.bsky.network` services; self-hosted PDS video
+  downloads outside those hosts fail rather than saving a poster-only post. Existing browser
+  articles upgrade in place on re-save, preserving their URL-derived id and curation.
 - **Index:** local SQLite database with FTS5. Rebuildable; per-device; never synced.
 - **Tag persistence:** `tags` contains user labels; `machine_tags` contains image/text source
   entries with `source`, `source_fingerprint`, `analyzer_version`, and inferred `tags`;

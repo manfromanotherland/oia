@@ -1,0 +1,80 @@
+{
+  "thread": {
+    "post": {
+      "uri": "at://did:plc:e5zplwgiznavptdxhx5n2zlp/app.bsky.feed.post/3muu5higixs2i",
+      "cid": "bafyreibxmcfavr5fbscaaslc7mcubagzzryjozsskxyzipzm2zkfbu3llq",
+      "author": {
+        "did": "did:plc:e5zplwgiznavptdxhx5n2zlp",
+        "handle": "montoulieu.dev",
+        "displayName": "Pieter Montoulieu",
+        "avatar": "https://cdn.bsky.app/img/avatar/plain/did:plc:e5zplwgiznavptdxhx5n2zlp/bafkreidp6jyg4lg6xiwc3k6h5bpptdudik2nmw4cqa4jmjw5zrpl6e4dpa",
+        "associated": {
+          "activitySubscription": {
+            "allowSubscriptions": "followers"
+          }
+        },
+        "labels": [],
+        "createdAt": "2023-11-04T22:47:36.086Z"
+      },
+      "record": {
+        "$type": "app.bsky.feed.post",
+        "createdAt": "2026-09-06T13:55:32.482Z",
+        "embed": {
+          "$type": "app.bsky.embed.video",
+          "aspectRatio": {
+            "height": 2232,
+            "width": 1258
+          },
+          "presentation": "default",
+          "video": {
+            "$type": "blob",
+            "ref": {
+              "$link": "bafkreig5nf6elpzgtanaydqmaemj5sssyu4nacelrcosy6mz56wl75suzu"
+            },
+            "mimeType": "video/mp4",
+            "size": 7224515
+          }
+        },
+        "facets": [
+          {
+            "$type": "app.bsky.richtext.facet",
+            "features": [
+              {
+                "$type": "app.bsky.richtext.facet#mention",
+                "did": "did:plc:re3ebnp5v7ffagz6rb6xfei4"
+              }
+            ],
+            "index": {
+              "byteEnd": 106,
+              "byteStart": 92
+            }
+          }
+        ],
+        "langs": [
+          "en"
+        ],
+        "text": "Anyone remember the newsreader app, Paper?\n\nStarted prototyping an atproto take on it using @standard.site records"
+      },
+      "embed": {
+        "cid": "bafkreig5nf6elpzgtanaydqmaemj5sssyu4nacelrcosy6mz56wl75suzu",
+        "playlist": "https://video.bsky.app/watch/did%3Aplc%3Ae5zplwgiznavptdxhx5n2zlp/bafkreig5nf6elpzgtanaydqmaemj5sssyu4nacelrcosy6mz56wl75suzu/playlist.m3u8",
+        "thumbnail": "https://video.bsky.app/watch/did%3Aplc%3Ae5zplwgiznavptdxhx5n2zlp/bafkreig5nf6elpzgtanaydqmaemj5sssyu4nacelrcosy6mz56wl75suzu/thumbnail.jpg",
+        "aspectRatio": {
+          "height": 2232,
+          "width": 1258
+        },
+        "presentation": "default",
+        "$type": "app.bsky.embed.video#view"
+      },
+      "bookmarkCount": 7,
+      "replyCount": 5,
+      "repostCount": 9,
+      "likeCount": 90,
+      "quoteCount": 5,
+      "indexedAt": "2026-09-06T13:55:33.774Z",
+      "labels": []
+    },
+    "threadContext": {},
+    "$type": "app.bsky.feed.defs#threadViewPost"
+  }
+}

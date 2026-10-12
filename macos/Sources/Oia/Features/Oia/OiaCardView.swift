@@ -83,8 +83,8 @@ struct OiaCardView: View {
             .background {
                 if showsCulturalArtwork {
                     Color.clear
-                } else if row.socialPostProfile?.isXProvider == true {
-                    cardShape.fill(OiaTheme.xPostCardSurface)
+                } else if row.isSocialPost {
+                    cardShape.fill(OiaTheme.socialPostCardSurface)
                 } else if row.kind == .article || row.kind == .quote {
                     cardShape.fill(OiaTheme.textCardSurface)
                 } else if PerformanceTrace.disableMaterials {

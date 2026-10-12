@@ -85,11 +85,12 @@ enum OiaTheme {
     static var cardShape: RoundedRectangle {
         RoundedRectangle(cornerRadius: 8, style: .continuous)
     }
+
     static let shellSurface = semanticSurface(lightBlack: 0.08, darkBlack: 0.25)
     static let boardSurface = semanticSurface(lightBlack: 0.06, darkBlack: 0.12)
     static let inspectorSidebarSurface = semanticSurface(lightBlack: 0.10, darkBlack: 0.16)
     static let textCardSurface = semanticSurface(darkWhite: 0.05)
-    static let xPostCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
+    static let socialPostCardSurface = Color(nsColor: NSColor(name: nil) { appearance in
         let isDark = appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         return isDark
             ? NSColor(srgbRed: 0x2B / 255, green: 0x30 / 255, blue: 0x35 / 255, alpha: 1)

@@ -129,4 +129,17 @@ final class ReadingSourceProfileTests: XCTestCase {
         XCTAssertNil(profile.primaryAttachment?.height)
         XCTAssertEqual(profile.primaryAttachment?.intrinsicAspectRatio, 4.0 / 3.0)
     }
+
+    func testBlueskyProviderAliasesUseTheButterflyBadge() throws {
+        for provider in ["bluesky", "bsky", "BLUESKY"] {
+            let profile = try XCTUnwrap(ReadingSourceProfile.decode("""
+            {"version":1,"source_type":"social_post","provider":"\(provider)",\
+            "source_id":"at://did:plc:example/app.bsky.feed.post/3",\
+            "author_handle":"author.bsky.social","attachments":[]}
+            """))
+            XCTAssertTrue(profile.isBlueskyProvider)
+            XCTAssertFalse(profile.isXProvider)
+            XCTAssertEqual(profile.displayProvider, "Bluesky")
+        }
+    }
 }

@@ -2,9 +2,9 @@
 
 import SwiftUI
 
-/// A source-aware article presentation. The reading remains an article for
-/// filtering, search, and its durable Markdown body; this view only changes how
-/// the indexed source profile is presented.
+/// A source-aware Link presentation backed by the reading's durable Markdown
+/// body and local attachments. The core owns its classification; this view only
+/// changes how the indexed source profile is presented.
 struct SocialPostCard: View {
     let row: ReadingRow
     let profile: ReadingSourceProfile
@@ -228,6 +228,14 @@ private struct SocialPostHeader: View {
                     .frame(width: 32, height: 32)
                     .background(Color.primary.opacity(0.08), in: Circle())
                     .accessibilityLabel("X")
+            } else if profile.isBlueskyProvider {
+                Image("BlueskyButterfly")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 16, height: 16)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.08), in: Circle())
+                    .accessibilityLabel("Bluesky")
             } else {
                 Text(profile.displayProvider)
                     .font(.caption2.weight(.semibold))
@@ -254,7 +262,6 @@ private struct SocialPostAttachmentPreview: View {
     let reduceMotion: Bool
     let scenePhase: ScenePhase
 
-    @ViewBuilder
     var body: some View {
         Group {
             if attachment.mediaKind == .video {

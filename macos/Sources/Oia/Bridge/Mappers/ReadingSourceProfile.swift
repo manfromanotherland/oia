@@ -72,6 +72,13 @@ struct ReadingSourceProfile: Equatable, Sendable {
         }
     }
 
+    var isBlueskyProvider: Bool {
+        switch provider.lowercased() {
+        case "bluesky", "bsky": true
+        default: false
+        }
+    }
+
     var displayHandle: String? {
         guard let authorHandle else { return nil }
         return authorHandle.hasPrefix("@") ? authorHandle : "@\(authorHandle)"

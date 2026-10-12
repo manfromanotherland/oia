@@ -182,6 +182,9 @@ is true for a link saved without a cleaned article body, from either the app or 
   `article`; this profile changes its presentation, not its primary kind, identity, or tags. The
   macOS board places `social_post` readings under Links even though their text and assets are
   captured locally. Longform X Articles without that profile remain under Articles.
+  Bluesky uses `provider: bluesky` and the stable DID-based
+  `at://<did>/app.bsky.feed.post/<record-key>` as `source_id`; its images, MP4 videos, posters,
+  and avatar use the same safe local asset references as X posts.
 - `read_at`, `archived`, `favorite`, and `rating` remain part of the format-v1 compatibility
   contract. Older clients may still interpret and mutate them, so current readers preserve them
   when rewriting a file. The current macOS product does not expose them as curation controls.

@@ -3,6 +3,7 @@
 uniffi::setup_scaffolding!();
 
 mod article_html;
+pub mod bluesky_source;
 mod card_description;
 mod category_update;
 mod color_search;
