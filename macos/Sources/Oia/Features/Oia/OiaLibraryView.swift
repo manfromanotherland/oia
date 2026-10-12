@@ -220,7 +220,9 @@ extension OiaLibraryView {
                 boardFilterPicker
             }
 
-            ToolbarItem {
+            ToolbarItemGroup {
+                Spacer()
+
                 Button(action: requestEditSelectedTags) {
                     Label("Add Tag…", systemImage: "tag")
                 }
