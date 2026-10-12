@@ -98,18 +98,47 @@ extension AppState {
     }
 
     func addTag(id: String, tag: String) async {
-        guard let core else { return }
+        await addTag(tag, to: [id])
+    }
+
+    /// Add one user Tag to every requested card without replacing its existing
+    /// Tags. Patch the complete visible selection before the first file write,
+    /// then reconcile once so failed writes return to file-backed truth.
+    @discardableResult
+    func addTag(_ tag: String, to ids: [String]) async -> Int {
+        guard let core, !ids.isEmpty else { return 0 }
+        let tag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty, TagRules.isWithinLength(tag) else { return 0 }
+        var seenIDs: Set<String> = []
+        let requestedIDs = ids.filter { seenIDs.insert($0).inserted }
         beginLibraryWrite()
         defer { endLibraryWrite() }
         // A manually added name takes ownership of a matching machine tag.
-        let tag = tag.trimmingCharacters(in: .whitespaces)
-        if let old = readings.first(where: { $0.id == id }) {
-            var updated = old
-            updated.applyTagEdit(tag, applies: true)
-            applyOptimistic(old, updated)
+        for index in readings.indices where seenIDs.contains(readings[index].id) {
+            readings[index].applyTagEdit(tag, applies: true)
         }
-        try? await core.addTag(id: id, tag: tag)
+
+        var successfulCount = 0
+        var failures: [Error] = []
+        for id in requestedIDs {
+            do {
+                try await core.addTag(id: id, tag: tag)
+                successfulCount += 1
+            } catch {
+                failures.append(error)
+            }
+        }
+
         await refresh()
+        if let firstFailure = failures.first {
+            if requestedIDs.count == 1 {
+                error = firstFailure.localizedDescription
+            } else {
+                error = "Added “\(tag)” to \(successfulCount) of \(requestedIDs.count) cards. "
+                    + "Unable to tag \(failures.count); try again."
+            }
+        }
+        return successfulCount
     }
 
     func removeTag(id: String, tag: String) async {

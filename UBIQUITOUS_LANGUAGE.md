@@ -90,7 +90,7 @@ host, and macOS app.
 | Search token | A native search-field pill created from an item-type or exact Tag suggestion. Tokens narrow the free-text search and board scope by intersection. |
 | All | The unfiltered board scope. It includes every saved item, including files carrying a legacy `archived: true` value. |
 | Legacy state field | `read_at`, `archived`, `favorite`, or `rating` in a format-v1 file. The core preserves these for compatibility; the current macOS app does not display or mutate them. |
-| Board selection | The transient set of cards selected on the macOS board. A plain click or arrow move replaces it; Shift-click or Shift-arrow extends it from an anchor. Board actions such as delete apply to the complete set. |
+| Board selection | The transient set of cards selected on the macOS board. A plain click or arrow move replaces it; Shift-click or Shift-arrow extends it from an anchor; Command-click toggles an individual card; Command-Shift-click adds a range; Command-A selects the current board. Board actions such as adding a Tag or deleting apply to the complete set. |
 | Focused card | The one card within the board selection that receives spatial arrow-key navigation and single-reading actions. When an optimistic edit removes it from the active board scope, focus advances to an adjacent matching reading in the same render tick. |
 | Open reading | The single reading shown in Gallery detail. Double-clicking a card opens it and collapses any board multi-selection to that card. |
 

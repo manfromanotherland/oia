@@ -5,9 +5,9 @@ import LazyLayoutKit
 import SwiftUI
 
 extension OiaLibraryView {
-    func select(_ row: ReadingRow, extending: Bool) {
+    func select(_ row: ReadingRow, extending: Bool, toggling: Bool = false) {
         guard presentedReading == nil else { return }
-        appState.selectReading(id: row.id, extending: extending)
+        appState.selectReading(id: row.id, extending: extending, toggling: toggling)
         boardFocused = true
     }
 
@@ -42,6 +42,11 @@ extension OiaLibraryView {
 
     func performBoardShortcut(_ press: KeyPress) -> KeyPress.Result {
         guard !appState.isEditingText, presentedReading == nil else { return .ignored }
+
+        if ShortcutCatalog.selectAll.matches(key: press.key, modifiers: press.modifiers) {
+            appState.boardSelection.selectAll(in: appState.readings.map(\.id))
+            return .handled
+        }
 
         if ShortcutCatalog.copy.matches(key: press.key, modifiers: press.modifiers),
            let row = singleSelectedRow,
@@ -98,13 +103,13 @@ extension OiaLibraryView {
 struct EscapeKeyMonitor: NSViewRepresentable {
     let onEscape: () -> Bool
 
-    func makeNSView(context: Context) -> EscapeView {
+    func makeNSView(context _: Context) -> EscapeView {
         let view = EscapeView()
         view.onEscape = onEscape
         return view
     }
 
-    func updateNSView(_ view: EscapeView, context: Context) {
+    func updateNSView(_ view: EscapeView, context _: Context) {
         view.onEscape = onEscape
     }
 
@@ -112,7 +117,9 @@ struct EscapeKeyMonitor: NSViewRepresentable {
         var onEscape: (() -> Bool)?
         private var monitor: Any?
 
-        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+        override func hitTest(_: NSPoint) -> NSView? {
+            nil
+        }
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -123,10 +130,9 @@ struct EscapeKeyMonitor: NSViewRepresentable {
             guard window != nil else { return }
             monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
                 guard let self, event.keyCode == 53, event.window === self.window,
-                      self.onEscape?() == true else { return event }
+                      onEscape?() == true else { return event }
                 return nil
             }
         }
-
     }
 }

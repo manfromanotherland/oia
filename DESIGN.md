@@ -183,13 +183,20 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - A single click selects and focuses a card without opening it. Selection uses a restrained semantic
   accent outline. Arrow keys move spatially through the masonry columns and minimally scroll the
   focused card into view; Shift-click and Shift-arrow extend the selection from its anchor.
+  Command-click toggles an individual card; Command-Shift-click adds a range to the existing
+  selection. `⌘A` selects every card in the current board scope and search results.
 - Double-click, `⌘O`, or Return opens the focused card. Space opens system Quick Look for its local
   media asset, falling back to the source-of-truth `article.md`; Quick Look never receives a remote
   origin URL. Pinching changes the same five card-size levels as the toolbar and existing keyboard
   zoom commands.
+- The toolbar's **Add Tag…** action and `⌘⇧T` open an **Add tags** dialog for the selected cards.
+  Its inline field uses the same library Tag suggestions as the Inspector. Return or **Add Tag**
+  adds one user Tag to every target, preserving each card's existing Tags and avoiding duplicates.
+  The dialog retains its target cards while background refreshes run, shows added Tags as pills,
+  and remains open for additional names until **Done** or Escape. It never removes Tags.
 - Delete applies to every selected card after one explicit confirmation. Commands that only make
-  sense for one reading, such as editing tags or opening its source, are unavailable while several
-  cards are selected. `⌘Delete` requests the same confirmed permanent deletion.
+  sense for one reading, such as opening its source, are unavailable while several cards are
+  selected. `⌘Delete` requests the same confirmed permanent deletion.
 - Every card kind exposes its **origin page** (page URL, canonical URL, title/site, saved date).
   Image/video `media_url` is secondary metadata and never replaces the origin.
 
@@ -200,8 +207,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   a selection wholly within a `<blockquote>`/`<q>` element instead creates a quote card.
   Image bytes and video posters are copied locally when
   available.
-- The native card context menu provides tag editing, open origin, and permanent delete. Tag
-  editing focuses the Inspector's inline Tag field.
+- The native card context menu provides tag editing, open origin, and permanent delete. On the
+  board, **Add Tag…** opens the dialog for the complete selection when the clicked card belongs
+  to it, or just that card otherwise. In Gallery, tag editing focuses the Inspector's inline field.
   Destructive actions retain confirmation.
 
 ### Card detail
@@ -230,7 +238,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   deletion, before removing the Tag from this reading. The label searches the library. An inline
   field below the Tags heading filters a dropdown of matching library Tags, like board search.
   Choosing a suggestion fills the field; Return adds the entered name as a user Tag. Keyboard and
-  context-menu tag-editing actions focus this field, with no modal editor. Adding a user Tag with
+  context-menu tag-editing actions in Gallery focus this field. Adding a user Tag with
   the same spelling ignoring case gives the user Tag ownership in the combined view. Removing any
   effective Tag removes its user label and excludes matching machine labels, including future
   results. Analysis adds machine Tags directly after

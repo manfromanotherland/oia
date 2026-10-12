@@ -800,6 +800,81 @@ mod tests {
     }
 
     #[test]
+    fn adding_one_tag_across_videos_preserves_each_files_existing_state() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let mut readings = Vec::new();
+        for index in 0..10 {
+            let id = new_id();
+            let mut metadata = meta(&id, &format!("https://example.com/video/{index}"));
+            metadata.kind = crate::ReadingKind::Video;
+            metadata.tags = vec![format!("clip-{index}"), "keep".into()];
+            if index == 0 {
+                metadata.tags.push("Demo".into());
+            }
+            metadata.machine_tags = vec![
+                MachineTagSource {
+                    source: "text".into(),
+                    source_fingerprint: format!("text-{index}"),
+                    analyzer_version: "text-v1".into(),
+                    tags: vec!["demo".into(), "motion".into()],
+                },
+                MachineTagSource {
+                    source: "image".into(),
+                    source_fingerprint: format!("image-{index}"),
+                    analyzer_version: "image-v1".into(),
+                    tags: vec!["animation".into()],
+                },
+            ];
+            metadata.excluded_machine_tags = vec!["DEMO".into(), "unrelated".into()];
+            let body = format!("Video description {index}\n");
+            let written = write_reading(&lib, metadata, body.clone()).unwrap();
+            readings.push((written.metadata, body));
+        }
+        rebuild(&conn, &lib).unwrap();
+
+        // A sync writer can change one selected card after the board snapshot.
+        // Adding a Tag must extend the current file, including its latest body.
+        readings[4].0.tags.push("external".into());
+        readings[4].1 = "Updated by another device\n".into();
+        let changed = write_reading(&lib, readings[4].0.clone(), readings[4].1.clone()).unwrap();
+        readings[4].0 = changed.metadata;
+
+        for (before, _) in &readings {
+            add_tag(&lib, &conn, &before.id, "  demo  ").unwrap();
+        }
+
+        for (before, body) in &readings {
+            let after =
+                parse_reading(&fs::read_to_string(lib.article_path(&before.id)).unwrap()).unwrap();
+            let mut expected_tags = before.tags.clone();
+            if !expected_tags.iter().any(|tag| tag_key(tag) == "demo") {
+                expected_tags.push("demo".into());
+            }
+            assert_eq!(after.metadata.tags, expected_tags);
+            assert_eq!(after.metadata.machine_tags, before.machine_tags);
+            assert_eq!(after.metadata.excluded_machine_tags, vec!["unrelated"]);
+            assert_eq!(after.body, *body);
+            assert!(tag_entries(&after.metadata)
+                .iter()
+                .any(|tag| tag.key == "demo" && tag.origin == "user"));
+        }
+        let tagged = crate::list::list_readings(
+            &conn,
+            &crate::list::ListOptions {
+                tag: Some("demo".into()),
+                limit: 10,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(tagged.len(), 10);
+        assert!(tagged
+            .iter()
+            .all(|row| !row.machine_tags.iter().any(|tag| tag_key(tag) == "demo")));
+    }
+
+    #[test]
     fn add_tag_accepts_tag_at_max_length() {
         let (dir, conn) = setup();
         let lib = make_library(&dir);

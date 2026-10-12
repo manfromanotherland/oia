@@ -13,7 +13,11 @@ struct BoardSelection<ID: Hashable & Sendable>: Equatable, Sendable {
         selectedIDs.isEmpty
     }
 
-    mutating func select(_ id: ID, extending: Bool, in orderedIDs: [ID]) {
+    mutating func select(_ id: ID, extending: Bool, toggling: Bool = false, in orderedIDs: [ID]) {
+        if toggling, !extending {
+            toggle(id, in: orderedIDs)
+            return
+        }
         guard extending else {
             selectOnly(id)
             return
@@ -28,7 +32,11 @@ struct BoardSelection<ID: Hashable & Sendable>: Equatable, Sendable {
         }
 
         let bounds = min(anchorIndex, focusedIndex) ... max(anchorIndex, focusedIndex)
-        selectedIDs = Set(orderedIDs[bounds])
+        if toggling {
+            selectedIDs.formUnion(orderedIDs[bounds])
+        } else {
+            selectedIDs = Set(orderedIDs[bounds])
+        }
         focusedID = id
         anchorID = anchor
     }
@@ -37,6 +45,14 @@ struct BoardSelection<ID: Hashable & Sendable>: Equatable, Sendable {
         focusedID = nil
         selectedIDs = []
         anchorID = nil
+    }
+
+    mutating func selectAll(in orderedIDs: [ID]) {
+        selectedIDs = Set(orderedIDs)
+        if focusedID.map(selectedIDs.contains) != true {
+            focusedID = orderedIDs.first
+        }
+        anchorID = focusedID
     }
 
     /// Drops cards that no longer belong to the current board snapshot. A
@@ -92,5 +108,15 @@ struct BoardSelection<ID: Hashable & Sendable>: Equatable, Sendable {
         focusedID = id
         selectedIDs = [id]
         anchorID = id
+    }
+
+    private mutating func toggle(_ id: ID, in orderedIDs: [ID]) {
+        if selectedIDs.remove(id) == nil {
+            selectedIDs.insert(id)
+            focusedID = id
+        } else if focusedID == id {
+            focusedID = orderedIDs.first(where: selectedIDs.contains)
+        }
+        anchorID = focusedID
     }
 }

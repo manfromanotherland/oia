@@ -107,6 +107,7 @@ enum ShortcutCatalog {
     )
     static let quickLook = AppShortcut(title: "Quick Look", key: .space, modifiers: [], keyGlyph: "Space")
     static let editTags = AppShortcut(title: "Add Tag…", key: "t", modifiers: [.command, .shift], keyGlyph: "T")
+    static let selectAll = AppShortcut(title: "Select All Cards", key: "a", modifiers: .command, keyGlyph: "A")
     static let toggleHighlights = AppShortcut(title: "Show / Hide Highlights", key: "h", modifiers: [.command, .shift], keyGlyph: "H")
     static let delete = AppShortcut(title: "Delete", key: .delete, modifiers: .command, keyGlyph: "⌫")
     static let openInBrowser = AppShortcut(title: "Open in Browser", key: "o", modifiers: [.command, .shift], keyGlyph: "O")
@@ -142,7 +143,7 @@ enum ShortcutCatalog {
 
     /// Groups in cheat-sheet display order.
     static let groups: [Group] = [
-        Group(name: "Item", shortcuts: [open, quickLook, copy, editTags, toggleHighlights, delete, openInBrowser]),
+        Group(name: "Item", shortcuts: [open, quickLook, copy, selectAll, editTags, toggleHighlights, delete, openInBrowser]),
         Group(
             name: "View",
             shortcuts: [

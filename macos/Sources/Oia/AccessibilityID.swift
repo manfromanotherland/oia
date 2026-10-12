@@ -57,6 +57,7 @@ enum A11y {
         /// headings (`AXHeading`).
         static let rows = "list.rows"
         static let cardSizeControl = "list.cardSize"
+        static let addTag = "list.addTag"
         static let scrollToTop = "list.scrollToTop"
         /// Default "Nothing here yet" empty state.
         static let emptyState = "list.empty"
@@ -65,6 +66,20 @@ enum A11y {
         /// Tag-filter empty state (offers Clear tag filter).
         static let tagEmptyState = "list.empty.tag"
         static let clearTagFilter = "list.clearTagFilter"
+    }
+
+    /// ── Board tag dialog ──────────────────────────────────────────────────
+    enum BoardTags {
+        static let editor = "boardTags.editor"
+        static let input = "boardTags.input"
+        static let inputError = "boardTags.inputError"
+        static let feedback = "boardTags.feedback"
+        static let add = "boardTags.add"
+        static let done = "boardTags.done"
+
+        static func tag(_ tag: String) -> String {
+            "boardTags.tag.\(tag)"
+        }
     }
 
     /// ── Paste/drop save feedback ──────────────────────────────────────────
@@ -94,8 +109,13 @@ enum A11y {
         static let tagInputError = "detail.inspector.tagInputError"
         static let details = "detail.inspector.details"
         static let colorPrefix = "detail.inspector.colour."
-        static func attribute(_ label: String) -> String { "detail.inspector.attribute.\(label)" }
-        static func removeTag(_ label: String) -> String { "detail.inspector.removeTag.\(label)" }
+        static func attribute(_ label: String) -> String {
+            "detail.inspector.attribute.\(label)"
+        }
+
+        static func removeTag(_ label: String) -> String {
+            "detail.inspector.removeTag.\(label)"
+        }
     }
 
     /// ── Reader content ────────────────────────────────────────────────────────

@@ -3,10 +3,11 @@
 import Foundation
 
 extension AppState {
-    func selectReading(id: String, extending: Bool) {
+    func selectReading(id: String, extending: Bool, toggling: Bool = false) {
         boardSelection.select(
             id,
             extending: extending,
+            toggling: toggling,
             in: readings.map(\.id)
         )
     }

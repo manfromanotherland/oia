@@ -18,6 +18,7 @@ struct OiaLibraryView: View {
     @State private var gallerySnapshot = GallerySnapshot<ReadingRow>()
     @State private var tagInputFocusRequest: TagInputFocusRequest?
     @State private var tagInputFocusGeneration: UInt64 = 0
+    @State private var boardTagRequest: BoardTagRequest?
     @State private var isDropTargeted = false
     @State var cardTextMetrics = OiaCardTextMetrics()
     @State private var videoPlaybackPositions = VideoPlaybackPositionStore()
@@ -36,6 +37,13 @@ struct OiaLibraryView: View {
                 .navigationDestination(isPresented: detailPresented) {
                     overlay
                 }
+        }
+        .sheet(item: $boardTagRequest, onDismiss: { boardFocused = true }, content: { request in
+            BoardTagEditor(rows: request.rows, librarySession: request.librarySession)
+                .environment(appState)
+        })
+        .onChange(of: appState.libraryURL) { _, _ in
+            boardTagRequest = nil
         }
         .confirmationDialog(
             deleteDialogTitle,
@@ -59,7 +67,9 @@ struct OiaLibraryView: View {
         }
         .environment(\.assetContentGeneration, appState.libraryContentGeneration)
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { appState.scheduleVisualSearchReconciliation() }
+            if phase == .active {
+                appState.scheduleVisualSearchReconciliation()
+            }
         }
         .focusedSceneValue(\.boardActions, focusedBoardActions)
         .quickLookPreview($quickLookURL)
@@ -209,6 +219,16 @@ extension OiaLibraryView {
             ToolbarItem(placement: .principal) {
                 boardFilterPicker
             }
+
+            ToolbarItem {
+                Button(action: requestEditSelectedTags) {
+                    Label("Add Tag…", systemImage: "tag")
+                }
+                .disabled(appState.selectedRows.isEmpty || appState.isDeleting)
+                .help("Add tags to selected cards (\(ShortcutCatalog.editTags.display))")
+                .accessibilityValue("\(appState.selectedRows.count) cards selected")
+                .accessibilityIdentifier(A11y.List.addTag)
+            }
         }
     }
 
@@ -312,7 +332,8 @@ extension OiaLibraryView {
                             onSelect: {
                                 select(
                                     row,
-                                    extending: boardModifierKeys.contains(.shift)
+                                    extending: boardModifierKeys.contains(.shift),
+                                    toggling: boardModifierKeys.contains(.command)
                                 )
                             },
                             onOpen: { open(row) },
@@ -343,6 +364,7 @@ extension OiaLibraryView {
                 .onKeyPress(
                     keys: [
                         ShortcutCatalog.copy.primary.key,
+                        ShortcutCatalog.selectAll.primary.key,
                         ShortcutCatalog.openWithReturn.key,
                         ShortcutCatalog.focusSearchWithSlash.key,
                         ShortcutCatalog.quickLook.primary.key
@@ -350,7 +372,7 @@ extension OiaLibraryView {
                     phases: [.down],
                     action: performBoardShortcut
                 )
-                .onModifierKeysChanged(mask: .shift) { _, modifiers in
+                .onModifierKeysChanged(mask: [.shift, .command]) { _, modifiers in
                     boardModifierKeys = modifiers
                 }
                 .simultaneousGesture(boardMagnifyGesture)
@@ -446,7 +468,7 @@ extension OiaLibraryView {
     func open(_ row: ReadingRow) {
         appState.selectReading(id: row.id, extending: false)
 
-        if row.isLink && row.lightweight {
+        if row.isLink, row.lightweight {
             if let url = row.sourceURL {
                 ReadingLink.open(url)
             }
@@ -462,10 +484,21 @@ extension OiaLibraryView {
     }
 
     func requestEditTags(_ row: ReadingRow) {
-        appState.selectReading(id: row.id, extending: false)
+        guard !appState.isDeleting, boardTagRequest == nil else { return }
         if presentedReading == nil {
-            gallerySnapshot = GallerySnapshot(appState.readings.filter { !($0.isLink && $0.lightweight) })
+            let rows: [ReadingRow]
+            if appState.selectedIDs.contains(row.id) {
+                rows = appState.selectedRows
+            } else {
+                appState.selectReading(id: row.id, extending: false)
+                rows = [row]
+            }
+            guard !rows.isEmpty, !appState.isDeleting else { return }
+            boardFocused = false
+            boardTagRequest = BoardTagRequest(rows: rows, librarySession: appState.librarySessionGeneration)
+            return
         }
+        appState.selectReading(id: row.id, extending: false)
         boardFocused = false
         updatePresentedRow(row)
         showsInspector = true
@@ -474,6 +507,11 @@ extension OiaLibraryView {
             readingID: row.id,
             generation: tagInputFocusGeneration
         )
+    }
+
+    func requestEditSelectedTags() {
+        guard let row = presentedReading ?? appState.selectedRows.first else { return }
+        requestEditTags(row)
     }
 
     func closeOverlay() {
@@ -531,18 +569,18 @@ private struct ReadingSidebarTitlebarAccessory: NSViewRepresentable {
     let showsInspector: Bool
     let onToggle: () -> Void
 
-    func makeNSView(context: Context) -> ReadingSidebarTitlebarAnchor {
+    func makeNSView(context _: Context) -> ReadingSidebarTitlebarAnchor {
         ReadingSidebarTitlebarAnchor()
     }
 
-    func updateNSView(_ view: ReadingSidebarTitlebarAnchor, context: Context) {
+    func updateNSView(_ view: ReadingSidebarTitlebarAnchor, context _: Context) {
         view.isPresented = isPresented
         view.showsInspector = showsInspector
         view.onToggle = onToggle
         view.sync()
     }
 
-    static func dismantleNSView(_ view: ReadingSidebarTitlebarAnchor, coordinator: ()) {
+    static func dismantleNSView(_ view: ReadingSidebarTitlebarAnchor, coordinator _: ()) {
         view.detach()
     }
 }
@@ -580,14 +618,15 @@ private final class ReadingSidebarTitlebarAnchor: NSView {
         controller.layoutAttribute = .left
         controller.view = hostingView
         window.addTitlebarAccessoryViewController(controller)
-        self.attachedWindow = window
+        attachedWindow = window
         self.controller = controller
         self.hostingView = hostingView
     }
 
     func detach() {
         if let attachedWindow, let controller,
-           let index = attachedWindow.titlebarAccessoryViewControllers.firstIndex(where: { $0 === controller }) {
+           let index = attachedWindow.titlebarAccessoryViewControllers.firstIndex(where: { $0 === controller })
+        {
             attachedWindow.removeTitlebarAccessoryViewController(at: index)
         }
         attachedWindow = nil

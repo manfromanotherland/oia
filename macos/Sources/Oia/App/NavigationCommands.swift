@@ -19,7 +19,7 @@ struct BoardActions {
     let canFocusSearch: Bool
     let canScrollToTop: Bool
     let openSelection: () -> Void
-    let editTags: (String) -> Void
+    let editTags: () -> Void
     let toggleQuickLook: () -> Void
     let focusSearch: () -> Void
     let scrollToTop: () -> Void

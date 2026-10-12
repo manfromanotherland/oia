@@ -20,7 +20,7 @@ struct OiaReadingActions: View {
 
         Button("Add Tag…") { onAddTag() }
             .keyboardShortcut(ShortcutCatalog.editTags)
-            .disabled(disablesSingleReadingActions || appState.isDeleting)
+            .disabled(appState.isDeleting)
 
         if let url = row.sourceURL {
             Button("Open Source") {
