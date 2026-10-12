@@ -27,6 +27,7 @@ mod page_capture;
 pub mod product;
 pub mod rating;
 pub mod reconcile;
+pub mod sanitation;
 pub mod scanner;
 mod search;
 pub mod selection;

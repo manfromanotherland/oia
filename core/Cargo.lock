@@ -1535,6 +1535,7 @@ dependencies = [
  "oia-core",
  "reqwest",
  "scraper",
+ "serde_json",
  "sha2",
  "tempfile",
  "url",
