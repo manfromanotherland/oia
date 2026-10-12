@@ -240,6 +240,7 @@ extension AppState {
     }
 
     private func publishReadings(_ rows: [ReadingRow], context: ReadingSnapshotContext) {
+        let rows = rowsWithPendingTagEdits(rows, context: context)
         let boardContext = context.boardContext
         if publishedBoardContext != boardContext {
             publishedBoardContext = boardContext
@@ -257,6 +258,22 @@ extension AppState {
             libraryContentGeneration &+= 1
         }
         TestHooks.recordStartupEvent("readings")
+    }
+
+    /// Replay pending edits over fetched rows before publication. A queued Tag
+    /// removal remains outside exact-tag filters during older refreshes; the
+    /// core still supplies the complete candidate set and all other predicates.
+    private func rowsWithPendingTagEdits(
+        _ rows: [ReadingRow], context: ReadingSnapshotContext
+    ) -> [ReadingRow] {
+        let session = librarySessionGeneration
+        guard pendingTagEdits.hasEdits(librarySession: session) else { return rows }
+        return rows.compactMap { row in
+            let updated = pendingTagEdits.apply(to: row, librarySession: session)
+            return rowMatchesOptimisticTagFilter(
+                updated, scope: context.scope, tagTerms: context.search.criteria.tagTerms
+            ) ? updated : nil
+        }
     }
 
     // ── Filter metadata ───────────────────────────────────────────────────

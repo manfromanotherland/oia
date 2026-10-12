@@ -994,6 +994,61 @@ mod tests {
     }
 
     #[test]
+    fn removing_one_tag_across_cards_preserves_other_tags_and_external_edits() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let ids: Vec<_> = (0..3).map(|_| new_id()).collect();
+        for (index, id) in ids.iter().enumerate() {
+            let mut metadata = meta(id, &format!("https://example.com/reading/{index}"));
+            metadata.tags = vec![format!("keep-{index}")];
+            if index == 0 {
+                metadata.tags.push("Demo".into());
+            }
+            write_reading(&lib, metadata, "An article about animation".into()).unwrap();
+        }
+        rebuild(&conn, &lib).unwrap();
+        for task in pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+        {
+            complete_text_tagging(&lib, &conn, &task, &["demo".into(), "motion".into()]).unwrap();
+        }
+
+        // The board snapshot can predate a sync writer's additional user Tag.
+        let mut changed =
+            parse_reading(&fs::read_to_string(lib.article_path(&ids[1])).unwrap()).unwrap();
+        changed.metadata.tags.push("external".into());
+        write_reading(&lib, changed.metadata, changed.body).unwrap();
+
+        let before: Vec<_> = ids[..2]
+            .iter()
+            .map(|id| parse_reading(&fs::read_to_string(lib.article_path(id)).unwrap()).unwrap())
+            .collect();
+        for id in &ids[..2] {
+            remove_tag(&lib, &conn, id, "DEMO").unwrap();
+        }
+
+        for (id, before) in ids[..2].iter().zip(before) {
+            let after = parse_reading(&fs::read_to_string(lib.article_path(id)).unwrap()).unwrap();
+            let expected_tags: Vec<_> = before
+                .metadata
+                .tags
+                .into_iter()
+                .filter(|tag| tag_key(tag) != "demo")
+                .collect();
+            assert_eq!(after.metadata.tags, expected_tags);
+            assert_eq!(after.metadata.machine_tags, before.metadata.machine_tags);
+            assert_eq!(after.metadata.excluded_machine_tags, vec!["demo"]);
+            assert_eq!(after.body, before.body);
+            let row = crate::list::get_reading(&conn, id).unwrap().unwrap().0;
+            assert!(!row.tags.iter().any(|tag| tag_key(tag) == "demo"));
+            assert_eq!(row.machine_tags, vec!["motion"]);
+        }
+        let untouched = crate::list::get_reading(&conn, &ids[2]).unwrap().unwrap().0;
+        assert!(untouched.tags.iter().any(|tag| tag_key(tag) == "demo"));
+    }
+
+    #[test]
     fn list_tags_counts_across_readings() {
         let (dir, conn) = setup();
         let lib = make_library(&dir);

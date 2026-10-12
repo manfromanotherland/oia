@@ -110,6 +110,11 @@ final class AppState {
     @ObservationIgnored var visualSearchTask: Task<Void, Never>?
     @ObservationIgnored var visualSearchRerunPending = false
     @ObservationIgnored var readingLoadGeneration: UInt64 = 0
+    /// One ordered tag-write queue shared by board dialogs and the Inspector.
+    /// Reserve writes synchronously so dismissing a dialog cannot let a later
+    /// editing session overtake the edits it already submitted.
+    @ObservationIgnored var tagPersistenceQueue = TagPersistenceQueue()
+    @ObservationIgnored var pendingTagEdits = PendingTagEdits()
 
     /// The active library scope. Always exactly one; `.all` is the unfiltered
     /// base. Persisted under a new key so legacy unread/read/archive selections

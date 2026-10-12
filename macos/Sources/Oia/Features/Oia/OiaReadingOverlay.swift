@@ -248,16 +248,16 @@ struct OiaReadingOverlay: View {
 
     private func updateTag(_ tag: String, applies: Bool) {
         let id = row.id
+        let session = appState.librarySessionGeneration
         row.applyTagEdit(tag, applies: applies)
+        let persistence = appState.enqueueTagEdit(tag, ids: [id], applies: applies)
         Task {
-            if applies {
-                await appState.addTag(id: id, tag: tag)
-            } else {
-                await appState.removeTag(id: id, tag: tag)
-            }
-            if row.id == id, let refreshed = await appState.reloadRow(id: id) {
-                row = refreshed
-            }
+            _ = await persistence.value
+            guard session == appState.librarySessionGeneration,
+                  let refreshed = await appState.reloadRow(id: id),
+                  session == appState.librarySessionGeneration,
+                  row.id == id else { return }
+            row = refreshed
         }
     }
 

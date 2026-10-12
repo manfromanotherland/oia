@@ -2,45 +2,49 @@
 
 import SwiftUI
 
+/// Captured before queueing so later UI navigation cannot retarget a Tag edit.
+private struct TagEditRequest {
+    let tag: String
+    let ids: [String]
+    let applies: Bool
+    let core: any CoreBridging
+    let librarySession: UInt64
+    let reservation: UInt64
+}
+
 // ── Mutations ────────────────────────────────────────────────────────────────
 // Tag edits land optimistically, then the core write + `refresh()` reconcile.
 // Deletion follows the same pattern; the refresh restores any failed rows.
 
 extension AppState {
-    /// Optimistically apply an edit so it shows on the next frame, before the
-    /// core write + `refresh()` land by swapping the row in the visible list (if
-    /// present). Removing a row that no longer matches the filter is the explicit
-    /// job of `advancePastFilteredRow`; re-ordering is left to the follow-up
-    /// `refresh()`. A failed write self-heals from the index.
-    private func applyOptimistic(_ old: ReadingRow, _ new: ReadingRow) {
-        if let index = readings.firstIndex(where: { $0.id == old.id }) {
-            readings[index] = new
-        }
-    }
-
-    /// Mirror of the core's board scope: does `row` still belong in the list the
-    /// user is currently looking at?
-    private func rowMatchesCurrentFilter(_ row: ReadingRow) -> Bool {
-        ComposedFilter.matches(row, scope: activeScope)
-    }
-
-    /// Pair with `applyOptimistic`: if the optimistic edit
-    /// pushed the row out of the current filter, slide it out and advance the
-    /// selection to an adjacent row in the *same* render tick — one motion, not
-    /// an in-place icon flip followed a beat later by the row jumping away. A
-    /// no-op when the row still matches. Free-text and visual predicates are
-    /// not mirrored in Swift, but a failed scope or exact-tag predicate is
-    /// sufficient to know the complete AND query can no longer match.
-    private func advancePastFilteredRow(id: String) {
-        guard let index = readings.firstIndex(where: { $0.id == id }) else { return }
-        let row = readings[index]
-        let matchesRequiredTags = activeSearchInput.criteria.tagTerms.allSatisfy { requiredTag in
+    /// Mirror only scope and exact Tag predicates for optimistic removals.
+    /// Free-text, visual predicates, and missing-row inclusion stay in the core.
+    func rowMatchesOptimisticTagFilter(
+        _ row: ReadingRow, scope: LibraryScope, tagTerms: [String]
+    ) -> Bool {
+        ComposedFilter.matches(row, scope: scope) && tagTerms.allSatisfy { requiredTag in
             row.tags.contains { ExactTagIdentity.matches($0, requiredTag) }
         }
-        guard !rowMatchesCurrentFilter(row) || !matchesRequiredTags else { return }
+    }
+
+    /// If optimistic edits pushed rows out of the current filter, slide them
+    /// out and advance selection to an adjacent row in the *same* render tick —
+    /// one motion, not
+    /// an in-place icon flip followed a beat later by the row jumping away. A
+    /// no-op when every row still matches. Free-text and visual predicates are
+    /// not mirrored in Swift, but a failed scope or exact-tag predicate is
+    /// sufficient to know the complete AND query can no longer match.
+    private func advancePastFilteredRows(ids: Set<String>) {
+        let requiredTags = activeSearchInput.criteria.tagTerms
+        let removedIDs = Set(readings.compactMap { row -> String? in
+            guard ids.contains(row.id) else { return nil }
+            return rowMatchesOptimisticTagFilter(row, scope: activeScope, tagTerms: requiredTags)
+                ? nil : row.id
+        })
+        guard !removedIDs.isEmpty else { return }
         withAnimation {
-            boardSelection.remove([id], from: readings.map(\.id))
-            readings.remove(at: index)
+            boardSelection.remove(removedIDs, from: readings.map(\.id))
+            readings.removeAll { removedIDs.contains($0.id) }
         }
     }
 
@@ -106,55 +110,101 @@ extension AppState {
     /// then reconcile once so failed writes return to file-backed truth.
     @discardableResult
     func addTag(_ tag: String, to ids: [String]) async -> Int {
-        guard let core, !ids.isEmpty else { return 0 }
+        await enqueueTagEdit(tag, ids: ids, applies: true).value
+    }
+
+    func removeTag(id: String, tag: String) async {
+        await removeTag(tag, from: [id])
+    }
+
+    /// Remove one Tag from the frozen targets, including machine Tags whose
+    /// exclusion is persisted by the core. The whole visible batch changes
+    /// before any write; a single refresh reconciles successes and failures.
+    @discardableResult
+    func removeTag(_ tag: String, from ids: [String]) async -> Int {
+        await enqueueTagEdit(tag, ids: ids, applies: false).value
+    }
+
+    /// Reserve a Tag edit in the shared persistence order at the UI action.
+    /// Apply its presentation and freeze the core, library session, and target
+    /// IDs before returning; persistence survives the submitting view's lifetime.
+    @discardableResult
+    func enqueueTagEdit(_ tag: String, ids: [String], applies: Bool) -> Task<Int, Never> {
         let tag = tag.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !tag.isEmpty, TagRules.isWithinLength(tag) else { return 0 }
+        guard let core, !ids.isEmpty, !tag.isEmpty,
+              !applies || TagRules.isWithinLength(tag) else { return Task { 0 } }
         var seenIDs: Set<String> = []
         let requestedIDs = ids.filter { seenIDs.insert($0).inserted }
+        let request = TagEditRequest(
+            tag: tag,
+            ids: requestedIDs,
+            applies: applies,
+            core: core,
+            librarySession: librarySessionGeneration,
+            reservation: pendingTagEdits.reserve(
+                tag: tag, ids: seenIDs, applies: applies, librarySession: librarySessionGeneration
+            )
+        )
         beginLibraryWrite()
-        defer { endLibraryWrite() }
-        // A manually added name takes ownership of a matching machine tag.
-        for index in readings.indices where seenIDs.contains(readings[index].id) {
-            readings[index].applyTagEdit(tag, applies: true)
+        applyQueuedTagEdit(request, ids: seenIDs)
+        return tagPersistenceQueue.enqueue { [self] in
+            defer {
+                pendingTagEdits.complete(request.reservation)
+                endLibraryWrite()
+            }
+            return await persistTagEdit(request)
         }
+    }
 
+    private func applyQueuedTagEdit(_ request: TagEditRequest, ids: Set<String>) {
+        // Adding a matching machine name transfers ownership in presentation;
+        // the core persists ownership or removal exclusions in the local file.
+        for index in readings.indices where ids.contains(readings[index].id) {
+            readings[index].applyTagEdit(request.tag, applies: request.applies)
+        }
+        if !request.applies {
+            advancePastFilteredRows(ids: ids)
+        }
+    }
+
+    private func persistTagEdit(_ request: TagEditRequest) async -> Int {
+        guard request.librarySession == librarySessionGeneration else { return 0 }
         var successfulCount = 0
         var failures: [Error] = []
-        for id in requestedIDs {
+        for id in request.ids {
+            guard request.librarySession == librarySessionGeneration else { return successfulCount }
             do {
-                try await core.addTag(id: id, tag: tag)
+                if request.applies {
+                    try await request.core.addTag(id: id, tag: request.tag)
+                } else {
+                    try await request.core.removeTag(id: id, tag: request.tag)
+                }
                 successfulCount += 1
             } catch {
                 failures.append(error)
             }
         }
-
+        guard request.librarySession == librarySessionGeneration else { return successfulCount }
+        pendingTagEdits.complete(request.reservation)
         await refresh()
-        if let firstFailure = failures.first {
-            if requestedIDs.count == 1 {
-                error = firstFailure.localizedDescription
-            } else {
-                error = "Added “\(tag)” to \(successfulCount) of \(requestedIDs.count) cards. "
-                    + "Unable to tag \(failures.count); try again."
-            }
-        }
+        guard request.librarySession == librarySessionGeneration else { return successfulCount }
+        reportTagFailures(failures, request: request, successfulCount: successfulCount)
         return successfulCount
     }
 
-    func removeTag(id: String, tag: String) async {
-        guard let core else { return }
-        beginLibraryWrite()
-        defer { endLibraryWrite() }
-        if let old = readings.first(where: { $0.id == id }),
-           old.tags.contains(where: { ExactTagIdentity.matches($0, tag) })
-        {
-            var updated = old
-            updated.applyTagEdit(tag, applies: false)
-            applyOptimistic(old, updated)
-            advancePastFilteredRow(id: id)
+    private func reportTagFailures(
+        _ failures: [Error], request: TagEditRequest, successfulCount: Int
+    ) {
+        guard let firstFailure = failures.first else { return }
+        if request.ids.count == 1 {
+            error = firstFailure.localizedDescription
+        } else if request.applies {
+            error = "Added “\(request.tag)” to \(successfulCount) of \(request.ids.count) cards. "
+                + "Unable to tag \(failures.count); try again."
+        } else {
+            error = "Removed “\(request.tag)” from \(successfulCount) of \(request.ids.count) cards. "
+                + "Unable to remove it from \(failures.count); try again."
         }
-        try? await core.removeTag(id: id, tag: tag)
-        await refresh()
     }
 
     func getBody(id: String) async -> String? {
@@ -166,7 +216,18 @@ extension AppState {
     /// detail views can refresh their local copy without a full list reload.
     func reloadRow(id: String) async -> ReadingRow? {
         guard let core else { return nil }
-        guard let fetched = try? await core.getReadingRow(id: id) else { return nil }
-        return ReadingRow(fetched)
+        let session = librarySessionGeneration
+        while session == librarySessionGeneration {
+            let revision = pendingTagEdits.revision
+            let fetched = try? await core.getReadingRow(id: id)
+            guard session == librarySessionGeneration else { return nil }
+            // A newer edit may settle while this raw snapshot crosses actors.
+            // Re-read instead of replacing it with a now-obsolete snapshot or
+            // treating a valid target as unavailable after optimistic replay.
+            guard revision == pendingTagEdits.revision else { continue }
+            guard let fetched else { return nil }
+            return pendingTagEdits.apply(to: ReadingRow(fetched), librarySession: session)
+        }
+        return nil
     }
 }
