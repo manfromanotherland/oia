@@ -338,6 +338,19 @@ mod tests {
     }
 
     #[test]
+    fn owned_offer_identity_keeps_duplicate_product_graphs_out_of_articles() {
+        let url = "https://bo-ha.com/en-ie/products/ronja-hand-painted-ceramic-pendant-light?variant=50744649023620&ad_id=120249781090550484";
+        let html = r#"<meta property="og:type" content="website"><script type="application/ld+json">{"@type":"Product","name":"Ronja","url":"https://bo-ha.com/en-ie/en-ie/products/ronja-hand-painted-ceramic-pendant-light"}</script><script type="application/ld+json">{"@type":"Product","name":"Ronja","offers":{"@type":"Offer","url":"https://bo-ha.com/en-ie/products/ronja-hand-painted-ceramic-pendant-light?variant=50744649023620","price":149.95,"priceCurrency":"USD"}}</script>"#;
+        assert_eq!(
+            classify_page_capture(url, html, BODY, Some(&prose())),
+            PageCaptureKind::Link
+        );
+        let product = crate::parse_product_metadata(html, url).unwrap();
+        assert_eq!(product.price.as_deref(), Some("149.95"));
+        assert_eq!(product.currency.as_deref(), Some("USD"));
+    }
+
+    #[test]
     fn collection_context_keeps_long_item_descriptions_as_links() {
         for kind in [
             "CollectionPage",

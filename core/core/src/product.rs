@@ -229,6 +229,23 @@ pub(crate) fn choose_main_entity<'a>(
     page: &Url,
     accepts: impl Fn(&Value) -> bool,
 ) -> Option<&'a Value> {
+    choose_main_entity_with_score(
+        nodes,
+        ids,
+        page,
+        accepts,
+        |node| url_score(node, page),
+        |node| node.get("url").is_none(),
+    )
+}
+fn choose_main_entity_with_score<'a>(
+    nodes: &[(&'a Value, bool)],
+    ids: &HashMap<&str, &'a Value>,
+    page: &Url,
+    accepts: impl Fn(&Value) -> bool,
+    entity_score: impl Fn(&Value) -> u8,
+    is_unscoped: impl Fn(&Value) -> bool,
+) -> Option<&'a Value> {
     let explicit = nodes
         .iter()
         .filter(|(node, allowed)| {
@@ -277,13 +294,13 @@ pub(crate) fn choose_main_entity<'a>(
         .collect();
     let best = products
         .iter()
-        .map(|node| (url_score(node, page), *node))
+        .map(|node| (entity_score(node), *node))
         .filter(|(score, _)| *score > 0)
         .max_by_key(|(score, _)| *score);
     if let Some((best_score, best)) = best {
         let matching = products
             .iter()
-            .filter(|node| url_score(node, page) == best_score)
+            .filter(|node| entity_score(node) == best_score)
             .count();
         if matching == 1 {
             return Some(best);
@@ -305,15 +322,52 @@ pub(crate) fn choose_main_entity<'a>(
         })
         .copied()
         .collect();
-    (roots.len() == 1 && (roots[0].get("url").is_none() || url_score(roots[0], page) > 0))
-        .then(|| roots[0])
+    (roots.len() == 1 && (is_unscoped(roots[0]) || entity_score(roots[0]) > 0)).then(|| roots[0])
 }
 fn choose_product<'a>(
     nodes: &[(&'a Value, bool)],
     ids: &HashMap<&str, &'a Value>,
     page: &Url,
 ) -> Option<&'a Value> {
-    choose_main_entity(nodes, ids, page, is_product)
+    choose_main_entity_with_score(
+        nodes,
+        ids,
+        page,
+        is_product,
+        |product| product_url_score(product, ids, page),
+        |product| !product_declares_page_identity(product),
+    )
+}
+fn product_url_score(product: &Value, ids: &HashMap<&str, &Value>, page: &Url) -> u8 {
+    let own_score = url_score(product, page);
+    if own_score > 0 {
+        return own_score;
+    }
+    // A publisher may omit the Product's page identity while identifying its
+    // associated Offer. Use that ownership evidence without repairing a
+    // conflicting declared Product URL or borrowing an unrelated graph Offer.
+    if product_declares_page_identity(product) {
+        return 0;
+    }
+    product
+        .get("offers")
+        .into_iter()
+        .flat_map(array_values)
+        .map(|offer| url_score(resolved(offer, ids), page))
+        .max()
+        .unwrap_or(0)
+}
+fn product_declares_page_identity(product: &Value) -> bool {
+    ["url", "@id", "mainEntityOfPage"].iter().any(|key| {
+        product
+            .get(*key)
+            .and_then(|value| {
+                value
+                    .as_str()
+                    .or_else(|| value.get("@id").and_then(Value::as_str))
+            })
+            .is_some_and(|identity| !identity.starts_with('#'))
+    })
 }
 fn contains_descendant(parent: &Value, node: &Value) -> bool {
     match parent {
@@ -899,7 +953,6 @@ pub fn update_product_metadata_if_unchanged(
     let reading = crate::parse_reading(std::str::from_utf8(&bytes)?)?;
     if reading.metadata.id != id
         || reading.metadata.kind != ReadingKind::Article
-        || !reading.metadata.lightweight
         || reading.metadata.source_profile.is_some()
     {
         return Ok(false);
@@ -990,6 +1043,32 @@ mod tests {
     fn select_main_url_over_related_graph_product() {
         let p=parse(r#"[{"@type":"Product","url":"https://shop.example/related","offers":{"price":1,"priceCurrency":"EUR"}},{"@type":"Product","url":"https://shop.example/lamp","offers":{"price":20,"priceCurrency":"EUR"}}]"#).unwrap();
         assert_eq!(p.price.as_deref(), Some("20"));
+    }
+    #[test]
+    fn matching_owned_offer_identifies_an_unscoped_product_among_peer_roots() {
+        for data in [
+            r#"[{"@type":"Product","url":"/en-ie/en-ie/lamp","offers":{"price":1,"priceCurrency":"USD"}},{"@type":"Product","offers":{"url":"/lamp","price":149.95,"priceCurrency":"USD"}}]"#,
+            r##"{"@graph":[{"@type":"Product","url":"/another-lamp"},{"@type":"Product","@id":"#lamp","offers":{"@id":"#offer"}},{"@id":"#offer","@type":"Offer","url":"/lamp","price":149.95,"priceCurrency":"USD"}]}"##,
+        ] {
+            let product =
+                parse(data).expect("the uniquely owned matching Offer selects the product");
+            assert_eq!(product.price.as_deref(), Some("149.95"));
+            assert_eq!(product.currency.as_deref(), Some("USD"));
+        }
+    }
+    #[test]
+    fn owned_offer_urls_do_not_override_conflicts_or_context_guards() {
+        for data in [
+            r#"[{"@type":"Product","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}},{"@type":"Product","offers":{"url":"/lamp","price":20,"priceCurrency":"USD"}}]"#,
+            r#"{"@type":"Product","url":"/another-lamp","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}"#,
+            r#"{"@type":"Product","@id":"https://other.example/product","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}"#,
+            r#"{"@type":"Product","mainEntityOfPage":{"@id":"https://other.example/page"},"offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}"#,
+            r#"{"@type":"Article","mentions":{"@type":"Product","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}}"#,
+            r#"{"@type":"CollectionPage","itemListElement":[{"@type":"Product","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}]}"#,
+            r##"{"@graph":[{"@type":"WebPage","url":"https://other.example/page","mainEntity":{"@id":"#lamp"}},{"@type":"Product","@id":"#lamp","offers":{"url":"/lamp","price":10,"priceCurrency":"USD"}}]}"##,
+        ] {
+            assert!(parse(data).is_none(), "{data}");
+        }
     }
     #[test]
     fn variant_offer_url_and_ranges() {
@@ -1106,40 +1185,57 @@ mod tests {
     }
     #[test]
     fn migration_preserves_raw_body_unknown_fields_and_snapshot_guard() {
-        let dir = tempfile::TempDir::new().unwrap();
-        let library = LibraryRoot::new(dir.path()).unwrap();
-        let saved = crate::import_link(&library, "https://shop.example/lamp").unwrap();
-        let path = library.article_path(&saved.id);
-        let initial = fs::read_to_string(&path).unwrap();
-        let close = initial.find("\n---\n").unwrap();
-        let original=format!("{}\nunknown_future_key: 'Keep exactly this!'\n# preserved comment{}\nBody with trailing spaces  \n\n\n",&initial[..close],&initial[close..close+6]);
-        fs::write(&path, &original).unwrap();
-        let expected = crate::sha256_hex(original.as_bytes());
-        let product =
-            parse(r#"{"@type":"Product","offers":{"price":"140.00","priceCurrency":"EUR"}}"#)
-                .unwrap();
-        assert!(update_product_metadata_if_unchanged(
-            &library,
-            &saved.id,
-            product.clone(),
-            &expected
-        )
-        .unwrap());
-        let changed = fs::read_to_string(&path).unwrap();
-        assert!(changed.contains("unknown_future_key: 'Keep exactly this!'\n# preserved comment"));
-        assert_eq!(
-            original.split_once("\n---\n").unwrap().1,
-            changed.split_once("\n---\n").unwrap().1
-        );
-        let previous = crate::parse_reading(&original).unwrap();
-        let parsed = crate::parse_reading(&changed).unwrap();
-        let mut metadata = previous.metadata;
-        metadata.product = Some(product.clone());
-        assert_eq!(metadata, parsed.metadata);
-        assert!(
-            !update_product_metadata_if_unchanged(&library, &saved.id, product, &expected).unwrap()
-        );
-        assert_eq!(fs::read_to_string(path).unwrap(), changed);
+        for lightweight in [true, false] {
+            let dir = tempfile::TempDir::new().unwrap();
+            let library = LibraryRoot::new(dir.path()).unwrap();
+            let saved = crate::import_link(&library, "https://shop.example/lamp").unwrap();
+            let path = library.article_path(&saved.id);
+            let initial = fs::read_to_string(&path).unwrap();
+            let initial = if lightweight {
+                initial
+            } else {
+                initial.replace("lightweight: true\n", "")
+            };
+            let close = initial.find("\n---\n").unwrap();
+            let original=format!("{}\nunknown_future_key: 'Keep exactly this!'\n# preserved comment{}\nBody with trailing spaces  \n\n\n",&initial[..close],&initial[close..close+6]);
+            fs::write(&path, &original).unwrap();
+            assert_eq!(
+                crate::parse_reading(&original)
+                    .unwrap()
+                    .metadata
+                    .lightweight,
+                lightweight
+            );
+            let expected = crate::sha256_hex(original.as_bytes());
+            let product =
+                parse(r#"{"@type":"Product","offers":{"price":"140.00","priceCurrency":"EUR"}}"#)
+                    .unwrap();
+            assert!(update_product_metadata_if_unchanged(
+                &library,
+                &saved.id,
+                product.clone(),
+                &expected
+            )
+            .unwrap());
+            let changed = fs::read_to_string(&path).unwrap();
+            assert!(
+                changed.contains("unknown_future_key: 'Keep exactly this!'\n# preserved comment")
+            );
+            assert_eq!(
+                original.split_once("\n---\n").unwrap().1,
+                changed.split_once("\n---\n").unwrap().1
+            );
+            let previous = crate::parse_reading(&original).unwrap();
+            let parsed = crate::parse_reading(&changed).unwrap();
+            let mut metadata = previous.metadata;
+            metadata.product = Some(product.clone());
+            assert_eq!(metadata, parsed.metadata);
+            assert!(
+                !update_product_metadata_if_unchanged(&library, &saved.id, product, &expected)
+                    .unwrap()
+            );
+            assert_eq!(fs::read_to_string(path).unwrap(), changed);
+        }
     }
     #[test]
     fn product_roundtrip_index_ffi_and_full_capture_stays_link() {

@@ -199,6 +199,81 @@ mod tests {
     }
 
     #[test]
+    fn automatic_product_resave_enriches_an_existing_full_article_without_replacing_it() {
+        let directory = tempfile::tempdir().unwrap();
+        let library_path = directory.path().join("library");
+        std::fs::create_dir(&library_path).unwrap();
+        let library = LibraryRoot::new(library_path).unwrap();
+        let url = "https://example.com/ronja-product";
+        let original_response =
+            handle_in_library_with_source_resolver(request(url), &library, |_, _| Ok(None))
+                .unwrap();
+        let id = original_response.id.as_ref().unwrap();
+        let index = oia_core::open_index(&directory.path().join("index.db")).unwrap();
+        oia_core::set_favorite(&library, &index, id, true).unwrap();
+        oia_core::add_tag(&library, &index, id, "Keep tag").unwrap();
+        let original = read(&library, &original_response);
+        assert!(!original.metadata.lightweight);
+        assert!(original.metadata.product.is_none());
+
+        let product_capture = |url: &str| {
+            let mut capture = request(url);
+            capture.metadata.title = "Replacement product title".into();
+            capture.markdown = "Replacement body must never be saved.".into();
+            capture.metadata.product_html = Some(format!(
+                r#"<script type="application/ld+json">{{"@type":"Product","url":"{url}","name":"Ronja","offers":{{"@type":"Offer","price":"135","priceCurrency":"EUR"}}}}</script>"#,
+            ));
+            capture
+        };
+
+        // Control proves the exact evidence is recognized by this save route.
+        let control = handle_in_library_with_source_resolver(
+            product_capture("https://example.com/fresh-product"),
+            &library,
+            |_, _| Ok(None),
+        )
+        .unwrap();
+        assert!(read(&library, &control).metadata.product.is_some());
+
+        let upgraded =
+            handle_in_library_with_source_resolver(product_capture(url), &library, |_, _| Ok(None))
+                .unwrap();
+        assert!(upgraded.ok, "recognized product re-save: {upgraded:?}");
+        assert_eq!(upgraded.id.as_ref(), Some(id));
+        let after = read(&library, &original_response);
+        let product = after.metadata.product.as_ref().unwrap();
+        assert_eq!(product.price.as_deref(), Some("135"));
+        assert_eq!(product.currency.as_deref(), Some("EUR"));
+        let mut expected_metadata = original.metadata;
+        expected_metadata.product = after.metadata.product.clone();
+        assert_eq!(after.metadata, expected_metadata);
+        assert_eq!(after.body, original.body);
+
+        oia_core::rebuild(&index, &library).unwrap();
+        let links = oia_core::list_readings(
+            &index,
+            &oia_core::ListOptions {
+                view: oia_core::View::Links,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let row = links.iter().find(|row| &row.id == id).unwrap();
+        assert!(row.is_link);
+        assert!(!row.lightweight);
+        assert!(row.product_json.is_some());
+        let articles = oia_core::list_readings(
+            &index,
+            &oia_core::ListOptions {
+                view: oia_core::View::Articles,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert!(!articles.iter().any(|row| &row.id == id));
+    }
+
+    #[test]
     fn source_retrieval_has_priority_and_live_content_remains_the_fallback() {
         let directory = tempfile::tempdir().unwrap();
         let library = LibraryRoot::new(directory.path()).unwrap();

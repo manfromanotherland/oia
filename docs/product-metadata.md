@@ -9,6 +9,8 @@ not create a Tag or a fifth reading kind.
 1. Prefer the page's Schema.org `Product` or `ProductGroup` JSON-LD and its associated `Offer`.
    Resolve graph references, select the product belonging to the current page, and reject ambiguous
    collections or incidental products inside an article/review.
+   When a Product has no page identity, a uniquely matching URL in its associated Offer can identify
+   it. An Offer does not override a conflicting identity declared by the Product.
 2. Fall back to scoped Schema.org microdata/RDFa, then explicit product Open Graph metadata.
    A currency symbol, a number in visible text, or `/products/` in the URL is insufficient evidence.
 3. Record the offered price as a decimal string with its currency code. A minimum price from an
@@ -30,6 +32,11 @@ image and no source footer. Products without previews use a neutral surface and 
 color. Currency formatting belongs to the native presentation layer.
 
 ## Existing library
+
+Re-saving a recognized product can enrich an existing full article as well as a lightweight link.
+The update preserves the original body, assets, title, save date, Tags, and user state; a fingerprint
+check under the reading lock prevents stale captures from overwriting an external edit. The product
+metadata moves the card into Links without discarding the earlier capture.
 
 The importer has a separate product enrichment mode that scans existing lightweight article links,
 including those already enriched with previews. It leaves unrecognised/unreachable links alone and

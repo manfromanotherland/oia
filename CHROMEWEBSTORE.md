@@ -1,6 +1,6 @@
 # Chrome Web Store listing — Save to Óia
 
-Last updated: 2026-10-11
+Last updated: 2026-10-12
 
 Status: local submission draft. No store submission, dashboard update, public privacy-policy
 hosting, or publisher identity has been verified by this document.
@@ -115,6 +115,7 @@ submission.
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
 | 0.1.0 | 2026-10-11 | Automatic Save, explicit screenshot capture, selected-media and text saves; separate Chromium and Firefox packages; local privacy disclosures. | Local draft; not submitted |
+| 0.1.0 | 2026-10-12 | Fixed automatic product recognition and reclassification of previously saved articles. | Local draft update; not submitted |
 
 This records the current local manifest version, not a verified published version. Confirm the
 existing listing's version and bump `extension/manifest.json` if required before uploading.
