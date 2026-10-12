@@ -193,7 +193,9 @@ is true for a link saved without a cleaned article body, from either the app or 
   exact filters, and counts is Unicode full default case folding after surrounding whitespace is trimmed.
   Canonically equivalent spellings with different Unicode byte sequences are not folded together.
 - `machine_tags` is optional and additive within format version 1. Each source record owns its
-  `source`, `source_fingerprint`, `analyzer_version`, and normalized lowercase `tags`. Text and
+  `source`, `source_fingerprint`, `analyzer_version`, and normalized lowercase `tags`. Generated
+  multiword labels retain spaces; whitespace and underscores collapse to one space, and supplied
+  compound hyphens remain intact. Text and
   image analysis replace only their own source record, so results may arrive independently. The
   text fingerprint hashes the current title, excerpt, and full Markdown body; the image
   fingerprint hashes the local preview bytes. Inference from stale source content is ignored by

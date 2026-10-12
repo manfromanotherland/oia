@@ -141,14 +141,14 @@ fn normalize_machine_tags(tags: &[String], limit: usize) -> Vec<String> {
             if character.is_whitespace() || character == '_' {
                 separator = !value.is_empty();
             } else {
-                if separator && !value.ends_with('-') {
-                    value.push('-');
+                if separator {
+                    value.push(' ');
                 }
                 value.push(character);
                 separator = false;
             }
         }
-        let value = value.trim_matches('-').to_string();
+        let value = value.trim_matches([' ', '-']).to_string();
         if !value.is_empty() && value.chars().count() <= MAX_TAG_LEN && seen.insert(tag_key(&value))
         {
             normalized.push(value);
@@ -1434,6 +1434,52 @@ mod tests {
         assert_eq!(first_row.machine_tags, vec!["furniture"]);
         let second_row = rows.iter().find(|row| row.id == second).unwrap();
         assert_eq!(second_row.machine_tags, vec!["chair", "furniture"]);
+    }
+
+    #[test]
+    fn generated_tag_phrases_keep_spaces_and_compound_hyphens() {
+        let (dir, conn) = setup();
+        let lib = make_library(&dir);
+        let id = new_id();
+        let mut metadata = meta(&id, "https://example.com/design");
+        metadata.tags = vec!["Interior design".into()];
+        write_reading(&lib, metadata, "A room and clothing collection".into()).unwrap();
+        rebuild(&conn, &lib).unwrap();
+        let task = pending_text_tagging(&conn, &lib, "text-v1", 64, None)
+            .unwrap()
+            .tasks
+            .remove(0);
+        complete_text_tagging(
+            &lib,
+            &conn,
+            &task,
+            &[
+                "Interior  design".into(),
+                "interior_design".into(),
+                "T-shirt".into(),
+                "well-being".into(),
+            ],
+        )
+        .unwrap();
+        let saved = parse_reading(&fs::read_to_string(lib.article_path(&id)).unwrap()).unwrap();
+        assert_eq!(
+            saved.metadata.machine_tags[0].tags,
+            vec!["interior design", "t-shirt", "well-being"]
+        );
+        let rows = crate::list::list_readings(
+            &conn,
+            &crate::list::ListOptions {
+                tag: Some("interior design".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(
+            rows[0].tags,
+            vec!["Interior design", "t-shirt", "well-being"]
+        );
+        assert_eq!(rows[0].machine_tags, vec!["t-shirt", "well-being"]);
     }
 
     #[test]
