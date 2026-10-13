@@ -139,17 +139,10 @@ enum AppKitInline {
         return NSFont(descriptor: descriptor, size: theme.bodySize) ?? font
     }
 
-    /// Use an explicit Palatino face for Serif. Other choices retain their system
-    /// designs and symbolic traits so nested emphasis composes.
+    /// Resolve the platform face used by Biblioteca and preserve inline traits.
     static func makeFont(size: CGFloat, weight: Font.Weight, design: Font.Design,
                          bold: Bool, italic: Bool) -> NSFont
     {
-        if case .serif = design,
-           let serif = NSFont(name: ReaderFont.serifFaceName(weight: weight, bold: bold, italic: italic),
-                              size: size)
-        {
-            return serif
-        }
         let fallback = NSFont.systemFont(ofSize: size, weight: weight.nsWeight)
         var descriptor = fallback.fontDescriptor
         if let designed = descriptor.withDesign(design.systemDesign) {

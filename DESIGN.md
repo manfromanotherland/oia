@@ -294,9 +294,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 ## Apple platform style guide — the reader
 
 > This section is **exclusive to the Apple (macOS) client** and is the source of truth for how a
-> saved article is rendered in the reader. The visual reference is iA Writer's Classic Serif
-> preview: a quiet serif page, compact headings and lists, generous paragraph rhythm, and almost
-> no decorative chrome. Native selection, adjustable typography, and semantic Light/Dark colors
+> saved article is rendered in the reader. The visual reference is NetNewsWire’s Biblioteca
+> theme: system serif prose and title, sans-serif section headings, compact paragraph rhythm,
+> and subtle quote rules. Native selection, adjustable typography, and semantic Light/Dark colors
 > preserve the macOS reading experience.
 >
 > It is implemented natively with SwiftUI + [`swift-markdown`](https://github.com/apple/swift-markdown)
@@ -316,21 +316,21 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 
 ### Reader typography
 
-**Serif** is the default reading face, using macOS Palatino to approach iA Writer Classic Serif's
-lighter print texture. The reader still offers
-**System** and **Monospace** in Settings › Typography. These are per-device preferences, as are the
-size, width, and line-height choices; they do not alter the saved article file.
+**Serif** is the default reading face, using the platform serif (`ui-serif` in Biblioteca).
+Section headings H2–H6 use the system sans-serif. **System** and **Monospace** body choices
+remain available in Settings › Typography. All preferences are per-device and do not alter files.
+See [the theme reference](docs/reader-typography.md).
 
 | Size option | Body point size |
 |-------------|-----------------|
-| Small | 15 pt |
-| **Medium (default)** | **17 pt** |
-| Large | 19 pt |
-| Extra Large | 21 pt |
-| Huge | 23 pt |
-| Giant | 25 pt |
+| Small | 16 pt |
+| **Medium (default)** | **18 pt** |
+| Large | 20 pt |
+| Extra Large | 22 pt |
+| Huge | 24 pt |
+| Giant | 26 pt |
 
-The centered article title and body use the same measure. Increasing text size does not silently
+The left-aligned article title and body use the same measure. Increasing text size does not silently
 widen the column.
 
 | Width | Measure |
@@ -341,8 +341,7 @@ widen the column.
 | Large | 800 pt |
 | Extra Large | 960 pt |
 
-Normal line height is **1.5×** the body size. Top-level blocks have **1.5em** of separation, giving
-paragraphs a generous vertical pause. List items remain closely grouped, and headings sit closer
+Normal line height is **1.6×** the body size. Paragraphs have **1em** of separation. List items remain closely grouped, and headings sit closer
 to the paragraph they introduce than to the preceding text. The selectable text run and the
 SwiftUI blocks use the same spacing tokens so an image or code block does not change the rhythm.
 
@@ -353,36 +352,36 @@ changing the font size. Width also has five stops, with Medium as the default.
 | Line height | Effective |
 |-------------|-----------|
 | Tight | 1.20× |
-| Snug | 1.35× |
-| **Normal (default)** | **1.50×** |
+| Snug | 1.475× |
+| **Normal (default)** | **1.60×** |
 | Relaxed | 1.75× |
 | Loose | 2.00× |
 
 ### Heading hierarchy
 
-The hierarchy is intentionally restrained. Headings use the chosen reader face and weight, not a
-display typeface or uppercase eyebrow. Their added space goes mainly above them, keeping each
-heading connected to the text that follows.
+Biblioteca uses a bold serif title/H1 and bold sans-serif H2–H6, all with 1.2 line height.
+Headings have 1.5em above and 0.25em below, relative to their own size. A following paragraph
+has no added top gap, so the heading remains connected to its content. Tags are not shown
+under the article title.
 
-| Level | Approximate scale | Treatment |
-|-------|-------------------|-----------|
-| Article title | `1.5em` | bold in the chosen reader face, prominent above the body |
-| H1 in body | `1.25em` | bold; retained for older or manually written files |
-| H2 | `1.12em` | bold, major section |
-| H3 | `1em` | bold |
-| H4–H5 | `1em` | semibold italic |
-| H6 | `1em` | bold run-in heading when a paragraph follows; preserve its written case |
+| Level | Scale | Treatment |
+|-------|-------|-----------|
+| Article title / H1 | `2em` | bold system serif, left aligned |
+| H2 | `1.5em` | bold system sans-serif |
+| H3 | `1.17em` | bold system sans-serif |
+| H4 | `1em` | bold system sans-serif |
+| H5 | `0.83em` | bold system sans-serif |
+| H6 | `0.67em` | bold system sans-serif, separate block |
 
 The article title comes from frontmatter and is the reading's primary heading. Browser captures
 demote a body `#` to `##` so the same title does not appear twice. Older or manually written files
-may still contain body H1s; they retain heading styling when parsed. An H6 inside an image-bearing
-quote or list stays on its own line in the SwiftUI fallback renderer.
+may still contain body H1s; they retain heading styling when parsed. H6 remains a separate block in both renderers.
 
 ### Lists
 
 | Aspect | Spec |
 |--------|------|
-| Gap between items | `0.18em`, clearly less than the `1.5em` gap between paragraphs |
+| Gap between items | `0.5em`, less than the `1em` gap between paragraphs |
 | Marker → text gap | `0.4em`, with wrapped lines aligned to the item text |
 | Marker column | hanging indent; `1.5em` ordered / `1.1em` unordered, with ordered numbers aligned neatly |
 | Unordered bullets | the same quiet, neutral bullet at each depth; indentation shows nesting |
@@ -393,11 +392,9 @@ quote or list stays on its own line in the SwiftUI fallback renderer.
 
 ### Block quotes
 
-- Set quoted prose in *italics* at the body scale with a **2.1em** left indent. It remains readable
-  in the normal text color and has **no vertical bar** or colored panel.
-- Keep the quote's inner paragraphs relatively close together; leave a paragraph-sized pause around
-  the whole quote.
-- Quotes may nest and may contain any block (paragraphs, lists, code, even other quotes).
+- Use the ordinary upright body face and size, with **15 pt** of left padding plus a
+  subtle **3 pt** rule. Quotes retain normal paragraph spacing and can nest.
+- Continuous native text selection remains available across paragraphs and text-only quotes.
 
 ### Code
 

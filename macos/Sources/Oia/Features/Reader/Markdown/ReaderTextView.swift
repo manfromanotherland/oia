@@ -3,6 +3,9 @@
 import AppKit
 
 extension NSAttributedString.Key {
+    /// Left position and thickness of a native article quote rule.
+    static let readerQuoteRule = NSAttributedString.Key("ReaderQuoteRule")
+
     /// Marks a range as a saved highlight. `ReaderLayoutManager` fills a tinted
     /// rounded rect behind it. A dedicated key (rather than `.backgroundColor`)
     /// keeps highlights from clobbering inline-code backgrounds.
@@ -211,7 +214,25 @@ final class ReaderLayoutManager: NSLayoutManager {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let textStorage else { return }
 
+        drawQuoteRules(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
         drawHighlights(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
+    }
+
+    /// Keep the quote rule inside the shared text run, preserving selection
+    /// across body paragraphs and quotes. Each line fragment joins the next.
+    private func drawQuoteRules(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint,
+                                textStorage: NSTextStorage)
+    {
+        let chars = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        NSColor.secondaryLabelColor.withAlphaComponent(0.4).setFill()
+        textStorage.enumerateAttribute(.readerQuoteRule, in: chars) { value, range, _ in
+            guard let metrics = value as? [CGFloat], metrics.count == 2 else { return }
+            let glyphs = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            self.enumerateLineFragments(forGlyphRange: glyphs) { rect, _, _, _, _ in
+                NSRect(x: origin.x + metrics[0], y: origin.y + rect.minY,
+                       width: metrics[1], height: rect.height).fill()
+            }
+        }
     }
 
     /// Fill a rounded tint behind every range carrying `.readerHighlight`. Drawn

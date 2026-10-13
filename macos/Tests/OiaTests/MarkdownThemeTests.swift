@@ -16,30 +16,35 @@ final class MarkdownThemeTests: XCTestCase {
 
     // ── Defaults ────────────────────────────────────────────────────────────
 
-    /// Medium / Normal use a 680 pt measure and 0.3em of added leading,
-    /// giving the body a line height of approximately 1.5.
+    /// Medium / Normal use a 680 pt measure and 0.4em of added leading,
+    /// giving the body a line height of approximately 1.6.
     func testDefaultMeasureAndLeading() {
         let theme = theme()
         XCTAssertEqual(theme.contentMaxWidth, 680)
-        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.3, accuracy: 0.001)
+        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.4, accuracy: 0.001)
     }
 
     func testDefaultFontIsSerif() {
         XCTAssertEqual(ReaderFont.defaultChoice, .serif)
     }
 
-    func testClassicArticleHierarchyKeepsHeadingsCloseToBodySize() {
+    func testBibliotecaUsesSerifBodyAndSansSectionHeadings() {
         let theme = theme()
-        XCTAssertEqual(theme.blockSpacing, theme.bodySize * 1.5, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSize(1), theme.bodySize * 1.25, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSize(2), theme.bodySize * 1.12, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSize(3), theme.bodySize, accuracy: 0.001)
-        XCTAssertTrue(theme.headingIsItalic(4))
-        XCTAssertTrue(theme.headingIsItalic(5))
-        XCTAssertTrue(theme.headingIsRunIn(6))
-        XCTAssertEqual(theme.quoteIndent, theme.bodySize * 2.1, accuracy: 0.001)
-        XCTAssertEqual(theme.bullet(depth: 0), theme.bullet(depth: 2))
-        XCTAssertLessThan(theme.listItemSpacing, theme.blockSpacing)
+        XCTAssertEqual(theme.bodySize, 18)
+        XCTAssertEqual(theme.design, .serif)
+        XCTAssertEqual(theme.headingReaderFont(1), .serif)
+        XCTAssertEqual(theme.headingReaderFont(2), .system)
+        XCTAssertEqual(theme.headingReaderFont(6), .system)
+        XCTAssertEqual(theme.headingSize(1), 36, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSize(2), 27, accuracy: 0.001)
+        XCTAssertEqual(theme.blockSpacing, 18, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSpaceAbove(2) + theme.blockSpacing, 40.5, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSpaceBelow(2), 6.75, accuracy: 0.001)
+        XCTAssertEqual(theme.quoteSize, theme.bodySize)
+        XCTAssertEqual(theme.quoteIndent, 18)
+        XCTAssertEqual(theme.quoteRuleWidth, 3)
+        XCTAssertFalse(theme.headingIsItalic(4))
+        XCTAssertFalse(theme.headingIsRunIn(6))
     }
 
     // ── Width ───────────────────────────────────────────────────────────────
@@ -105,8 +110,8 @@ final class MarkdownThemeTests: XCTestCase {
     /// rhythm; the last two provide more room for readers who prefer it.
     func testLineHeightStopMultiples() {
         let multiples = ReaderLineHeight.allCases.map(\.multiple)
-        let expected: [CGFloat] = [1.2, 1.35, 1.5, 1.75, 2.0]
-        zip(multiples, expected).forEach { actual, intended in
+        let expected: [CGFloat] = [1.2, 1.475, 1.6, 1.75, 2.0]
+        for (actual, intended) in zip(multiples, expected) {
             XCTAssertEqual(actual, intended, accuracy: 0.001)
         }
     }

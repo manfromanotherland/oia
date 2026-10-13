@@ -47,6 +47,10 @@ struct MarkdownBlockView: View {
                 }
             }
             .padding(.leading, theme.quoteIndent)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(.secondary.opacity(0.4)).frame(width: theme.quoteRuleWidth)
+            }
+            .padding(.top, theme.quoteSpaceAbove - theme.blockSpacing)
             .fixedSize(horizontal: false, vertical: true)
 
         case let list as UnorderedList:

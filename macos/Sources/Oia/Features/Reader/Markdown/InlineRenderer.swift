@@ -34,7 +34,7 @@ enum InlineRenderer {
         static func heading(_ level: Int, _ theme: MarkdownTheme) -> FontContext {
             FontContext(size: theme.headingSize(level),
                         weight: theme.headingWeight(level),
-                        font: theme.font,
+                        font: theme.headingReaderFont(level),
                         italic: theme.headingIsItalic(level))
         }
 

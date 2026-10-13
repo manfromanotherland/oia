@@ -19,14 +19,10 @@ enum ReaderFont: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Use the installed Palatino faces for Serif so SwiftUI and AppKit agree on
-    /// the actual typeface rather than resolving the generic serif differently.
+    /// Biblioteca uses the platform serif, sans-serif, and monospace faces.
     func swiftUIFont(size: CGFloat, weight: Font.Weight = .regular,
                      bold: Bool = false, italic: Bool = false) -> Font
     {
-        if self == .serif {
-            return .custom(Self.serifFaceName(weight: weight, bold: bold, italic: italic), size: size)
-        }
         var font = Font.system(size: size, design: design).weight(weight)
         if bold {
             font = font.bold()
@@ -78,7 +74,14 @@ enum ReaderFontSize: Int, CaseIterable, Identifiable {
 
     /// Base body point size for the native reader.
     var points: CGFloat {
-        CGFloat(rawValue)
+        switch self {
+        case .small: 16
+        case .medium: 18
+        case .large: 20
+        case .xlarge: 22
+        case .huge: 24
+        case .giant: 26
+        }
     }
 }
 
@@ -137,8 +140,8 @@ enum ReaderLineHeight: String, CaseIterable, Identifiable {
     var multiple: CGFloat {
         switch self {
         case .tight: 1.20
-        case .snug: 1.35
-        case .normal: 1.50
+        case .snug: 1.475
+        case .normal: 1.60
         case .relaxed: 1.75
         case .loose: 2.00
         }

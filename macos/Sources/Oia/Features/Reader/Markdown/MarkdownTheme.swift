@@ -2,14 +2,9 @@
 
 import SwiftUI
 
-/// Derives the native reader's type and spacing from the user's preferences.
-/// The default rhythm follows iA Writer's Classic preview: a serif text column,
-/// generous space between paragraphs, and a quiet heading hierarchy. The
-/// reader's font, size, width, and leading remain adjustable per device.
-///
-/// All values are expressed *relative to the body size* so the whole document
-/// rescales when the reader picks Small … Giant. See DESIGN.md →
-/// "Apple platform style guide" for the rationale behind each token.
+/// Native adaptation of NetNewsWire's Biblioteca theme: platform serif prose,
+/// sans-serif section headings, compact paragraph rhythm, and quiet quotes.
+/// The user's font, size, width, and leading preferences remain per-device.
 struct MarkdownTheme {
     let font: ReaderFont
     let fontSize: ReaderFontSize
@@ -42,10 +37,9 @@ struct MarkdownTheme {
         bodySize * lineHeight.extraLeadingMultiple
     }
 
-    /// The open paragraph rhythm in the Classic preview. Lists override this
-    /// with compact item spacing; headings add extra space above themselves.
+    /// Browser-default paragraph margins collapse to one body em.
     var blockSpacing: CGFloat {
-        bodySize * 1.5
+        bodySize
     }
 
     /// The reader's measure, from the reader's chosen width. The Medium default
@@ -55,7 +49,7 @@ struct MarkdownTheme {
     }
 
     var bodyFont: Font {
-        font.swiftUIFont(size: bodySize)
+        font.swiftUIFont(size: bodySize, weight: .regular)
     }
 
     var codeFont: Font {
@@ -63,59 +57,81 @@ struct MarkdownTheme {
     }
 
     // ── Headings ────────────────────────────────────────────────────────────
-    // A restrained hierarchy: titles and section headings change size only
-    // slightly. Lower levels distinguish themselves by weight and italic style.
+    // Biblioteca uses a bold serif H1 and bold sans-serif section headings.
 
     func headingSize(_ level: Int) -> CGFloat {
         switch level {
-        case 1: bodySize * 1.25
-        case 2: bodySize * 1.12
-        default: bodySize
+        case 1: bodySize * 2
+        case 2: bodySize * 1.5
+        case 3: bodySize * 1.17
+        case 4: bodySize
+        case 5: bodySize * 0.83
+        default: bodySize * 0.67
         }
     }
 
-    func headingWeight(_ level: Int) -> Font.Weight {
-        switch level {
-        case 1, 2, 3, 6: .bold
-        default: .semibold
-        }
+    func headingWeight(_: Int) -> Font.Weight {
+        .bold
     }
 
     func headingFont(_ level: Int) -> Font {
-        font.swiftUIFont(size: headingSize(level), weight: headingWeight(level),
-                         italic: headingIsItalic(level))
+        headingReaderFont(level).swiftUIFont(size: headingSize(level), weight: headingWeight(level),
+                                             italic: headingIsItalic(level))
     }
 
-    /// Classic keeps the natural spacing of the chosen text face.
-    func headingTracking(_ level: Int) -> CGFloat {
+    /// The reference uses natural letter spacing.
+    func headingTracking(_: Int) -> CGFloat {
         0
     }
 
-    func headingIsItalic(_ level: Int) -> Bool {
-        level == 4 || level == 5
+    func headingIsItalic(_: Int) -> Bool {
+        false
     }
 
-    /// H6 sits on the same line as the following paragraph when one exists.
-    func headingIsRunIn(_ level: Int) -> Bool {
-        level == 6
+    /// Every heading starts its own block.
+    func headingIsRunIn(_: Int) -> Bool {
+        false
     }
 
     /// Space *above* a heading. Larger for higher levels so major sections get a
     /// clear visual break; this is added on top of the inter-block `blockSpacing`.
     func headingSpaceAbove(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: bodySize * 1.0
-        case 2: bodySize * 0.9
-        case 3: bodySize * 0.7
-        default: bodySize * 0.45
-        }
+        max(headingSize(level) * 1.5 - blockSpacing, 0)
+    }
+
+    func headingReaderFont(_ level: Int) -> ReaderFont {
+        level == 1 ? .serif : .system
+    }
+
+    func headingLineHeight(_ level: Int) -> CGFloat {
+        headingSize(level) * 1.2
+    }
+
+    func headingSpaceBelow(_ level: Int) -> CGFloat {
+        headingSize(level) * 0.25
+    }
+
+    var quoteSize: CGFloat {
+        bodySize
+    }
+
+    var quoteLineHeight: CGFloat {
+        bodySize * lineHeight.multiple
+    }
+
+    var quoteRuleWidth: CGFloat {
+        3
+    }
+
+    var quoteSpaceAbove: CGFloat {
+        blockSpacing
     }
 
     // ── Lists ───────────────────────────────────────────────────────────────
 
     /// Gap between sibling list items (tighter than `blockSpacing`).
     var listItemSpacing: CGFloat {
-        bodySize * 0.18
+        bodySize * 0.5
     }
 
     /// Gap between the marker (bullet/number) and the item text.
@@ -129,20 +145,20 @@ struct MarkdownTheme {
         bodySize * (ordered ? 1.5 : 1.1)
     }
 
-    /// Classic uses the same quiet bullet at every nesting depth; indentation
+    /// Use the same quiet bullet at every nesting depth; indentation
     /// carries the hierarchy.
-    func bullet(depth: Int) -> String {
+    func bullet(depth _: Int) -> String {
         "•"
     }
 
     // ── Block quote ─────────────────────────────────────────────────────────
 
     var quoteIndent: CGFloat {
-        bodySize * 2.1
+        18
     }
 
     var quoteInnerSpacing: CGFloat {
-        blockSpacing * 0.6
+        blockSpacing
     }
 
     // ── Code ────────────────────────────────────────────────────────────────
@@ -180,7 +196,7 @@ struct MarkdownTheme {
     /// Give the article title more presence than headings within the body while
     /// keeping it tied to the chosen reader font and body size.
     var titleFont: Font {
-        font.swiftUIFont(size: bodySize * 1.5, weight: .bold)
+        ReaderFont.serif.swiftUIFont(size: headingSize(1), weight: .bold)
     }
 
     var titleTracking: CGFloat {

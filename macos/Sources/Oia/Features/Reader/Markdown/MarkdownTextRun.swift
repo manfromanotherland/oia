@@ -22,17 +22,23 @@ enum MarkdownTextRun {
     }
 
     /// Context threaded down the block tree: the current left indent (points),
-    /// list nesting depth (drives bullet glyphs), and inherited quote italics.
+    /// list nesting depth (drives bullet glyphs), and quote-rule placement.
     private struct Ctx {
         var indent: CGFloat = 0
         var listDepth: Int = 0
         var color: NSColor = .labelColor
         var italic = false
+        var quoted = false
     }
 
-    static func attributed(_ blocks: [Markup], theme: MarkdownTheme) -> NSAttributedString {
-        let paras = emitSequence(blocks, theme: theme, ctx: Ctx(),
+    static func attributed(_ blocks: [Markup], theme: MarkdownTheme,
+                           startsDocument: Bool = false) -> NSAttributedString
+    {
+        var paras = emitSequence(blocks, theme: theme, ctx: Ctx(),
                                  innerGap: theme.blockSpacing, topLevel: true)
+        if startsDocument, !paras.isEmpty {
+            paras[0].spacingBefore = 0
+        }
 
         let out = NSMutableAttributedString()
         for (index, para) in paras.enumerated() {
@@ -66,7 +72,7 @@ enum MarkdownTextRun {
         case let quote as BlockQuote:
             var qctx = ctx
             qctx.indent += theme.quoteIndent
-            qctx.italic = true
+            qctx.quoted = true
             return emitSequence(quote.blockChildren.map { $0 as Markup }, theme: theme,
                                 ctx: qctx, innerGap: theme.quoteInnerSpacing)
         default:
@@ -106,9 +112,18 @@ enum MarkdownTextRun {
             // The enclosing LazyVStack provides the first top-level block gap.
             // Subsequent siblings use their container's rhythm; top-level
             // headings retain their extra space above.
-            let lead = result.isEmpty ? 0 : innerGap
+            let previousHeading = index >= 2 ? blocks[index - 2] as? Heading : nil
+            let lead: CGFloat = if result.isEmpty {
+                0
+            } else if block is Paragraph, let previousHeading {
+                theme.headingSpaceBelow(previousHeading.level)
+            } else {
+                innerGap
+            }
             let headingExtra = topLevel ? (block as? Heading).map { theme.headingSpaceAbove($0.level) } ?? 0 : 0
-            paras[0].spacingBefore = lead + headingExtra
+            let quoteExtra = topLevel && block is BlockQuote
+                ? theme.quoteSpaceAbove - innerGap : 0
+            paras[0].spacingBefore = lead + headingExtra + quoteExtra
             result.append(contentsOf: paras)
         }
         return result
@@ -180,10 +195,16 @@ enum MarkdownTextRun {
 
     private static func textParagraph(_ paragraph: Markup, theme: MarkdownTheme, ctx: Ctx) -> Para {
         let content = NSMutableAttributedString(attributedString:
-            AppKitInline.attributed(paragraph, size: theme.bodySize, weight: .regular,
+            AppKitInline.attributed(paragraph, size: ctx.quoted ? theme.quoteSize : theme.bodySize,
+                                    weight: .regular,
                                     design: theme.design, color: ctx.color, italic: ctx.italic))
         let style = baseStyle(indent: ctx.indent)
-        style.lineSpacing = theme.lineSpacing
+        style.minimumLineHeight = ctx.quoted ? theme.quoteLineHeight : theme.bodySize * theme.lineHeight.multiple
+        style.maximumLineHeight = style.minimumLineHeight
+        if ctx.quoted {
+            content.addAttribute(.readerQuoteRule, value: [ctx.indent - theme.quoteIndent, theme.quoteRuleWidth],
+                                 range: NSRange(location: 0, length: content.length))
+        }
         return Para(content: content, style: style, spacingBefore: 0)
     }
 
@@ -191,7 +212,7 @@ enum MarkdownTextRun {
         let level = heading.level
         let content = NSMutableAttributedString(attributedString:
             AppKitInline.attributed(heading, size: theme.headingSize(level),
-                                    weight: theme.headingWeight(level), design: theme.design,
+                                    weight: theme.headingWeight(level), design: theme.headingReaderFont(level).design,
                                     color: ctx.color, italic: ctx.italic || theme.headingIsItalic(level)))
         let tracking = theme.headingTracking(level)
         if tracking != 0 {
@@ -199,6 +220,8 @@ enum MarkdownTextRun {
                                  range: NSRange(location: 0, length: content.length))
         }
         let style = baseStyle(indent: ctx.indent)
+        style.minimumLineHeight = theme.headingLineHeight(level)
+        style.maximumLineHeight = style.minimumLineHeight
         return Para(content: content, style: style, spacingBefore: 0)
     }
 

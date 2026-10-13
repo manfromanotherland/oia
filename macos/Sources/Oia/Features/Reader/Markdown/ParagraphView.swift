@@ -15,8 +15,7 @@ struct ParagraphView: View {
     let paragraph: Paragraph
     let theme: MarkdownTheme
     let assetBaseURL: URL?
-    /// Block quotes set this so each inline run receives an italic font trait;
-    /// a view-level `.italic()` cannot override the renderer's explicit fonts.
+    /// Biblioteca keeps quoted prose in the upright body face.
     var quoted = false
     /// Completed task items strike their text without affecting nested blocks.
     var struck = false
@@ -78,7 +77,7 @@ struct ParagraphView: View {
                     runID = IdentifiedMarkup.stableID(for: child, fallbackIndex: offset)
                 }
                 run.append(InlineRenderer.inline(child, theme: theme,
-                                                 italic: quoted, strike: struck))
+                                                 italic: false, strike: struck))
             }
         }
         flush()
