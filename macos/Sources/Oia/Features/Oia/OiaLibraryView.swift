@@ -55,11 +55,7 @@ struct OiaLibraryView: View {
                     )
                     .environment(appState)
                     .id(request.id)
-                    .transition(.asymmetric(
-                        insertion: accessibilityReduceMotion
-                            ? .opacity : .offset(y: 32).combined(with: .opacity),
-                        removal: .opacity
-                    ))
+                    .transition(.opacity)
                 }
             }
             .animation(.easeOut(duration: 0.2), value: boardTagRequest?.id)

@@ -198,8 +198,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   `⌘⇧T` remains available while editing text and can reopen the dialog after dismissal.
   The dialog retains its target cards while background refreshes run and remains open for
   additional names until the top-right close button, Escape, or a backdrop click. The padded
-  dialog appears over a dark backdrop, enters upward, and fades away on dismissal (Reduce Motion
-  uses a fade for entry too). With one card selected, it shows every user and
+  dialog has a subtle border, appears over a dark backdrop, and fades in and out without movement.
+  With one card selected, it shows every user and
   machine Tag. With several selected, it shows the names added during that dialog session.
   These Tags use the Inspector's same pills, hover removal control, label search, and machine
   ownership action. Removal from this dialog requires confirmation. Edits appear immediately;

@@ -72,6 +72,11 @@ struct BoardTagEditor: View {
         .padding(24)
         .frame(width: 352)
         .background(.background, in: RoundedRectangle(cornerRadius: 20))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20)
+                .strokeBorder(.primary.opacity(0.1), lineWidth: 1)
+                .allowsHitTesting(false)
+        }
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         .accessibilityIdentifier(A11y.BoardTags.editor)
         .defaultFocus($isFocused, true)
