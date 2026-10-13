@@ -11,7 +11,7 @@
 # Commands:
 #   status   git status -sb for the monorepo
 #   push     git push the current monorepo branch (sets upstream)
-#   pull     git pull --ff-only for the monorepo
+#   pull     git pull --rebase for the monorepo
 #   fetch    git fetch --all --prune for the monorepo
 #   fmt      auto-format every component
 #   lint     lint every component
@@ -138,7 +138,7 @@ run_git() {
   case "$phase" in
     status) git status -sb || rc=$? ;;
     push)   git push -u origin HEAD || rc=$? ;;
-    pull)   git pull --ff-only || rc=$? ;;
+    pull)   git pull --rebase || rc=$? ;;
     fetch)  git fetch --all --prune || rc=$? ;;
   esac
   [ "$rc" -ne 0 ] && { failed=" monorepo"; printf '%s\n' "${RED}  ✗ failed${RST}"; }

@@ -148,6 +148,9 @@ These are load-bearing. Most architectural questions resolve by appealing to one
 
 ## Git commit message standards
 
+**Keep history linear.** Always rebase local commits onto upstream (`git pull --rebase`).
+Never create merge commits when integrating changes in this project.
+
 **Commit as you go.** After each coherent change, run the relevant checks and commit the
 completed work without waiting for a separate request. Before handing back a task, commit all
 completed changes belonging to it unless the user explicitly asks to leave them uncommitted.

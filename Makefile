@@ -32,7 +32,7 @@ status: ## git status -sb for the monorepo
 push:   ## git push the current monorepo branch (sets upstream)
 	@$(RUN) push
 
-pull:   ## git pull --ff-only for the monorepo
+pull:   ## git pull --rebase for the monorepo
 	@$(RUN) pull
 
 fetch:  ## git fetch --all --prune for the monorepo
