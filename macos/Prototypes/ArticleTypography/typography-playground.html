@@ -73,7 +73,7 @@ main { min-width:0; padding:32px clamp(24px,5vw,80px) 100px; }
 .sample blockquote { padding-left:24px; border-left:3px solid var(--line); font-family:var(--quote-font); font-size:var(--quote-size); line-height:var(--quote-leading); }
 .sample blockquote p + p { margin-top:var(--paragraph-gap); }
 .sample blockquote footer { margin-top:12px; font:13px/1.5 system-ui,sans-serif; color:var(--muted); }
-.sample q { font-family:var(--quote-font); font-size:var(--quote-size); line-height:var(--quote-leading); }
+.sample q { font-family:inherit; font-size:inherit; line-height:inherit; font-style:italic; }
 .sample figure img { display:block; width:100%; height:auto; }
 .sample figcaption { margin-top:8px; color:var(--muted); font-size:13px; line-height:1.4; }
 .sample a { text-underline-offset:.15em; }
@@ -136,7 +136,7 @@ main { min-width:0; padding:32px clamp(24px,5vw,80px) 100px; }
 <p>A heading introduces the paragraph beneath it. It should read as part of the same thought, with enough distance from the previous section to make the transition clear.</p>
 <p>Longer text makes spacing easier to judge. As the lines accumulate, the relationship between the letterforms, the line length, and the leading becomes more apparent. A narrow face may need a different measure from a broad one. A generous line height can help a dense font breathe, but too much makes a paragraph fall apart into separate lines.</p>
 <blockquote><p>There is a kind of attention that only becomes possible when nothing is asking you to hurry.</p><footer>A sample quotation, written for this specimen</footer></blockquote>
-<p>An inline quotation sits within a sentence: she described the place as <q>a room with enough light to think</q>, then went back to her notebook. Its font can agree with the body or deliberately introduce a different voice.</p>
+<p>An inline quotation sits within a sentence: she described the place as <q>a room with enough light to think</q>, then went back to her notebook. It follows the body typography, with italics to distinguish the quoted words.</p>
 <h3>What a reading page has to hold</h3>
 <ul><li>An idea that fits in one line.</li><li>A longer observation that wraps onto another line, so the hanging indent and line spacing have a chance to show themselves.</li><li>A few related details:<ul><li>A small photograph.</li><li>A source worth returning to.</li><li>A fragment of a conversation.</li></ul></li></ul>
 <p>Lists should feel connected without becoming a wall of text. The marker belongs to the line; wrapped text should sit beneath the words.</p>
