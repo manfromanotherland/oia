@@ -72,8 +72,7 @@ enum A11y {
         static let editor = "boardTags.editor"
         static let input = "boardTags.input"
         static let inputError = "boardTags.inputError"
-        static let add = "boardTags.add"
-        static let done = "boardTags.done"
+        static let close = "boardTags.close"
 
         static func tag(_ tag: String) -> String {
             "boardTags.tag.\(tag)"

@@ -38,10 +38,32 @@ struct OiaLibraryView: View {
                     overlay
                 }
         }
-        .sheet(item: $boardTagRequest, onDismiss: { boardFocused = true }, content: { request in
-            BoardTagEditor(rows: request.rows, librarySession: request.librarySession)
-                .environment(appState)
-        })
+        .disabled(boardTagRequest != nil)
+        .allowsHitTesting(boardTagRequest == nil)
+        .accessibilityHidden(boardTagRequest != nil)
+        .overlay {
+            ZStack {
+                if let request = boardTagRequest {
+                    Color.black.opacity(0.6)
+                        .ignoresSafeArea()
+                        .onTapGesture(perform: closeTagEditor)
+                        .transition(.opacity)
+                    BoardTagEditor(
+                        rows: request.rows,
+                        librarySession: request.librarySession,
+                        onClose: closeTagEditor
+                    )
+                    .environment(appState)
+                    .id(request.id)
+                    .transition(.asymmetric(
+                        insertion: accessibilityReduceMotion
+                            ? .opacity : .offset(y: 32).combined(with: .opacity),
+                        removal: .opacity
+                    ))
+                }
+            }
+            .animation(.easeOut(duration: 0.2), value: boardTagRequest?.id)
+        }
         .onChange(of: appState.libraryURL) { _, _ in
             boardTagRequest = nil
         }
@@ -71,7 +93,7 @@ struct OiaLibraryView: View {
                 appState.scheduleVisualSearchReconciliation()
             }
         }
-        .focusedSceneValue(\.boardActions, focusedBoardActions)
+        .focusedSceneValue(\.boardActions, boardTagRequest == nil ? focusedBoardActions : nil)
         .quickLookPreview($quickLookURL)
         .alert("Óia couldn’t complete that action", isPresented: errorAlertPresented) {
             Button("OK") { appState.error = nil }
@@ -473,6 +495,11 @@ extension OiaLibraryView {
         updatePresentedRow(row)
     }
 
+    private func closeTagEditor() {
+        boardTagRequest = nil
+        boardFocused = true
+    }
+
     func requestEditTags(_ row: ReadingRow) {
         guard !appState.isDeleting, boardTagRequest == nil else { return }
         if presentedReading == nil {
@@ -485,6 +512,7 @@ extension OiaLibraryView {
             }
             guard !rows.isEmpty, !appState.isDeleting else { return }
             boardFocused = false
+            searchFocused = false
             boardTagRequest = BoardTagRequest(rows: rows, librarySession: appState.librarySessionGeneration)
             return
         }

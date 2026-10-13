@@ -5,15 +5,16 @@ import SwiftUI
 /// Edits a frozen board selection using the Inspector's tag controls.
 struct BoardTagEditor: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.dismiss) private var dismiss
+    let onClose: () -> Void
     @State private var editing: BoardTagEditingSession
     @State private var query = ""
     @State private var tagPendingRemoval: BoardTagEditorState.Tag?
     @State private var showsTagRemovalConfirmation = false
     @FocusState private var isFocused: Bool
 
-    init(rows: [ReadingRow], librarySession: UInt64) {
-        // A new sheet request owns its target snapshots for its whole lifetime.
+    init(rows: [ReadingRow], librarySession: UInt64, onClose: @escaping () -> Void) {
+        self.onClose = onClose
+        // A new dialog request owns its target snapshots for its whole lifetime.
         _editing = State(initialValue: BoardTagEditingSession(rows: rows, librarySession: librarySession))
     }
 
@@ -25,10 +26,23 @@ struct BoardTagEditor: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Add tags")
-                .font(.headline)
-                .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Add tags")
+                    .font(.headline)
+                    .accessibilityAddTraits(.isHeader)
+                Spacer()
+                Button(action: onClose) {
+                    Label("Close", systemImage: "xmark")
+                        .labelStyle(.iconOnly)
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .keyboardShortcut(.cancelAction)
+                .accessibilityIdentifier(A11y.BoardTags.close)
+            }
 
             TagNameInput(
                 query: $query,
@@ -37,8 +51,10 @@ struct BoardTagEditor: View {
                 isFocused: $isFocused,
                 accessibilityIdentifier: A11y.BoardTags.input,
                 errorAccessibilityIdentifier: A11y.BoardTags.inputError,
+                floatsSuggestions: true,
                 onSubmit: addTag
             )
+            .zIndex(1)
 
             if !editing.state.tags.isEmpty {
                 ScrollView {
@@ -52,21 +68,13 @@ struct BoardTagEditor: View {
                 .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: 240)
             }
-
-            HStack {
-                Button("Add Tag", action: addTag)
-                    .disabled(!canAdd)
-                    .accessibilityIdentifier(A11y.BoardTags.add)
-                Spacer()
-                Button("Done") { dismiss() }
-                    .keyboardShortcut(.cancelAction)
-                    .accessibilityIdentifier(A11y.BoardTags.done)
-            }
         }
-        .padding(16)
-        .frame(width: 320)
+        .padding(24)
+        .frame(width: 352)
+        .background(.background, in: RoundedRectangle(cornerRadius: 20))
+        .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         .accessibilityIdentifier(A11y.BoardTags.editor)
-        .onExitCommand { dismiss() }
+        .onExitCommand { onClose() }
         .task {
             editing.updateRows(appState.readings, librarySession: appState.librarySessionGeneration)
             isFocused = true
@@ -138,6 +146,6 @@ struct BoardTagEditor: View {
         if !searchChanged {
             appState.searchDidChange()
         }
-        dismiss()
+        onClose()
     }
 }

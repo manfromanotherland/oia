@@ -2,8 +2,8 @@
 
 import Observation
 
-/// Owns the serial persistence queue independently of the sheet's lifetime, so
-/// Done can dismiss immediately without abandoning already-requested edits.
+/// Owns the serial persistence queue independently of the dialog's lifetime, so
+/// closing can dismiss immediately without abandoning already-requested edits.
 @MainActor
 @Observable
 final class BoardTagEditingSession {
