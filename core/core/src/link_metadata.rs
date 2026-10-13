@@ -48,6 +48,8 @@ pub struct DetectedLinkMetadata {
     pub title: Option<String>,
     pub image_url: Option<String>,
     pub isbn: Option<String>,
+    #[serde(default)]
+    pub author: Option<String>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -102,6 +104,13 @@ fn inspect_link_metadata(
     }) {
         return Err(());
     }
+    if !negative_page_context(&nodes)
+        && !text(og.get("og:type")).is_some_and(|kind| kind == "article")
+    {
+        if let Some(book) = crate::harvard_book::inspect(&document, &page)? {
+            return Ok(Some(book));
+        }
+    }
     let main = choose_main_entity(&nodes, &ids, &page, |node| {
         entity_category(node).is_some() || is_television(node)
     });
@@ -132,6 +141,7 @@ fn inspect_link_metadata(
                 .or_else(|| og_image_url(&og, &page))
                 .or_else(|| isbn_cover(category, isbn.as_deref())),
             isbn,
+            author: None,
         }));
     }
     // Unscoped competing TV/movie works are ambiguous. A selected Movie with
@@ -185,6 +195,7 @@ fn inspect_link_metadata(
         title: text(og.get("og:title")),
         image_url: og_image_url(&og, &page).or_else(|| isbn_cover(category, isbn.as_deref())),
         isbn,
+        author: None,
     }))
 }
 
@@ -568,6 +579,7 @@ fn parse_imdb_catalog(bytes: &[u8], title_id: &str) -> Option<DetectedLinkMetada
         title: Some(title.to_string()),
         image_url,
         isbn: None,
+        author: None,
     })
 }
 

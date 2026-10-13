@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MIT
 
+import { readFileSync } from "node:fs";
+
 import { describe, expect, it } from "vitest";
 
 import { captureProductHtml, MAX_PRODUCT_HTML_BYTES } from "./product-html.js";
@@ -12,6 +14,17 @@ function buildDoc(head: string, body = ""): Document {
 }
 
 describe("structured product evidence", () => {
+  it("preserves the Harvard main book facts without interpreting them", () => {
+    const html = readFileSync("../core/core/tests/fixtures/harvard-book.html", "utf8");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    const evidence = captureProductHtml(doc)!;
+    expect(evidence).toContain('data-purchase-isbn13="9780674627512"');
+    expect(evidence).toContain('data-purchase-title="Notes on the Synthesis of Form"');
+    expect(evidence).toContain("Christopher Alexander");
+    expect(evidence).toContain("Blair Kamin");
+    expect(evidence).not.toContain("link_category");
+  });
+
   it("preserves cultural OG metadata, artwork alternatives and names as raw facts", () => {
     const doc = buildDoc(`<meta property="og:type" content="book">
       <meta property="og:title" content="The book">

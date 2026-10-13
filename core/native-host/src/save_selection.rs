@@ -100,7 +100,10 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
                 .as_ref()
                 .and_then(|value| value.title.clone())
                 .unwrap_or(capture.metadata.title),
-            author: capture.metadata.author,
+            author: detected
+                .as_ref()
+                .and_then(|value| value.author.clone())
+                .or(capture.metadata.author),
             site: capture.metadata.site,
             saved_at: capture.metadata.saved_at,
             markdown: capture.markdown,

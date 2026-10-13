@@ -503,7 +503,7 @@ fn save_ordinary_url_with(
                 .and_then(|link| link.title.clone())
                 .or(request.title_hint)
                 .unwrap_or_else(|| request.url.clone()),
-            author: None,
+            author: detected.link.as_ref().and_then(|link| link.author.clone()),
             site: request.site_hint,
             saved_at: request.saved_at.unwrap_or_else(crate::time::now_utc_iso),
             images: artwork.into_iter().collect(),

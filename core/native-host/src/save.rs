@@ -121,7 +121,10 @@ pub(crate) fn persist_capture_in_library(
                     .as_ref()
                     .and_then(|value| value.title.clone())
                     .unwrap_or(req.metadata.title),
-                author: req.metadata.author,
+                author: detected
+                    .as_ref()
+                    .and_then(|value| value.author.clone())
+                    .or(req.metadata.author),
                 site: req.metadata.site,
                 saved_at: req.metadata.saved_at,
                 images,
@@ -147,7 +150,10 @@ pub(crate) fn persist_capture_in_library(
                     .as_ref()
                     .and_then(|value| value.title.clone())
                     .unwrap_or(req.metadata.title),
-                author: req.metadata.author,
+                author: detected
+                    .as_ref()
+                    .and_then(|value| value.author.clone())
+                    .or(req.metadata.author),
                 site: req.metadata.site,
                 saved_at: req.metadata.saved_at,
                 markdown: req.markdown,

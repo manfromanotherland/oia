@@ -552,6 +552,7 @@ mod tests {
                 title: Some("Untrusted replacement title".into()),
                 image_url: Some("https://example.com/cover.png".into()),
                 isbn: None,
+                author: None,
             }))
         }
         fn artwork(&self, url: &str) -> Result<ImageBytes> {
@@ -744,6 +745,7 @@ mod tests {
                 title: None,
                 image_url: None,
                 isbn: None,
+                author: None,
             }))
         }
         fn artwork(&self, _: &str) -> Result<ImageBytes> {

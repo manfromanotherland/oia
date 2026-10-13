@@ -10,6 +10,7 @@ mod color_search;
 mod delete;
 pub mod ffi;
 mod frontmatter;
+mod harvard_book;
 pub mod highlights;
 mod id;
 mod images;

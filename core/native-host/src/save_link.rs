@@ -104,7 +104,10 @@ fn handle_in_library_with_source_resolver(
                 .as_ref()
                 .and_then(|value| value.title.clone())
                 .unwrap_or(request.metadata.title),
-            author: request.metadata.author,
+            author: detected
+                .as_ref()
+                .and_then(|value| value.author.clone())
+                .or(request.metadata.author),
             site: request.metadata.site,
             saved_at: request.metadata.saved_at,
             images,

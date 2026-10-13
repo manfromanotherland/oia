@@ -24,6 +24,9 @@ const STRUCTURED_ATTRIBUTES = [
   "href",
   "src",
   "datetime",
+  "data-component",
+  "data-purchase-title",
+  "data-purchase-isbn13",
 ];
 
 /**
@@ -119,6 +122,22 @@ export function captureProductHtml(doc: Document): string | undefined {
   }
   if (!append(scopes)) return undefined;
 
+  // Raw provider evidence only: the core validates its host, route and identity.
+  // Keep text and author links inside the main product header, never the page body.
+  try {
+    const budget = { nodes: 0 };
+    for (const header of Array.from(
+      doc.querySelectorAll('[data-component="heros:hero-product"]'),
+    )) {
+      if (!append(cloneStructuredElement(header, budget, true)?.outerHTML ?? "")) {
+        return undefined;
+      }
+    }
+  } catch (error) {
+    if (error === STRUCTURED_DOM_LIMIT) return undefined;
+    throw error;
+  }
+
   return blocks.length ? blocks.join("\n") : undefined;
 }
 
@@ -136,7 +155,7 @@ function cloneStructuredElement(
   }
   const scoped = element.hasAttribute("itemscope") || element.hasAttribute("typeof");
   const annotated = element.matches(
-    "[itemscope], [itemtype], [itemprop], [itemid], [itemref], [typeof], [property], [resource], [about], [vocab], [prefix]",
+    "[itemscope], [itemtype], [itemprop], [itemid], [itemref], [typeof], [property], [resource], [about], [vocab], [prefix], [data-component], [data-purchase-isbn13]",
   );
   const captureText =
     !scoped && (parentText || element.hasAttribute("itemprop") || element.hasAttribute("property"));

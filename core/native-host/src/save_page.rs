@@ -131,6 +131,31 @@ mod tests {
     }
 
     #[test]
+    fn harvard_save_uses_main_book_author_and_category_instead_of_recommendations() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://www.hup.harvard.edu/books/9780674627512";
+        let mut capture = request(url);
+        capture.metadata.author = Some("Blair Kamin".into());
+        capture.metadata.product_html =
+            Some(include_str!("../../core/tests/fixtures/harvard-book.html").into());
+        let response =
+            handle_in_library_with_source_resolver(capture, &library, |_, _| Ok(None)).unwrap();
+        let reading = read(&library, &response);
+        assert!(reading.metadata.lightweight);
+        assert_eq!(reading.metadata.title, "Notes on the Synthesis of Form");
+        assert_eq!(
+            reading.metadata.author.as_deref(),
+            Some("Christopher Alexander")
+        );
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(
+            reading.body,
+            "[Open link](<https://hup.harvard.edu/books/9780674627512>)\n"
+        );
+    }
+
+    #[test]
     fn automatic_save_writes_prose_as_an_article_and_empty_or_weak_extraction_as_links() {
         let directory = tempfile::tempdir().unwrap();
         let library = LibraryRoot::new(directory.path()).unwrap();
