@@ -497,7 +497,11 @@ extension OiaLibraryView {
 
     private func closeTagEditor() {
         boardTagRequest = nil
-        boardFocused = true
+        // Let the board become enabled again before requesting keyboard focus.
+        DispatchQueue.main.async {
+            guard boardTagRequest == nil else { return }
+            boardFocused = true
+        }
     }
 
     func requestEditTags(_ row: ReadingRow) {

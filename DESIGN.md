@@ -192,8 +192,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - The card context menu's **Add Tag…** action and `⌘⇧T` open an **Add tags** dialog for the
   selected cards. The board toolbar has no tag control.
   Its inline field uses the same library Tag suggestions as the Inspector; clicking a suggestion
-  completes the field. Suggestions float below the field without changing the dialog’s size.
+  completes the field. The field receives initial keyboard focus. Suggestions float below the
+  field without changing the dialog’s size. The dialog fits its Tags; long Tag collections scroll.
   Return adds one user Tag to every target, preserving each card's existing Tags and avoiding duplicates.
+  `⌘⇧T` remains available while editing text and can reopen the dialog after dismissal.
   The dialog retains its target cards while background refreshes run and remains open for
   additional names until the top-right close button, Escape, or a backdrop click. The padded
   dialog appears over a dark backdrop, enters upward, and fades away on dismissal (Reduce Motion

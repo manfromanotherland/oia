@@ -32,7 +32,7 @@ struct BoardTagEditor: View {
                     .font(.headline)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button(action: onClose) {
+                Button(action: close) {
                     Label("Close", systemImage: "xmark")
                         .labelStyle(.iconOnly)
                         .frame(width: 24, height: 24)
@@ -57,16 +57,16 @@ struct BoardTagEditor: View {
             .zIndex(1)
 
             if !editing.state.tags.isEmpty {
-                ScrollView {
-                    FlowLayout(spacing: 6) {
-                        ForEach(editing.state.tags) { tag in
-                            tagPill(tag)
-                        }
+                ViewThatFits(in: .vertical) {
+                    tagPills
+                    ScrollView {
+                        tagPills
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .scrollBounceBehavior(.basedOnSize)
+                    .frame(height: 240)
                 }
-                .scrollBounceBehavior(.basedOnSize)
                 .frame(maxHeight: 240)
+                .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(24)
@@ -74,11 +74,15 @@ struct BoardTagEditor: View {
         .background(.background, in: RoundedRectangle(cornerRadius: 20))
         .shadow(color: .black.opacity(0.25), radius: 24, y: 8)
         .accessibilityIdentifier(A11y.BoardTags.editor)
-        .onExitCommand { onClose() }
+        .defaultFocus($isFocused, true)
+        .onExitCommand(perform: close)
         .task {
             editing.updateRows(appState.readings, librarySession: appState.librarySessionGeneration)
+            await Task.yield()
+            guard !Task.isCancelled else { return }
             isFocused = true
         }
+        .onDisappear { isFocused = false }
         .onChange(of: appState.readings) { _, rows in
             editing.updateRows(rows, librarySession: appState.librarySessionGeneration)
         }
@@ -95,6 +99,21 @@ struct BoardTagEditor: View {
         } message: { tag in
             Text("“\(tag.name)” will be removed from \(removalTargets) and won’t be added back automatically.")
         }
+    }
+
+    private var tagPills: some View {
+        FlowLayout(spacing: 6) {
+            ForEach(editing.state.tags) { tag in
+                tagPill(tag)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func close() {
+        isFocused = false
+        onClose()
     }
 
     private var removalTargets: String {
@@ -146,6 +165,6 @@ struct BoardTagEditor: View {
         if !searchChanged {
             appState.searchDidChange()
         }
-        onClose()
+        close()
     }
 }

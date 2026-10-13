@@ -38,7 +38,9 @@ struct ArticleCommands: Commands {
                     boardActions?.editTags()
                 }
                 .keyboardShortcut(ShortcutCatalog.editTags)
-                .disabled(boardActions == nil || appState.isDeleting || appState.isEditingText)
+                // Tag editing has no conflicting text-editing key equivalent;
+                // it must remain available while search or a tag field is focused.
+                .disabled(boardActions == nil || appState.isDeleting)
 
                 Button(appState.showHighlights ? "Hide Highlights" : "Show Highlights") {
                     appState.showHighlights.toggle()
