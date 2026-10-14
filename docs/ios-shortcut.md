@@ -111,6 +111,11 @@ without selected text. A carousel URL with `img_index=2` saves only slide 2. If
 Instagram omits the index, the first slide is selected. It never saves the whole
 carousel or substitutes a link/preview when retrieval fails.
 
+The browser extension uses this same downloader for Instagram page and link
+saves. It saves the selected media directly into the library and reports success
+only after the local asset is verified. Failed extension saves show an error;
+retry the save from the browser. Only Shortcut requests are queued in Inbox.
+
 Install the downloader once on each Mac that will handle these requests:
 
 ```sh

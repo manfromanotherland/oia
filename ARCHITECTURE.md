@@ -83,6 +83,10 @@ and [Shortcut setup](docs/ios-shortcut.md).
 Version-2 Inbox captures explicitly request one Instagram post/carousel item.
 The app opts into a Rust adapter that validates the URL/index and launches the
 bundled Instaloader transport script in a per-device Python environment.
+The extension's native host uses the same adapter for Instagram page and link
+saves, importing the selected image or video directly. The original post URL
+selects the carousel slide even when its canonical URL omits `img_index`.
+Retrieval failures never fall back to article text, previews, or lightweight links.
 URL saves may also retrieve recognized public sources and optional category
 metadata/artwork. Supplied media and non-URL text imports remain offline. The resulting private
 media file passes through the same byte validation, durable import and safe

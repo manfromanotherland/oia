@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 
 use anyhow::Result;
-use oia_core::{
-    save_link_capture, save_special_url, LibraryRoot, SaveError, SaveLinkInput, UrlSaveRequest,
-};
+use oia_core::{save_link_capture, LibraryRoot, SaveError, SaveLinkInput, UrlSaveRequest};
 
 use crate::{
     protocol::{SaveLinkRequest, SaveResponse, PROTOCOL_VERSION},
@@ -44,7 +42,7 @@ pub fn handle(request: SaveLinkRequest) -> Result<SaveResponse> {
     };
     let library = LibraryRoot::new(&library_path)?;
 
-    handle_in_library_with_source_resolver(request, &library, save_special_url)
+    handle_in_library_with_source_resolver(request, &library, crate::source_resolver::resolve)
 }
 
 fn handle_in_library_with_source_resolver(

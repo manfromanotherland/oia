@@ -796,25 +796,11 @@ fn import_capture(
             "This Instagram share needs the Mac downloader. Open it in an updated Óia app.",
         )?;
         let media = resolver(&request)?;
-        ensure!(
-            matches!(media.name.as_str(), "payload.jpg" | "payload.mp4"),
-            "Unexpected Instagram payload."
-        );
-        let origin = Origin {
-            url: Some(request.origin),
-            title: Some(format!(
-                "Instagram · {} · slide {}",
-                request.shortcode, request.slide
-            )),
-            ..Origin::default()
-        };
-        outcomes.push(import_payload(
+        outcomes.push(import_instagram_media(
             library,
-            &media.path(),
-            &media.name,
-            &origin,
+            &request,
+            &media,
             Some(&saved_at),
-            url_saver,
         )?);
         return Ok(());
     }
@@ -1035,6 +1021,34 @@ fn import_capture(
         )?);
     }
     Ok(())
+}
+
+pub(crate) fn import_instagram_media(
+    library: &LibraryRoot,
+    request: &crate::instagram::InstagramRequest,
+    media: &crate::instagram::DownloadedMedia,
+    saved_at: Option<&str>,
+) -> Result<SaveOutcome> {
+    ensure!(
+        matches!(media.name.as_str(), "payload.jpg" | "payload.mp4"),
+        "Unexpected Instagram payload."
+    );
+    let origin = Origin {
+        url: Some(request.origin.clone()),
+        title: Some(format!(
+            "Instagram · {} · slide {}",
+            request.shortcode, request.slide
+        )),
+        ..Origin::default()
+    };
+    import_payload(
+        library,
+        &media.path(),
+        &media.name,
+        &origin,
+        saved_at,
+        &|library, request| Ok(crate::save_url(library, request)?),
+    )
 }
 
 fn import_payload(

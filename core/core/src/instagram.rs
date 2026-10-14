@@ -81,13 +81,41 @@ impl DownloadedMedia {
 }
 pub type Resolver<'a> = dyn Fn(&InstagramRequest) -> Result<DownloadedMedia> + 'a;
 
+/// Recognize post routes before validating their selected slide. Invalid slide
+/// requests must fail rather than falling through to an ordinary link save.
+pub fn is_post_url(input: &str) -> bool {
+    url::Url::parse(input).is_ok_and(|url| {
+        matches!(url.host_str(), Some("instagram.com" | "www.instagram.com"))
+            && matches!(url.path().split('/').nth(1), Some("p" | "reel" | "reels"))
+    })
+}
+
+/// Explicit browser/Inbox transport; both callers use the same validated media
+/// import and content-derived identity. Never substitute article text or a link.
+pub fn save_with_resolver(
+    library: &crate::LibraryRoot,
+    request: &crate::UrlSaveRequest,
+    resolver: &Resolver<'_>,
+) -> Result<Option<crate::SaveOutcome>, crate::SaveUrlError> {
+    if !is_post_url(&request.url) {
+        return Ok(None);
+    }
+    let instagram = InstagramRequest::parse(&request.url)
+        .map_err(|error| crate::SaveError::InvalidRequest(error.to_string()))?;
+    let media =
+        resolver(&instagram).map_err(|error| crate::SaveUrlError::Retrieval(error.to_string()))?;
+    crate::inbox::import_instagram_media(library, &instagram, &media, request.saved_at.as_deref())
+        .map(Some)
+        .map_err(|error| crate::SaveUrlError::Retrieval(error.to_string()))
+}
+
 /// Paths come from the native app, never from a shared manifest.
 pub fn download(
     python: &Path,
     script: &Path,
     request: &InstagramRequest,
 ) -> Result<DownloadedMedia> {
-    ensure!(python.is_file() && script.is_file(), "Instagram downloader is not installed. Run scripts/install-instagram-downloader.sh on this Mac, then Check Inbox.");
+    ensure!(python.is_file() && script.is_file(), "Instagram downloader is not installed. Run scripts/install-instagram-downloader.sh on this Mac, then retry the save or use Check Inbox for queued shares.");
     let directory = tempfile::tempdir()?;
     let mut child = Command::new(python)
         .arg("-I")
@@ -113,11 +141,11 @@ pub fn download(
                 if let Err(error) = result {
                     return Err(error.into());
                 }
-                bail!("Instagram download timed out. The request remains in Inbox; try Check Inbox later.");
+                bail!("Instagram download timed out. Retry the save later, or use Check Inbox for queued shares.");
             }
         }
     };
-    ensure!(status.success(), "Instagram could not supply the selected media. It may require login, be unavailable, or have no such slide. The request remains in Inbox; try Check Inbox later.");
+    ensure!(status.success(), "Instagram could not supply the selected media. It may require login, be unavailable, or have no such slide. Retry the save later, or use Check Inbox for queued shares.");
     let entries = fs::read_dir(directory.path())?.collect::<std::io::Result<Vec<_>>>()?;
     ensure!(
         entries.len() == 1,

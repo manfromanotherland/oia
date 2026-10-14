@@ -8,6 +8,7 @@ mod save;
 mod save_link;
 mod save_page;
 mod save_selection;
+mod source_resolver;
 mod video_import;
 
 use std::io::{Read, Write};

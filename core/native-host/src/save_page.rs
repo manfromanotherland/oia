@@ -2,8 +2,8 @@
 
 use anyhow::Result;
 use oia_core::{
-    classify_page_capture, save_special_url, LibraryRoot, PageCaptureKind, ReadingKind, SaveError,
-    SaveOutcome, SaveUrlError, UrlSaveRequest,
+    classify_page_capture, LibraryRoot, PageCaptureKind, ReadingKind, SaveError, SaveOutcome,
+    SaveUrlError, UrlSaveRequest,
 };
 
 use crate::{
@@ -30,7 +30,7 @@ pub fn handle(request: SaveRequest) -> Result<SaveResponse> {
         }
     };
     let library = LibraryRoot::new(library_path)?;
-    handle_in_library_with_source_resolver(request, &library, save_special_url)
+    handle_in_library_with_source_resolver(request, &library, crate::source_resolver::resolve)
 }
 
 fn validate_request(request: &SaveRequest) -> Option<SaveResponse> {
@@ -82,7 +82,9 @@ fn handle_in_library_with_source_resolver(
         Ok(None) => false,
         Err(error @ SaveUrlError::Retrieval(_))
         | Err(error @ SaveUrlError::Save(SaveError::InvalidRequest(_))) => {
-            if request.markdown.trim().is_empty() {
+            if request.markdown.trim().is_empty()
+                || oia_core::instagram::is_post_url(&source_request.url)
+            {
                 return response_for_source_error(error);
             }
             // A recognized provider's failed retrieval must not discard usable
@@ -109,6 +111,107 @@ mod tests {
     use super::*;
     use oia_core::{parse_reading, PageCaptureEvidence};
     use serde_json::json;
+
+    #[test]
+    fn instagram_page_never_saves_article_text_when_media_is_unavailable() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let response = handle_in_library_with_source_resolver(
+            request("https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2"),
+            &library,
+            |_, _| Err(SaveUrlError::Retrieval("selected media unavailable".into())),
+        )
+        .unwrap();
+        assert_eq!(response.error.as_deref(), Some("source_unavailable"));
+        assert!(response.id.is_none());
+        assert_eq!(oia_core::scan_library(&library).unwrap().len(), 0);
+    }
+
+    #[test]
+    fn instagram_toolbar_save_persists_selected_media_and_deduplicates() {
+        use base64::Engine;
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let bytes = base64::engine::general_purpose::STANDARD.decode(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAaX2RUAAAAAASUVORK5CYII="
+        ).unwrap();
+        let resolver = |instagram: &oia_core::instagram::InstagramRequest| {
+            assert_eq!(instagram.slide, 2);
+            assert_eq!(
+                instagram.origin,
+                "https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2"
+            );
+            let directory = tempfile::tempdir()?;
+            let name = "payload.jpg".to_string();
+            std::fs::write(directory.path().join(&name), &bytes)?;
+            Ok(oia_core::instagram::DownloadedMedia { directory, name })
+        };
+        for duplicate in [false, true] {
+            let mut capture =
+                request("https://www.instagram.com/p/DdlVpikk5Gj/?img_index=2&stkn=tracking");
+            // A canonical URL may omit the selected slide. The original URL owns it.
+            capture.metadata.canonical_url = "https://www.instagram.com/p/DdlVpikk5Gj/".into();
+            let response =
+                handle_in_library_with_source_resolver(capture, &library, |library, request| {
+                    crate::source_resolver::resolve_with_instagram(library, request, &resolver)
+                })
+                .unwrap();
+            assert_eq!(response.error.as_deref(), duplicate.then_some("duplicate"));
+            if duplicate {
+                continue;
+            }
+            assert!(response.ok, "{response:?}");
+            let reading = read(&library, &response);
+            assert_eq!(reading.metadata.kind, ReadingKind::Image);
+            assert!(!reading.metadata.lightweight);
+            assert_eq!(
+                reading.metadata.url,
+                "https://instagram.com/p/DdlVpikk5Gj?img_index=2"
+            );
+            assert_eq!(reading.metadata.saved_at, "2026-10-11T12:00:00.000Z");
+            let media = reading.metadata.media_url.unwrap();
+            let asset = media.strip_prefix("cuttings-asset:").unwrap();
+            assert_eq!(
+                std::fs::read(
+                    library
+                        .reading_dir(response.id.as_ref().unwrap())
+                        .join(asset)
+                )
+                .unwrap(),
+                bytes
+            );
+            assert!(!reading.body.contains("Captured live body"));
+        }
+        assert_eq!(oia_core::scan_library(&library).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn instagram_toolbar_rejects_invalid_slide_and_incomplete_media() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        for url in [
+            "https://instagram.com/reel/abc/?img_index=0",
+            "https://instagram.com/reel/abc/",
+        ] {
+            let response = handle_in_library_with_source_resolver(
+                request(url),
+                &library,
+                |library, request| {
+                    crate::source_resolver::resolve_with_instagram(library, request, &|instagram| {
+                        assert_eq!(instagram.slide, 1);
+                        let directory = tempfile::tempdir()?;
+                        let name = "payload.mp4".to_string();
+                        std::fs::write(directory.path().join(&name), b"incomplete movie")?;
+                        Ok(oia_core::instagram::DownloadedMedia { directory, name })
+                    })
+                },
+            )
+            .unwrap();
+            assert!(!response.ok);
+            assert!(response.id.is_none());
+        }
+        assert_eq!(oia_core::scan_library(&library).unwrap().len(), 0);
+    }
 
     fn request(url: &str) -> SaveRequest {
         serde_json::from_value(json!({

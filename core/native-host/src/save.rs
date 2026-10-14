@@ -5,9 +5,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Result};
 use base64::Engine;
 use oia_core::{
-    save_capture, save_link_capture, save_special_url, ImageBytes, LibraryRoot, PageCaptureKind,
-    ReadingKind, SaveDisposition, SaveError, SaveInput, SaveLinkInput, SaveUrlError,
-    UrlSaveRequest,
+    save_capture, save_link_capture, ImageBytes, LibraryRoot, PageCaptureKind, ReadingKind,
+    SaveDisposition, SaveError, SaveInput, SaveLinkInput, SaveUrlError, UrlSaveRequest,
 };
 
 use crate::protocol::{SaveRequest, SaveResponse, PROTOCOL_VERSION};
@@ -43,7 +42,7 @@ pub fn handle(req: SaveRequest) -> Result<SaveResponse> {
     };
     let library = LibraryRoot::new(&library_path)?;
 
-    handle_in_library_with_source_resolver(req, &library, save_special_url)
+    handle_in_library_with_source_resolver(req, &library, crate::source_resolver::resolve)
 }
 
 fn handle_in_library_with_source_resolver(
@@ -76,8 +75,12 @@ fn handle_in_library_with_source_resolver(
         match resolve_source(library, &special_request) {
             Ok(Some(outcome)) => return Ok(response_for_outcome(outcome)),
             Ok(None) => {}
-            Err(SaveUrlError::Retrieval(_))
-            | Err(SaveUrlError::Save(SaveError::InvalidRequest(_))) => {}
+            Err(error @ SaveUrlError::Retrieval(_))
+            | Err(error @ SaveUrlError::Save(SaveError::InvalidRequest(_))) => {
+                if oia_core::instagram::is_post_url(&special_request.url) {
+                    return response_for_source_error(error);
+                }
+            }
             Err(error) => return response_for_source_error(error),
         }
     }
