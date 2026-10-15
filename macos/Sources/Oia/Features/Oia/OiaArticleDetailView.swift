@@ -3,11 +3,12 @@
 import SwiftUI
 
 /// Keeps the local reader mounted so switching to the source preserves its place.
-/// A web page is created only after the user chooses Original for this reading.
+/// The preferred view follows navigation; each original page is loaded on demand.
 struct OiaArticleDetailView: View {
     let row: ReadingRow
 
-    @State private var showsOriginal = false
+    @AppStorage("detailArticleShowsOriginal", store: AppDefaults.store)
+    private var prefersOriginal = false
     @State private var originalPage: OriginalArticlePage?
 
     var body: some View {
@@ -17,14 +18,14 @@ struct OiaArticleDetailView: View {
                 .allowsHitTesting(!showsOriginal)
                 .accessibilityHidden(showsOriginal)
 
-            if showsOriginal, let originalPage {
+            if showsOriginal, let originalPage, originalPage.url == originalURL {
                 OriginalArticleView(page: originalPage)
             }
         }
         .toolbar {
             if originalURL != nil {
                 ToolbarItem(placement: .primaryAction) {
-                    Picker("Article View", selection: viewSelection) {
+                    Picker("Article View", selection: $prefersOriginal) {
                         Text("Saved").tag(false)
                         Text("Original").tag(true)
                     }
@@ -36,10 +37,14 @@ struct OiaArticleDetailView: View {
             }
         }
         .onChange(of: row.id) { _, _ in
-            showsOriginal = false
             originalPage?.stopLoading()
             originalPage = nil
+            loadOriginalIfNeeded()
         }
+        .onChange(of: prefersOriginal) { _, _ in
+            loadOriginalIfNeeded()
+        }
+        .onAppear(perform: loadOriginalIfNeeded)
         .onDisappear {
             originalPage?.stopLoading()
         }
@@ -55,16 +60,13 @@ struct OiaArticleDetailView: View {
         }
     }
 
-    private var viewSelection: Binding<Bool> {
-        Binding(
-            get: { showsOriginal },
-            set: { selected in
-                if selected, originalPage == nil, let url = originalURL {
-                    originalPage = OriginalArticlePage(url: url)
-                }
-                showsOriginal = selected && originalPage != nil
-            }
-        )
+    private var showsOriginal: Bool {
+        prefersOriginal && originalURL != nil
+    }
+
+    private func loadOriginalIfNeeded() {
+        guard showsOriginal, originalPage == nil, let url = originalURL else { return }
+        originalPage = OriginalArticlePage(url: url)
     }
 
     private var originalURL: URL? {
