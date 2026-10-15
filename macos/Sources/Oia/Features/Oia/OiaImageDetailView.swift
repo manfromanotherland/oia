@@ -13,7 +13,9 @@ struct OiaImageDetailView: View {
 
     @State private var pixelSize: CGSize?
     @State private var metadataLoaded = false
-    @State private var imageScale = ImageScale.fit
+    @AppStorage("detailImageScale", store: AppDefaults.store)
+    private var preferredImageScale = ImageScale.automatic
+    @State private var scrollPosition = ScrollPosition()
 
     private static let imagePadding: CGFloat = 38
     private static let maximumDecodedPixels: CGFloat = 32_000_000
@@ -35,7 +37,7 @@ struct OiaImageDetailView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Picker("Image Size", selection: $imageScale) {
+                Picker("Image Size", selection: imageScaleSelection) {
                     Text("Fit").tag(ImageScale.fit)
                     Text("Original Size").tag(ImageScale.original)
                 }
@@ -59,12 +61,28 @@ struct OiaImageDetailView: View {
                 .padding(Self.imagePadding)
                 .frame(
                     minWidth: viewport.width, minHeight: viewport.height,
-                    alignment: imageScale == .original ? .top : .center
+                    alignment: size.height + 2 * Self.imagePadding > viewport.height ? .top : .center
                 )
         }
         .defaultScrollAnchor(.topLeading)
-        .id(imageScale)
+        .scrollPosition($scrollPosition)
+        .onChange(of: size) { _, _ in
+            scrollPosition.scrollTo(point: .zero)
+        }
         .accessibilityIdentifier(A11y.Detail.imageViewport)
+    }
+
+    private var imageScale: ImageScale {
+        guard preferredImageScale == .automatic else { return preferredImageScale }
+        guard let pixelSize else { return .fit }
+        return pixelSize.height > pixelSize.width * 2.5 ? .original : .fit
+    }
+
+    private var imageScaleSelection: Binding<ImageScale> {
+        Binding(
+            get: { imageScale },
+            set: { preferredImageScale = $0 }
+        )
     }
 
     private func framedImage(maxPixel: CGFloat) -> some View {
@@ -112,7 +130,6 @@ struct OiaImageDetailView: View {
     private func loadMetadata() async {
         pixelSize = nil
         metadataLoaded = false
-        imageScale = .fit
         guard let request = imageRequest else {
             metadataLoaded = true
             return
@@ -127,14 +144,12 @@ struct OiaImageDetailView: View {
             metadataTask.cancel()
         }
         guard !Task.isCancelled, imageRequest == request else { return }
-        if let loadedSize {
-            imageScale = loadedSize.height > loadedSize.width * 2.5 ? .original : .fit
-        }
         pixelSize = loadedSize
         metadataLoaded = true
     }
 
-    private enum ImageScale: Hashable {
+    private enum ImageScale: String {
+        case automatic
         case fit
         case original
     }
