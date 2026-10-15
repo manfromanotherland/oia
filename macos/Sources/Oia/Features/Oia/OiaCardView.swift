@@ -120,8 +120,8 @@ struct OiaCardView: View {
         LocalReadingImage(
             row: row, libraryURL: appState.libraryURL,
             fallbackAspectRatio: aspectRatio,
-            maxPixel: AssetPreviewLoadPlan.displayMaxPixel(
-                for: size, displayScale: displayScale
+            maxPixel: AssetPreviewLoadPlan.imageDisplayMaxPixel(
+                for: size, aspectRatio: aspectRatio, displayScale: displayScale
             ),
             contentMode: .fit,
             loadsProgressively: true,

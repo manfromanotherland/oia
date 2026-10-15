@@ -75,6 +75,7 @@ enum AssetPreviewQuality: Hashable {
 struct AssetPreviewLoadPlan: Equatable {
     static let lightweightMaxPixel: CGFloat = 160
     static let boardDisplayMaxPixel: CGFloat = 1024
+    private static let maximumBoardImagePixelCount: CGFloat = 32 * 1024 * 1024
     static let refinementDelay = Duration.milliseconds(120)
     private static let maximumDecodeMaxPixel = CGFloat(Int32.max)
     let initialMaxPixel: CGFloat?
@@ -114,6 +115,31 @@ struct AssetPreviewLoadPlan: Equatable {
         let scale = displayScale.isFinite && displayScale > 0 ? displayScale : 1
         let requested = min(boardDisplayMaxPixel, max(1, (dimension * scale).rounded(.up)))
         return [160, 320, 512, 768, 1024].first { $0 >= requested } ?? boardDisplayMaxPixel
+    }
+
+    /// A clipped screenshot still needs enough pixels across its full source
+    /// width. ImageIO's bound applies to the longest edge of that source, not
+    /// the smaller visible crop. Ordinary previews keep their existing tiers.
+    static func imageDisplayMaxPixel(
+        for size: CGSize, aspectRatio: CGFloat, displayScale: CGFloat
+    ) -> CGFloat {
+        let ordinaryMaxPixel = displayMaxPixel(for: size, displayScale: displayScale)
+        guard size.width.isFinite, size.width > 0,
+              aspectRatio.isFinite, aspectRatio > 0,
+              size.width / aspectRatio > size.height
+        else { return ordinaryMaxPixel }
+
+        let targetWidth = displayMaxPixel(
+            for: CGSize(width: size.width, height: 0), displayScale: displayScale
+        )
+        let requestedLongestEdge = (targetWidth / aspectRatio).rounded(.down)
+        // Reserve one short-edge pixel for ImageIO's integer rounding. Solving
+        // ratio * edge² + edge <= budget also bounds extremely narrow sources.
+        let areaLimitedLongestEdge = (
+            2 * maximumBoardImagePixelCount
+                / (1 + (1 + 4 * aspectRatio * maximumBoardImagePixelCount).squareRoot())
+        ).rounded(.down)
+        return max(1, min(requestedLongestEdge, areaLimitedLongestEdge))
     }
 }
 

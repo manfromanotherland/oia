@@ -86,6 +86,47 @@ final class AssetPreviewLoadPlanTests: XCTestCase {
         XCTAssertEqual(before, 768)
     }
 
+    func testUnclippedImagesKeepExistingDecodeTiers() {
+        for size in [
+            CGSize(width: 240, height: 360),
+            CGSize(width: 240, height: 240),
+            CGSize(width: 640, height: 320)
+        ] {
+            XCTAssertEqual(
+                AssetPreviewLoadPlan.imageDisplayMaxPixel(
+                    for: size,
+                    aspectRatio: size.width / size.height,
+                    displayScale: 2
+                ),
+                AssetPreviewLoadPlan.displayMaxPixel(for: size, displayScale: 2)
+            )
+        }
+    }
+
+    func testClippedImageDecodePreservesWidthWithinPixelBudget() {
+        let ratio: CGFloat = 0.01
+        let maxPixel = AssetPreviewLoadPlan.imageDisplayMaxPixel(
+            for: CGSize(width: 700, height: 1050), aspectRatio: ratio, displayScale: 2
+        )
+
+        XCTAssertGreaterThan(maxPixel, AssetPreviewLoadPlan.boardDisplayMaxPixel)
+        XCTAssertLessThanOrEqual(maxPixel * ratio, AssetPreviewLoadPlan.boardDisplayMaxPixel)
+        XCTAssertLessThanOrEqual(maxPixel * (maxPixel * ratio).rounded(.up), 32 * 1024 * 1024)
+        XCTAssertGreaterThan(maxPixel * ratio, 500)
+    }
+
+    func testClippedImageDecodeUsesStableWidthTierAcrossSmallResize() {
+        let before = AssetPreviewLoadPlan.imageDisplayMaxPixel(
+            for: CGSize(width: 240, height: 360), aspectRatio: 0.1, displayScale: 2
+        )
+        let after = AssetPreviewLoadPlan.imageDisplayMaxPixel(
+            for: CGSize(width: 241, height: 361.5), aspectRatio: 0.1, displayScale: 2
+        )
+
+        XCTAssertEqual(before, 5120)
+        XCTAssertEqual(after, before)
+    }
+
     @MainActor
     func testDecodedPreviewCacheKeepsRequestedPixelVariantsSeparate() throws {
         let cache = AssetPreviewImageCache(countLimit: 4, totalCostLimit: 10_000_000)

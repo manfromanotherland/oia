@@ -4,6 +4,57 @@ import AppKit
 import XCTest
 
 final class AssetImageLoaderTests: XCTestCase {
+    func testClippedScreenshotDecodeRetainsRenderedBackingWidth() throws {
+        let sourceWidth = 800
+        let sourceHeight = 8000
+        let context = try XCTUnwrap(CGContext(
+            data: nil,
+            width: sourceWidth,
+            height: sourceHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(NSColor.systemPink.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: sourceWidth, height: sourceHeight))
+        let sourceImage = try XCTUnwrap(context.makeImage())
+        let data = try XCTUnwrap(
+            NSBitmapImageRep(cgImage: sourceImage).representation(using: .png, properties: [:])
+        )
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("oia-tall-screenshot-\(UUID().uuidString).png")
+        try data.write(to: url, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let oldMaxPixel = AssetPreviewLoadPlan.displayMaxPixel(
+            for: CGSize(width: 240, height: 360), displayScale: 2
+        )
+        let oldPreview = try XCTUnwrap(
+            AssetImageLoader.downsampledImage(at: url, maxPixel: oldMaxPixel)?.image
+        )
+        XCTAssertLessThan(oldPreview.size.width, 480,
+                          "The previous crop-sized request cannot resolve the rendered backing width")
+
+        let maxPixel = AssetPreviewLoadPlan.imageDisplayMaxPixel(
+            for: CGSize(width: 240, height: 360),
+            aspectRatio: CGFloat(sourceWidth) / CGFloat(sourceHeight),
+            displayScale: 2
+        )
+        let image = try XCTUnwrap(
+            AssetImageLoader.downsampledImage(at: url, maxPixel: maxPixel)?.image
+        )
+        var proposedRect = NSRect(origin: .zero, size: image.size)
+        let downsampled = try XCTUnwrap(
+            image.cgImage(forProposedRect: &proposedRect, context: nil, hints: nil)
+        )
+
+        XCTAssertGreaterThanOrEqual(downsampled.width, 480)
+        XCTAssertLessThanOrEqual(downsampled.width, 1024)
+        XCTAssertEqual(downsampled.height, 5120)
+        XCTAssertLessThanOrEqual(downsampled.width * downsampled.height, 32 * 1024 * 1024)
+    }
+
     func testRasterAssetsDownsampleToRequestedPixelBounds() throws {
         let context = try XCTUnwrap(CGContext(
             data: nil,
