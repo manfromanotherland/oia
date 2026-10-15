@@ -139,7 +139,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   At a wide desktop window it should naturally reach four or five columns around 220–250 pt each.
 - **Image:** local captured asset, full bleed, preserving a convincing square/portrait/landscape
   mix. Board images and article previews taller than 2.5 times their width are top-aligned
-  and clipped to 1.5 times their width; shorter images remain complete. Detail shows the full
+  and clipped to 0.75 times their width; shorter images remain complete. Detail shows the full
   image. Redundant title chrome is hidden.
 - **Video:** captured poster image with a restrained play glyph. A durable media URL is secondary
   metadata; session-local streams fall back to the source page for playback.

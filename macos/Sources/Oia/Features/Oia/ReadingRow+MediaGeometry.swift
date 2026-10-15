@@ -5,7 +5,7 @@ import CoreGraphics
 extension ReadingRow {
     static let socialPreviewAspectRatio: CGFloat = 1200 / 630
     private static let boardImageClippingThreshold: CGFloat = 2.5
-    private static let clippedBoardImageHeightToWidth: CGFloat = 1.5
+    private static let clippedBoardImageHeightToWidth: CGFloat = 0.75
 
     /// The intrinsic ratio stays available to full-size detail presentation.
     /// Board image heights apply their own cap without changing this ratio.
