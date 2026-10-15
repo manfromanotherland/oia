@@ -132,6 +132,18 @@ struct OiaCardView: View {
         .frame(width: size.width, height: max(size.height, size.width / aspectRatio))
         .frame(width: size.width, height: size.height, alignment: .top)
         .clipped()
+        .overlay(alignment: .bottom) {
+            if size.width / aspectRatio > size.height {
+                LinearGradient(
+                    colors: [OiaTheme.boardSurface.opacity(0), OiaTheme.boardSurface],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: min(80, size.height / 3))
+                .allowsHitTesting(false)
+                .accessibilityHidden(true)
+            }
+        }
     }
 
     private func videoCard(in size: CGSize) -> some View {
