@@ -4,7 +4,8 @@ import CoreGraphics
 
 extension ReadingRow {
     static let socialPreviewAspectRatio: CGFloat = 1200 / 630
-    private static let maximumBoardImageHeightToWidth: CGFloat = 3
+    private static let boardImageClippingThreshold: CGFloat = 2.5
+    private static let clippedBoardImageHeightToWidth: CGFloat = 1.5
 
     /// The intrinsic ratio stays available to full-size detail presentation.
     /// Board image heights apply their own cap without changing this ratio.
@@ -55,7 +56,8 @@ extension ReadingRow {
     /// keep their full height. Both masonry placement and card rendering use it.
     private func boardImageHeight(for width: CGFloat, aspectRatio: CGFloat?) -> CGFloat? {
         guard let naturalHeight = height(for: width, aspectRatio: aspectRatio) else { return nil }
-        return min(naturalHeight, width * Self.maximumBoardImageHeightToWidth)
+        guard naturalHeight > width * Self.boardImageClippingThreshold else { return naturalHeight }
+        return width * Self.clippedBoardImageHeightToWidth
     }
 
     private func height(for width: CGFloat, aspectRatio: CGFloat?) -> CGFloat? {
