@@ -531,7 +531,12 @@ export function showToast(
         border-radius: 50%; animation: oia-spin 700ms linear infinite;
       }
       .text { min-width: 0; flex: 1; }
+      .headline {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 12px; min-width: 0;
+      }
       .title {
+        min-width: 0; flex: 1;
         overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         font-size: 13px; font-weight: 650; letter-spacing: -0.01em;
       }
@@ -560,6 +565,13 @@ export function showToast(
       }
       .cta:hover { opacity: 0.84; }
       .cta:disabled { cursor: wait; opacity: 0.6; }
+      .actions--inline { flex: 0 0 auto; margin: 0; }
+      .cta--link {
+        min-height: 24px; padding: 0; border-radius: 2px;
+        color: var(--muted); background: transparent;
+        font-weight: 500; white-space: nowrap;
+        text-decoration: underline; text-underline-offset: 2px;
+      }
       .countdown {
         height: 2px; margin-top: 8px; overflow: hidden;
         background: var(--line); border-radius: 1px;
@@ -581,6 +593,7 @@ export function showToast(
         .close, .detail { color: CanvasText; }
         .close:focus-visible, .cta:focus-visible { outline-color: Highlight; }
         .cta { color: HighlightText; background: Highlight; }
+        .cta--link { color: LinkText; background: transparent; }
         .countdown { background: Canvas; outline: 1px solid CanvasText; }
         .countdown::after { background: CanvasText; }
       }
@@ -598,7 +611,7 @@ export function showToast(
       }
       </div>
       <div class="text">
-        <div class="title"></div>
+        <div class="headline"><div class="title"></div></div>
         ${detail ? '<div class="detail"></div>' : ""}
       </div>
       <button class="close" type="button" aria-label="Dismiss Óia notification">
@@ -653,7 +666,13 @@ function renderCta(
   button.type = "button";
   button.textContent = cta.label;
   actions.appendChild(button);
-  root.querySelector(".text")!.appendChild(actions);
+  if (cta.command === "save-screenshot") {
+    actions.classList.add("actions--inline");
+    button.classList.add("cta--link");
+    root.querySelector(".headline")!.appendChild(actions);
+  } else {
+    root.querySelector(".text")!.appendChild(actions);
+  }
 
   if (cta.command === "open-install") {
     button.addEventListener("click", () => {

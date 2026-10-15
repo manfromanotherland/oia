@@ -911,7 +911,7 @@ async function savePageWithScreenshotOption(tab: chrome.tabs.Tab): Promise<void>
       {
         action: "save-choice",
         status: "loading",
-        title: "Saving page…",
+        title: "Saving…",
         cta: {
           label: "Screenshot instead",
           command: "save-screenshot",

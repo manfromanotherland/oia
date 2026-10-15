@@ -29,9 +29,9 @@ index is a disposable, per-device cache.
                                               SQLite + FTS5 (per-device, NOT synced)
 ```
 
-Clicking the extension toolbar shows **Saving page…** in the existing in-page toast with
-**Screenshot instead** and a three-second countdown bar. Nothing persists
-during the countdown. Its expiry saves the page; the screenshot action chooses a full-page image
+Clicking the extension toolbar shows a compact in-page toast with **Saving…** and a link-style
+**Screenshot instead** action to its right on the same row, above a three-second countdown bar.
+Nothing persists during the countdown. Its expiry saves the page; the screenshot action chooses a full-page image
 instead. Keyboard and context-menu page saves use the same countdown. Page saves supply cleaned content,
 live metadata, and raw prose measurements to Rust, which chooses a full article or lightweight
 link and applies recognized-source and product/book/music/movie classification. The screenshot action

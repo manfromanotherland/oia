@@ -11,8 +11,9 @@
 # Browser extension
 
 The Manifest V3 browser extension for **Óia**, the local-first native macOS library. Clicking its
-toolbar button shows the in-page toast with **Saving page…**, **Screenshot instead**, and a three-second countdown bar. Nothing is saved until the countdown ends;
-then the engine uses the page's content and source to keep it as a cleaned article or a lightweight
+toolbar button shows a compact in-page toast with **Saving…** and a link-style **Screenshot instead**
+action to its right on the same row, above a three-second countdown bar. Nothing is saved until
+the countdown ends; then the engine uses the page's content and source to keep it as a cleaned article or a lightweight
 link. Choosing the screenshot action saves one long screenshot of the full scrollable page instead.
 The context menu also saves right-clicked
 images/videos and selected-text quotes. Article and link saves
@@ -85,8 +86,9 @@ manual checks.
 After editing source, re-run `npm run package` and click the **reload ↻** icon on the extension
 card. Dia/Chrome keeps the same unpacked path and stable development extension ID.
 
-Click the Óia toolbar button to show **Saving page…** in the in-page toast. The three-second
-countdown gives you time to choose **Screenshot instead**. When it ends,
+Click the Óia toolbar button to show **Saving…** in the compact in-page toast. The link-style
+**Screenshot instead** action sits to its right on the same row. The three-second countdown
+gives you time to choose it. When it ends,
 Óia saves the page. Choosing the screenshot action saves the full scrollable page as one long
 image instead. Nothing is saved during the countdown. The keyboard shortcut and a page save
 from the context menu use the same countdown.

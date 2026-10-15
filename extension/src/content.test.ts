@@ -138,7 +138,7 @@ describe("showToast", () => {
       {
         action: "toast",
         status: "loading",
-        title: "Saving page…",
+        title: "Saving…",
         cta: {
           label: "Screenshot instead",
           command: "save-screenshot",
@@ -164,7 +164,7 @@ describe("showToast", () => {
           {
             action: "save-choice",
             status: "loading",
-            title: "Saving page…",
+            title: "Saving…",
             cta: {
               label: "Screenshot instead",
               command: "save-screenshot",
@@ -308,7 +308,7 @@ describe("showToast", () => {
       showToast({ action: "toast", status, title: "Earlier save update" });
       expect(onChoice).not.toHaveBeenCalled();
       expect(document.getElementById(HOST_ID)).toBe(host);
-      expect(host.shadowRoot!.querySelector(".title")!.textContent).toBe("Saving page…");
+      expect(host.shadowRoot!.querySelector(".title")!.textContent).toBe("Saving…");
       expect(host.shadowRoot!.querySelector(".actions")).not.toBeNull();
       vi.advanceTimersByTime(2000);
       expect(onChoice).toHaveBeenCalledExactlyOnceWith("page");

@@ -112,7 +112,7 @@ describe("toolbar save countdown", () => {
     const message = mock.sendMessage.mock.calls[0][1];
     expect(message).toMatchObject({
       action: "save-choice",
-      title: "Saving page…",
+      title: "Saving…",
       cta: { label: "Screenshot instead", command: "save-screenshot" },
     });
     const expiresAt = (message as unknown as { cta: { expiresAt: number } }).cta.expiresAt;
