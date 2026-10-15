@@ -103,6 +103,8 @@ enum A11y {
         static let videoUnavailable = "detail.videoUnavailable"
         static let imageSize = "detail.imageSize"
         static let imageViewport = "detail.imageViewport"
+        static let articleView = "detail.articleView"
+        static let originalArticle = "detail.originalArticle"
     }
 
     enum Inspector {

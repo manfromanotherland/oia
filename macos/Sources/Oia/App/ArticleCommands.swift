@@ -57,7 +57,7 @@ struct ArticleCommands: Commands {
                     appState.requestDeleteSelection()
                 }
                 .keyboardShortcut(ShortcutCatalog.delete)
-                .disabled(appState.isEditingText || appState.isDeleting)
+                .disabled(appState.isEditingText || appState.isBrowsingWebContent || appState.isDeleting)
 
                 Divider()
 
@@ -87,7 +87,8 @@ struct ArticleCommands: Commands {
     }
 
     private var canCopySelection: Bool {
-        guard let selectedRow, !appState.isEditingText, boardActions != nil else { return false }
+        guard let selectedRow, !appState.isEditingText, !appState.isBrowsingWebContent,
+              boardActions != nil else { return false }
         return ReadingClipboard.fileURL(for: selectedRow, libraryURL: appState.libraryURL) != nil
     }
 }

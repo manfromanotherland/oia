@@ -39,6 +39,7 @@ targets:
       - sdk: SystemConfiguration.framework
       - sdk: AVFoundation.framework
       - sdk: AVKit.framework
+      - sdk: WebKit.framework
       - sdk: CoreImage.framework
       - sdk: CoreSpotlight.framework
       - sdk: ImageIO.framework
@@ -112,6 +113,8 @@ targets:
       - path: Sources/Oia/State/TagPersistenceQueue.swift
       - path: Sources/Oia/State/BoardSearch.swift
       - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
+      - path: Sources/Oia/Platform/TextEditing/TextEditingMonitor.swift
+      - path: Sources/Oia/Platform/Web/OriginalArticleNavigation.swift
       - path: Sources/Oia/State/ReadingSort.swift
       - path: Sources/Oia/App/Shortcuts.swift
       - path: Sources/Oia/App/TestHooks.swift
@@ -183,6 +186,7 @@ targets:
       - sdk: SystemConfiguration.framework
       - sdk: AVFoundation.framework
       - sdk: CoreImage.framework
+      - sdk: WebKit.framework
       - sdk: CoreSpotlight.framework
       - sdk: ImageIO.framework
       - sdk: Vision.framework

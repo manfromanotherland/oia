@@ -118,7 +118,8 @@ These are load-bearing. Most architectural questions resolve by appealing to one
   successful video save, and ordinary save messages never contain video bytes. This browser-video
   path does not fetch media in the host; recognized source adapters are a separate bounded path.
 - **The macOS home is a search-first, sidebar-free masonry board.** Articles still use the
-  existing native Markdown reader in the card detail overlay; no WebView is introduced.
+  native Markdown reader by default. A Saved / Original toolbar control can show the live
+  origin in a WebView, loaded only when Original is selected.
 - **The organizing model is Tags**, not manual Lists, favorites, read/unread queues, ratings, or an
   archive. The main board includes every saved item. Legacy `read_at`, `archived`, `favorite`, and
   `rating` fields remain readable as format-v1 compatibility data but are not exposed by the
@@ -204,7 +205,8 @@ Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>  ← AI co-author traile
 - Treat the **library format as a public contract** — version it; don't break readers/writers
   silently.
 - Never write logic into Swift/JS that belongs in `core`.
-- **The macOS reader is native SwiftUI — never use a WebView** (`WKWebView`/`WebKit`).
+- **Render saved articles with native SwiftUI.** WebKit is reserved for the optional Original
+  view of a reading's HTTP(S) origin; create it only after the user selects Original.
 - **One macOS debug build:** `/Applications/Óia.app` points to
   `macos/build/Build/Products/Debug/Óia.app`. Run Xcode builds and tests from
   `macos/` with `-derivedDataPath build` so they use that single app output.

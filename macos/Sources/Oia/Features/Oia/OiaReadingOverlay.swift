@@ -25,13 +25,13 @@ struct OiaReadingOverlay: View {
             .focusedSceneValue(\.detailNavigationActions, detailNavigationActions)
             .background {
                 EscapeKeyMonitor {
-                    guard !appState.isEditingText else { return false }
+                    guard !appState.isEditingText, !appState.isBrowsingWebContent else { return false }
                     onClose()
                     return true
                 }
             }
             .onExitCommand {
-                guard !appState.isEditingText else { return }
+                guard !appState.isEditingText, !appState.isBrowsingWebContent else { return }
                 onClose()
             }
             .onChange(of: appState.readings.first { $0.id == row.id }) { _, updated in
@@ -103,7 +103,7 @@ struct OiaReadingOverlay: View {
         .labelStyle(.iconOnly)
         .help("Close detail (Escape)")
         .accessibilityIdentifier(A11y.Detail.close)
-        .keyboardShortcut(.cancelAction)
+        .keyboardShortcut(appState.isBrowsingWebContent ? nil : .cancelAction)
         .accessibilityLabel("Close Detail")
     }
 
@@ -114,7 +114,7 @@ struct OiaReadingOverlay: View {
             }
             .help("Previous item (Left Arrow or K)")
             .accessibilityIdentifier(A11y.Detail.previous)
-            .keyboardShortcut(.leftArrow, modifiers: [])
+            .keyboardShortcut(appState.isBrowsingWebContent ? nil : KeyboardShortcut(.leftArrow, modifiers: []))
             .disabled(!canMovePrevious || appState.isEditingText)
 
             Button { onMove(1) } label: {
@@ -122,7 +122,7 @@ struct OiaReadingOverlay: View {
             }
             .help("Next item (Right Arrow or J)")
             .accessibilityIdentifier(A11y.Detail.next)
-            .keyboardShortcut(.rightArrow, modifiers: [])
+            .keyboardShortcut(appState.isBrowsingWebContent ? nil : KeyboardShortcut(.rightArrow, modifiers: []))
             .disabled(!canMoveNext || appState.isEditingText)
         }
         .controlGroupStyle(.navigation)
@@ -160,12 +160,7 @@ struct OiaReadingOverlay: View {
     private var detail: some View {
         switch row.kind {
         case .article:
-            if row.featuredHighlight == nil, let profile = row.socialPostProfile {
-                SocialPostDetailView(row: row, profile: profile)
-            } else {
-                ArticleDetailView(showsToolbar: false)
-                    .background(Color(nsColor: .textBackgroundColor))
-            }
+            OiaArticleDetailView(row: row)
         case .image:
             OiaImageDetailView(row: row, libraryURL: appState.libraryURL)
                 .id(row.id)

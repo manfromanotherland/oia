@@ -438,5 +438,6 @@ sufficient and lower ceremony.
 - Avoid broad refactors that mix file moves with behavior changes.
 - When moving files, preserve behavior first, then make naming improvements in
   separate commits when practical.
-- Do not introduce WebView rendering for article content.
+- Render saved article content natively. The optional Original view may use WebKit to load the
+  HTTP(S) origin after the user explicitly selects it.
 - Do not create a manual Lists model; use Tags and smart views.

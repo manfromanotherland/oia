@@ -119,11 +119,17 @@ struct NavigationCommands: Commands {
 
                 Button("Previous Item", action: detailNavigationActions.movePrevious)
                     .keyboardShortcut(ShortcutCatalog.previousItem)
-                    .disabled(!detailNavigationActions.canMovePrevious || appState.isEditingText)
+                    .disabled(
+                        !detailNavigationActions.canMovePrevious
+                            || appState.isEditingText || appState.isBrowsingWebContent
+                    )
 
                 Button("Next Item", action: detailNavigationActions.moveNext)
                     .keyboardShortcut(ShortcutCatalog.nextItem)
-                    .disabled(!detailNavigationActions.canMoveNext || appState.isEditingText)
+                    .disabled(
+                        !detailNavigationActions.canMoveNext
+                            || appState.isEditingText || appState.isBrowsingWebContent
+                    )
 
                 Divider()
 

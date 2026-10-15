@@ -193,10 +193,12 @@ every affected component.
   open articles, inspect images/videos/quotes, search, and save supported drop/paste payloads;
   appearance settings.
 - **Stack:** Swift / SwiftUI, embedding `core` via **UniFFI**-generated bindings.
-- **Native rendering only — never a WebView.** The reader renders article Markdown as a native
+- **Saved articles render natively.** The reader renders article Markdown as a native
   SwiftUI view tree via Apple's [`swift-markdown`](https://github.com/apple/swift-markdown) parser —
   proper macOS typography, text selection, Light/Dark, and accessibility with no web engine and no
-  script-execution surface. The UI is specified in [DESIGN.md](./DESIGN.md).
+  script-execution surface. A separate, optional Original view loads the HTTP(S) origin in
+  WebKit only after the user selects it; browsing state stays outside the library and index.
+  The UI is specified in [DESIGN.md](./DESIGN.md).
 - Card detail is a full-window native Gallery destination: the existing Markdown reader handles
   articles and quote bodies; image/video cards use local preview assets and source/media actions.
   Gallery navigation follows the current board order, while an optional leading Inspector

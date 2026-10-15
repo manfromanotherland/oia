@@ -193,6 +193,10 @@ final class AppState {
     /// keystroke fall through to standard text editing. Kept in sync by
     /// `editingMonitor` (see `TextEditingMonitor`).
     var isEditingText: Bool = false
+    /// The original article's WebKit content owns typing, selection, and arrow
+    /// keys while focused. Keep this separate from native text editing so
+    /// gallery toolbar buttons can still be clicked.
+    var isBrowsingWebContent: Bool = false
     var isFocusMode: Bool = false
 
     // Internal rather than private so the sibling extension files in this
@@ -259,8 +263,9 @@ final class AppState {
             Task { await boot(url: url) }
         }
 
-        editingMonitor = TextEditingMonitor { [weak self] editing in
+        editingMonitor = TextEditingMonitor { [weak self] editing, browsing in
             self?.isEditingText = editing
+            self?.isBrowsingWebContent = browsing
         }
     }
 

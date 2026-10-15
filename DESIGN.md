@@ -237,8 +237,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   left in that order. Previous and Next move through the frozen detail-capable board order. `⌘B`
   toggles the leading inspector sidebar with a brief slide, or immediately when Reduce Motion is enabled.
 - Ordinary articles reuse the existing native Markdown reader. Social-post articles use a native
-  post detail with selectable text and every ordered local attachment. Images offer **Fit** and
-  **Original Size** in the toolbar. Fit shows the whole local asset within the window; Original Size
+  post detail with selectable text and every ordered local attachment. Articles with a web origin
+  offer **Saved** and **Original** in the toolbar. Saved is the default on each article; Original
+  loads the live origin in an embedded WebView only when selected. Switching preserves the saved
+  reader and original page's position. Failed loads offer Try Again and Open in Browser; Saved
+  remains available offline. In-page links scroll Original; links to other pages open in the system
+  browser. Images offer **Fit** and **Original Size** in the toolbar. Fit shows the whole local asset
+  within the window; Original Size
   displays one source pixel per display pixel, with horizontal and vertical scrolling. Images taller
   than 2.5 times their width initially open at Original Size, aligned to the top; other images
   initially open in Fit. Choosing either size saves a per-device preference, retained across
