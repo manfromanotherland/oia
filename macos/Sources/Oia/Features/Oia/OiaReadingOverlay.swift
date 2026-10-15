@@ -67,9 +67,11 @@ struct OiaReadingOverlay: View {
                 .background {
                     if row.kind == .image || row.kind == .video {
                         mediaPanelSurface
-                            .ignoresSafeArea(.container, edges: .top)
                     }
                 }
+                // Let the actual reader or media viewport continue beneath
+                // the native toolbar, rather than extending only its backdrop.
+                .ignoresSafeArea(.container, edges: .top)
                 .toolbar {
                     if #available(macOS 26.0, *) {
                         ToolbarSpacer(.fixed, placement: .navigation)

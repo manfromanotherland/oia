@@ -233,7 +233,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   A lightweight link opens its origin in the system browser instead and never enters Gallery.
   Opening collapses a multi-selection to that card. Escape or Close returns focus to the board;
   left/right and J/K move through the frozen detail-capable board order, skipping lightweight links.
-- The selected preview fills the available space. Collapse, Previous, Next, and Close sit on the
+- The selected preview fills the available space, extending behind the transparent toolbar for
+  saved articles, Original pages, and images. Collapse, Previous, Next, and Close sit on the
   left in that order. Previous and Next move through the frozen detail-capable board order. `⌘B`
   toggles the leading inspector sidebar with a brief slide, or immediately when Reduce Motion is enabled.
 - Ordinary articles reuse the existing native Markdown reader. Social-post articles use a native
