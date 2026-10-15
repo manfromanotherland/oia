@@ -15,7 +15,7 @@ struct ParagraphView: View {
     let paragraph: Paragraph
     let theme: MarkdownTheme
     let assetBaseURL: URL?
-    /// Biblioteca keeps quoted prose in the upright body face.
+    /// Block quotes use the selected quotation face; inline emphasis stays in body text.
     var quoted = false
     /// Completed task items strike their text without affecting nested blocks.
     var struck = false
@@ -28,7 +28,7 @@ struct ParagraphView: View {
                 switch identified.segment {
                 case let .text(attributed):
                     Text(attributed)
-                        .lineSpacing(theme.lineSpacing)
+                        .lineSpacing(quoted ? max(theme.quoteLineHeight - theme.quoteSize * 1.2, 0) : theme.lineSpacing)
                         .textSelection(.enabled)
                         .fixedSize(horizontal: false, vertical: true)
                 case let .image(source, alt):
@@ -77,6 +77,7 @@ struct ParagraphView: View {
                     runID = IdentifiedMarkup.stableID(for: child, fallbackIndex: offset)
                 }
                 run.append(InlineRenderer.inline(child, theme: theme,
+                                                 context: quoted ? .quote(theme) : .body(theme),
                                                  italic: false, strike: struck))
             }
         }

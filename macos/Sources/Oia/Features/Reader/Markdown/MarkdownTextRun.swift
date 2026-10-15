@@ -197,7 +197,8 @@ enum MarkdownTextRun {
         let content = NSMutableAttributedString(attributedString:
             AppKitInline.attributed(paragraph, size: ctx.quoted ? theme.quoteSize : theme.bodySize,
                                     weight: .regular,
-                                    design: theme.design, color: ctx.color, italic: ctx.italic))
+                                    design: theme.design, color: ctx.color, italic: ctx.italic,
+                                    readerFont: ctx.quoted ? theme.quoteReaderFont : theme.font))
         let style = baseStyle(indent: ctx.indent)
         style.minimumLineHeight = ctx.quoted ? theme.quoteLineHeight : theme.bodySize * theme.lineHeight.multiple
         style.maximumLineHeight = style.minimumLineHeight
@@ -213,7 +214,8 @@ enum MarkdownTextRun {
         let content = NSMutableAttributedString(attributedString:
             AppKitInline.attributed(heading, size: theme.headingSize(level),
                                     weight: theme.headingWeight(level), design: theme.headingReaderFont(level).design,
-                                    color: ctx.color, italic: ctx.italic || theme.headingIsItalic(level)))
+                                    color: ctx.color, italic: ctx.italic || theme.headingIsItalic(level),
+                                    readerFont: theme.headingReaderFont(level)))
         let tracking = theme.headingTracking(level)
         if tracking != 0 {
             content.addAttribute(.kern, value: tracking,

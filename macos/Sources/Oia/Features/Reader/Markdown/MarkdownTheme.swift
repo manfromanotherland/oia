@@ -2,8 +2,8 @@
 
 import SwiftUI
 
-/// Native adaptation of NetNewsWire's Biblioteca theme: platform serif prose,
-/// sans-serif section headings, compact paragraph rhythm, and quiet quotes.
+/// Native rendering of the selected typography playground theme: Helvetica Neue
+/// prose, Fraunces headings and block quotes, and the exported reading rhythm.
 /// The user's font, size, width, and leading preferences remain per-device.
 struct MarkdownTheme {
     let font: ReaderFont
@@ -37,7 +37,7 @@ struct MarkdownTheme {
         bodySize * lineHeight.extraLeadingMultiple
     }
 
-    /// Browser-default paragraph margins collapse to one body em.
+    /// The selected 18 pt paragraph gap scales with the body preference.
     var blockSpacing: CGFloat {
         bodySize
     }
@@ -57,21 +57,15 @@ struct MarkdownTheme {
     }
 
     // ── Headings ────────────────────────────────────────────────────────────
-    // Biblioteca uses a bold serif H1 and bold sans-serif section headings.
+    // The exported H1 is 48 pt; all heading levels share Fraunces.
 
     func headingSize(_ level: Int) -> CGFloat {
-        switch level {
-        case 1: bodySize * 2
-        case 2: bodySize * 1.5
-        case 3: bodySize * 1.17
-        case 4: bodySize
-        case 5: bodySize * 0.83
-        default: bodySize * 0.67
-        }
+        let ratios: [CGFloat] = [1, 0.75, 0.6, 0.5, 0.44, 0.4]
+        return bodySize * (48 / 18) * ratios[min(max(level, 1), 6) - 1]
     }
 
     func headingWeight(_: Int) -> Font.Weight {
-        .bold
+        .regular
     }
 
     func headingFont(_ level: Int) -> Font {
@@ -93,30 +87,37 @@ struct MarkdownTheme {
         false
     }
 
-    /// Space *above* a heading. Larger for higher levels so major sections get a
-    /// clear visual break; this is added on top of the inter-block `blockSpacing`.
-    func headingSpaceAbove(_ level: Int) -> CGFloat {
-        max(headingSize(level) * 1.5 - blockSpacing, 0)
+    /// The exported 64 pt section gap includes the normal inter-block spacing.
+    func headingSpaceAbove(_: Int) -> CGFloat {
+        max(bodySize * (64 / 18) - blockSpacing, 0)
     }
 
-    func headingReaderFont(_ level: Int) -> ReaderFont {
-        level == 1 ? .serif : .system
+    func headingReaderFont(_: Int) -> ReaderFont {
+        .fraunces
     }
 
     func headingLineHeight(_ level: Int) -> CGFloat {
         headingSize(level) * 1.2
     }
 
-    func headingSpaceBelow(_ level: Int) -> CGFloat {
-        headingSize(level) * 0.25
+    func headingSpaceBelow(_: Int) -> CGFloat {
+        bodySize * (10 / 18)
     }
 
     var quoteSize: CGFloat {
-        bodySize
+        bodySize * (28 / 18)
     }
 
     var quoteLineHeight: CGFloat {
-        bodySize * lineHeight.multiple
+        quoteSize * 1.2
+    }
+
+    var quoteReaderFont: ReaderFont {
+        .fraunces
+    }
+
+    var titleBodyGap: CGFloat {
+        bodySize * (24 / 18)
     }
 
     var quoteRuleWidth: CGFloat {
@@ -131,7 +132,7 @@ struct MarkdownTheme {
 
     /// Gap between sibling list items (tighter than `blockSpacing`).
     var listItemSpacing: CGFloat {
-        bodySize * 0.5
+        bodySize * 0.35
     }
 
     /// Gap between the marker (bullet/number) and the item text.
@@ -154,7 +155,7 @@ struct MarkdownTheme {
     // ── Block quote ─────────────────────────────────────────────────────────
 
     var quoteIndent: CGFloat {
-        18
+        24
     }
 
     var quoteInnerSpacing: CGFloat {
@@ -193,10 +194,9 @@ struct MarkdownTheme {
     // The reader's non-body pieces are sized from the body so they rescale with
     // it (Small … Giant) instead of holding a fixed size while the copy grows.
 
-    /// Give the article title more presence than headings within the body while
-    /// keeping it tied to the chosen reader font and body size.
+    /// The article title uses the exported H1 size and Fraunces face.
     var titleFont: Font {
-        ReaderFont.serif.swiftUIFont(size: headingSize(1), weight: .bold)
+        headingFont(1)
     }
 
     var titleTracking: CGFloat {

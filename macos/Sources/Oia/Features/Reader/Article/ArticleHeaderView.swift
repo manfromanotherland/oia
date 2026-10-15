@@ -11,10 +11,7 @@ struct ArticleHeaderView: View {
     let theme: MarkdownTheme
 
     var body: some View {
-        Text(row.title.isEmpty ? "Untitled" : row.title)
-            .font(theme.titleFont)
-            .tracking(theme.titleTracking)
-            .multilineTextAlignment(.leading)
+        SelectableTextView(attributed: attributedTitle)
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityIdentifier(A11y.Detail.title)
             .padding(.top, 20)
@@ -23,5 +20,17 @@ struct ArticleHeaderView: View {
             .frame(maxWidth: theme.contentMaxWidth, alignment: .leading)
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.horizontal, 20)
+    }
+
+    private var attributedTitle: NSAttributedString {
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = theme.headingLineHeight(1)
+        style.maximumLineHeight = style.minimumLineHeight
+        style.alignment = .left
+        return NSAttributedString(string: row.title.isEmpty ? "Untitled" : row.title, attributes: [
+            .font: theme.headingReaderFont(1).nativeFont(size: theme.headingSize(1)),
+            .paragraphStyle: style,
+            .foregroundColor: NSColor.labelColor
+        ])
     }
 }

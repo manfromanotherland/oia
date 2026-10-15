@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
+import CoreText
 import XCTest
 
 /// The reader's measure and leading, which `MarkdownTheme` derives from the
@@ -16,35 +18,50 @@ final class MarkdownThemeTests: XCTestCase {
 
     // ── Defaults ────────────────────────────────────────────────────────────
 
-    /// Medium / Normal use a 680 pt measure and 0.4em of added leading,
-    /// giving the body a line height of approximately 1.6.
+    /// Medium / Normal use a 680 pt measure and 0.3em of added leading,
+    /// giving the body a line height of 1.5.
     func testDefaultMeasureAndLeading() {
         let theme = theme()
         XCTAssertEqual(theme.contentMaxWidth, 680)
-        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.4, accuracy: 0.001)
+        XCTAssertEqual(theme.lineSpacing, theme.bodySize * 0.3, accuracy: 0.001)
     }
 
-    func testDefaultFontIsSerif() {
-        XCTAssertEqual(ReaderFont.defaultChoice, .serif)
+    func testDefaultFontIsHelveticaNeue() {
+        XCTAssertEqual(ReaderFont.defaultChoice, .helveticaNeue)
     }
 
-    func testBibliotecaUsesSerifBodyAndSansSectionHeadings() {
+    func testSelectedThemeUsesHelveticaBodyAndFrauncesHeadingsAndQuotes() {
         let theme = theme()
         XCTAssertEqual(theme.bodySize, 18)
-        XCTAssertEqual(theme.design, .serif)
-        XCTAssertEqual(theme.headingReaderFont(1), .serif)
-        XCTAssertEqual(theme.headingReaderFont(2), .system)
-        XCTAssertEqual(theme.headingReaderFont(6), .system)
-        XCTAssertEqual(theme.headingSize(1), 36, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSize(2), 27, accuracy: 0.001)
+        XCTAssertEqual(theme.design, .default)
+        XCTAssertEqual(theme.headingReaderFont(1), .fraunces)
+        XCTAssertEqual(theme.headingReaderFont(2), .fraunces)
+        XCTAssertEqual(theme.headingReaderFont(6), .fraunces)
+        XCTAssertEqual(theme.headingSize(1), 48, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSize(2), 36, accuracy: 0.001)
         XCTAssertEqual(theme.blockSpacing, 18, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSpaceAbove(2) + theme.blockSpacing, 40.5, accuracy: 0.001)
-        XCTAssertEqual(theme.headingSpaceBelow(2), 6.75, accuracy: 0.001)
-        XCTAssertEqual(theme.quoteSize, theme.bodySize)
-        XCTAssertEqual(theme.quoteIndent, 18)
+        XCTAssertEqual(theme.headingSpaceAbove(2) + theme.blockSpacing, 64, accuracy: 0.001)
+        XCTAssertEqual(theme.headingSpaceBelow(2), 10, accuracy: 0.001)
+        XCTAssertEqual(theme.quoteSize, 28)
+        XCTAssertEqual(theme.quoteIndent, 24)
         XCTAssertEqual(theme.quoteRuleWidth, 3)
         XCTAssertFalse(theme.headingIsItalic(4))
         XCTAssertFalse(theme.headingIsRunIn(6))
+    }
+
+    func testSelectedFontsResolveWithoutDependingOnUserInstalledFonts() {
+        let body = ReaderFont.helveticaNeue.nativeFont(size: 18)
+        XCTAssertEqual(body.familyName, "Helvetica Neue")
+        let italic = ReaderFont.helveticaNeue.nativeFont(size: 18, italic: true)
+        XCTAssertEqual(italic.familyName, body.familyName)
+        XCTAssertEqual(italic.pointSize, body.pointSize)
+        XCTAssertTrue(italic.fontDescriptor.symbolicTraits.contains(.italic))
+
+        let heading = ReaderFont.fraunces.nativeFont(size: 48)
+        XCTAssertEqual(heading.familyName, "Fraunces")
+        let variations = CTFontCopyVariation(heading as CTFont) as? [NSNumber: NSNumber]
+        XCTAssertEqual(variations?[NSNumber(value: UInt32(0x7767_6874))]?.doubleValue, 400)
+        XCTAssertEqual(variations?[NSNumber(value: UInt32(0x6F70_737A))]?.doubleValue, 48)
     }
 
     // ── Width ───────────────────────────────────────────────────────────────
@@ -110,7 +127,7 @@ final class MarkdownThemeTests: XCTestCase {
     /// rhythm; the last two provide more room for readers who prefer it.
     func testLineHeightStopMultiples() {
         let multiples = ReaderLineHeight.allCases.map(\.multiple)
-        let expected: [CGFloat] = [1.2, 1.475, 1.6, 1.75, 2.0]
+        let expected: [CGFloat] = [1.2, 1.475, 1.5, 1.75, 2.0]
         for (actual, intended) in zip(multiples, expected) {
             XCTAssertEqual(actual, intended, accuracy: 0.001)
         }

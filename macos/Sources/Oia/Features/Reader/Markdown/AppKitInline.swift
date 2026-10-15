@@ -46,15 +46,16 @@ enum AppKitInline {
         let weight: Font.Weight
         let design: Font.Design
         let color: NSColor
+        let readerFont: ReaderFont?
     }
 
     /// Build an attributed string from a block node's inline children. `weight`
     /// and `size` set the base run; emphasis (bold/italic/code) layers on top.
     static func attributed(_ markup: Markup, size: CGFloat, weight: Font.Weight,
                            design: Font.Design, color: NSColor = .labelColor,
-                           italic: Bool = false) -> NSAttributedString
+                           italic: Bool = false, readerFont: ReaderFont? = nil) -> NSAttributedString
     {
-        let run = Run(size: size, weight: weight, design: design, color: color)
+        let run = Run(size: size, weight: weight, design: design, color: color, readerFont: readerFont)
         let out = NSMutableAttributedString()
         for child in markup.children {
             out.append(render(child, style: Style(italic: italic), run: run))
@@ -108,9 +109,11 @@ enum AppKitInline {
 
     private static func leaf(_ string: String, style: Style, run: Run, code: Bool) -> NSAttributedString {
         var attrs: [NSAttributedString.Key: Any] = [:]
-        attrs[.font] = makeFont(size: code ? run.size * 0.9 : run.size, weight: run.weight,
-                                design: code ? .monospaced : run.design,
-                                bold: style.bold, italic: style.italic)
+        attrs[.font] = (!code ? run.readerFont : nil)?.nativeFont(
+            size: run.size, weight: run.weight, bold: style.bold, italic: style.italic
+        ) ?? makeFont(size: code ? run.size * 0.9 : run.size, weight: run.weight,
+                      design: code ? .monospaced : run.design,
+                      bold: style.bold, italic: style.italic)
         attrs[.foregroundColor] = run.color
         if style.strike {
             attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
@@ -127,8 +130,7 @@ enum AppKitInline {
 
     /// Share the selected reader face and tabular numerals across both list renderers.
     static func listMarkerFont(theme: MarkdownTheme, ordered: Bool) -> NSFont {
-        let font = makeFont(size: theme.bodySize, weight: .regular,
-                            design: theme.design, bold: false, italic: false)
+        let font = theme.font.nativeFont(size: theme.bodySize)
         guard ordered else { return font }
         let descriptor = font.fontDescriptor.addingAttributes([
             .featureSettings: [[
@@ -157,49 +159,5 @@ enum AppKitInline {
         }
         descriptor = descriptor.withSymbolicTraits(traits)
         return NSFont(descriptor: descriptor, size: size) ?? fallback
-    }
-}
-
-// ── SwiftUI → AppKit mappings ────────────────────────────────────────────────
-
-extension Font.Weight {
-    /// Map the SwiftUI weights the theme uses onto AppKit font weights.
-    var nsWeight: NSFont.Weight {
-        if self == .ultraLight {
-            return .ultraLight
-        }
-        if self == .thin {
-            return .thin
-        }
-        if self == .light {
-            return .light
-        }
-        if self == .medium {
-            return .medium
-        }
-        if self == .semibold {
-            return .semibold
-        }
-        if self == .bold {
-            return .bold
-        }
-        if self == .heavy {
-            return .heavy
-        }
-        if self == .black {
-            return .black
-        }
-        return .regular
-    }
-}
-
-extension Font.Design {
-    var systemDesign: NSFontDescriptor.SystemDesign {
-        switch self {
-        case .serif: .serif
-        case .rounded: .rounded
-        case .monospaced: .monospaced
-        default: .default
-        }
     }
 }

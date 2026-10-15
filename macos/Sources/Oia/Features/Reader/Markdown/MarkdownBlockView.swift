@@ -102,7 +102,7 @@ struct MarkdownBlockView: View {
 
 /// A heading rendered with its own size/weight (injected via `FontContext`, so
 /// the heading font is not overridden by the per-run body font), extra space
-/// above to mark a section break, and italic treatment for levels 4–5.
+/// above to mark a section break.
 private struct HeadingView: View {
     let heading: Heading
     let theme: MarkdownTheme

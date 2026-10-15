@@ -236,7 +236,7 @@ struct MarkdownDocumentView<Header: View, Footer: View>: View {
                 .frame(maxWidth: theme.contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 20)
-                .padding(.top, theme.bodySize)
+                .padding(.top, theme.titleBodyGap)
                 .padding(.bottom, 80)
                 // Behind the content: a click in the margins or between blocks clears
                 // any active text selection, so clicking outside the text deselects.

@@ -177,6 +177,7 @@ struct ArticleDetailView: View {
                 .frame(maxWidth: theme.contentMaxWidth, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 20)
+                .padding(.top, theme.titleBodyGap)
                 .padding(.bottom, 80)
             }
         }

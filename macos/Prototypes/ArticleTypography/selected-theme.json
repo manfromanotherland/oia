@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "settings": {
+    "bodyFont": "Helvetica Neue",
+    "bodySize": 18,
+    "bodyLeading": 1.5,
+    "headingFont": "Fraunces",
+    "headingSize": 48,
+    "headingLeading": 1.2,
+    "quoteFont": "Fraunces",
+    "quoteSize": 28,
+    "quoteLeading": 1.2,
+    "measure": 680,
+    "paragraphGap": 18,
+    "sectionGap": 64
+  },
+  "headingRatios": {
+    "h1": 1,
+    "h2": 0.75,
+    "h3": 0.6,
+    "h4": 0.5,
+    "h5": 0.44,
+    "h6": 0.4
+  },
+  "fonts": {
+    "body": {
+      "family": "Helvetica Neue",
+      "category": "System",
+      "source": "Local system font",
+      "available": true
+    },
+    "heading": {
+      "family": "Fraunces",
+      "category": "Serif",
+      "source": "https://uncut.wtf/serif/fraunces/",
+      "creator": "Flavia Zimbardi, Phaedra Charles",
+      "download": "https://github.com/undercasetype/Fraunces",
+      "available": true,
+      "nativeFamily": "Fraunces",
+      "postscript": "Fraunces-9ptBlack",
+      "file": "fonts/fraunces/Fraunces-9ptBlack.ttf"
+    },
+    "quote": {
+      "family": "Fraunces",
+      "category": "Serif",
+      "source": "https://uncut.wtf/serif/fraunces/",
+      "creator": "Flavia Zimbardi, Phaedra Charles",
+      "download": "https://github.com/undercasetype/Fraunces",
+      "available": true,
+      "nativeFamily": "Fraunces",
+      "postscript": "Fraunces-9ptBlack",
+      "file": "fonts/fraunces/Fraunces-9ptBlack.ttf"
+    }
+  },
+  "appearance": "dark"
+}

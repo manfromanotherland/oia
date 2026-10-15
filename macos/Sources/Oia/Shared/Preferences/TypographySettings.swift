@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
+import CoreText
 import SwiftUI
 
 enum ReaderFont: String, CaseIterable, Identifiable {
-    case system, serif, mono
+    case system, serif, mono, helveticaNeue, fraunces
 
-    static let defaultChoice: ReaderFont = .serif
+    static let defaultChoice: ReaderFont = .helveticaNeue
     static let serifFamilyName = "Palatino"
 
     static func serifFaceName(weight: Font.Weight, bold: Bool = false, italic: Bool = false) -> String {
@@ -19,18 +21,55 @@ enum ReaderFont: String, CaseIterable, Identifiable {
         }
     }
 
-    /// Biblioteca uses the platform serif, sans-serif, and monospace faces.
+    /// Resolve the selected native face while preserving inline emphasis.
     func swiftUIFont(size: CGFloat, weight: Font.Weight = .regular,
                      bold: Bool = false, italic: Bool = false) -> Font
     {
-        var font = Font.system(size: size, design: design).weight(weight)
-        if bold {
-            font = font.bold()
+        Font(nativeFont(size: size, weight: weight, bold: bold, italic: italic))
+    }
+
+    /// One font resolver for SwiftUI text and AppKit's selectable reader runs.
+    func nativeFont(size: CGFloat, weight: Font.Weight = .regular,
+                    bold: Bool = false, italic: Bool = false) -> NSFont
+    {
+        if self == .fraunces {
+            return Self.frauncesFont(size: size, bold: bold || weight == .bold || weight == .semibold, italic: italic)
+        }
+        let fallback = NSFont.systemFont(ofSize: size, weight: weight.nsWeight)
+        var descriptor = (self == .helveticaNeue
+            ? NSFont(name: "HelveticaNeue", size: size) ?? fallback : fallback).fontDescriptor
+        if self != .helveticaNeue, let designed = descriptor.withDesign(design.systemDesign) {
+            descriptor = designed
+        }
+        var traits = descriptor.symbolicTraits
+        if bold || weight == .bold || weight == .semibold {
+            traits.insert(.bold)
         }
         if italic {
-            font = font.italic()
+            traits.insert(.italic)
         }
-        return font
+        return NSFont(descriptor: descriptor.withSymbolicTraits(traits), size: size) ?? fallback
+    }
+
+    private static func frauncesFont(size: CGFloat, bold: Bool, italic: Bool) -> NSFont {
+        let resource = italic ? "Fraunces-9ptBlackItalic" : "Fraunces-9ptBlack"
+        guard let url = Bundle(for: ReaderFontBundleToken.self).url(forResource: resource, withExtension: "ttf"),
+              let descriptors = CTFontManagerCreateFontDescriptorsFromURL(url as CFURL) as? [CTFontDescriptor],
+              let base = descriptors.first
+        else {
+            assertionFailure("Bundled Fraunces font is missing")
+            return NSFont.systemFont(ofSize: size)
+        }
+        // The exported playground uses normal CSS weight and automatic optical sizing.
+        // This variable font's internal default is Black; explicitly select 400.
+        let axes: [NSNumber: NSNumber] = [
+            NSNumber(value: UInt32(0x7767_6874)): NSNumber(value: bold ? 700 : 400),
+            NSNumber(value: UInt32(0x6F70_737A)): NSNumber(value: Double(size))
+        ]
+        let descriptor = CTFontDescriptorCreateCopyWithAttributes(
+            base, [kCTFontVariationAttribute: axes] as CFDictionary
+        )
+        return CTFontCreateWithFontDescriptor(descriptor, size, nil) as NSFont
     }
 
     var id: String {
@@ -42,14 +81,16 @@ enum ReaderFont: String, CaseIterable, Identifiable {
         case .system: "System"
         case .serif: "Serif"
         case .mono: "Monospace"
+        case .helveticaNeue: "Helvetica Neue"
+        case .fraunces: "Fraunces"
         }
     }
 
     /// SwiftUI font design used by the native reader.
     var design: Font.Design {
         switch self {
-        case .system: .default
-        case .serif: .serif
+        case .system, .helveticaNeue: .default
+        case .serif, .fraunces: .serif
         case .mono: .monospaced
         }
     }
@@ -141,7 +182,7 @@ enum ReaderLineHeight: String, CaseIterable, Identifiable {
         switch self {
         case .tight: 1.20
         case .snug: 1.475
-        case .normal: 1.60
+        case .normal: 1.50
         case .relaxed: 1.75
         case .loose: 2.00
         }
@@ -153,5 +194,51 @@ enum ReaderLineHeight: String, CaseIterable, Identifiable {
     /// the difference — never negative, so Tight can't overlap lines.
     var extraLeadingMultiple: CGFloat {
         max(multiple - 1.2, 0)
+    }
+}
+
+private final class ReaderFontBundleToken {}
+
+// ── SwiftUI → AppKit mappings ────────────────────────────────────────────────
+
+extension Font.Weight {
+    /// Map the SwiftUI weights the theme uses onto AppKit font weights.
+    var nsWeight: NSFont.Weight {
+        if self == .ultraLight {
+            return .ultraLight
+        }
+        if self == .thin {
+            return .thin
+        }
+        if self == .light {
+            return .light
+        }
+        if self == .medium {
+            return .medium
+        }
+        if self == .semibold {
+            return .semibold
+        }
+        if self == .bold {
+            return .bold
+        }
+        if self == .heavy {
+            return .heavy
+        }
+        if self == .black {
+            return .black
+        }
+        return .regular
+    }
+}
+
+extension Font.Design {
+    var systemDesign: NSFontDescriptor.SystemDesign {
+        switch self {
+        case .serif: .serif
+        case .rounded: .rounded
+        case .monospaced: .monospaced
+        default: .default
+        }
     }
 }
