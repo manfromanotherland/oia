@@ -24,10 +24,9 @@ struct OriginalArticleView: View {
                     Link("Open in Browser", destination: page.url)
                 }
             } else if page.isLoading {
-                ProgressView("Loading original")
+                ProgressView()
                     .controlSize(.small)
-                    .padding(16)
-                    .background(.regularMaterial, in: .rect(cornerRadius: 8))
+                    .accessibilityLabel("Loading original")
                     .allowsHitTesting(false)
             }
         }
