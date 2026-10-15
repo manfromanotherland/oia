@@ -16,7 +16,7 @@ hosting, or publisher identity has been verified by this document.
 ```text
 Save pages, screenshots, images, videos, and selected text to your private Óia library on your Mac.
 
-Click the Óia toolbar button to show a compact Saving… message with a three-second countdown. Screenshot instead? appears as a link-style action to the right of the title on the same row. Nothing is saved during the countdown. When it ends, Óia saves the page as an article or link automatically. Choosing the screenshot action dismisses the message immediately, saves one long image instead, and shows the result when finished. The keyboard shortcut and a page save from the context menu use the same countdown. Right-click an image, video, or text selection and choose Save to Óia. Selected text becomes a highlight on its source article, or a quote when quotation evidence is present.
+Click the Óia toolbar button to show a compact Saving… message with a three-second countdown. Screenshot instead? appears as a link-style action to the right of the title on the same row. Nothing is saved during the countdown. When it ends, Óia saves the page as an article or link automatically. Choosing the screenshot action dismisses the message immediately and captures one long image instead. Capture stays quiet while the page scrolls. After the page returns to its original position, Saving screenshot… stays visible while Óia assembles and saves the image, then shows the result. The keyboard shortcut and a page save from the context menu use the same countdown. Right-click an image, video, or text selection and choose Save to Óia. Selected text becomes a highlight on its source article, or a quote when quotation evidence is present.
 
 Install and open the Óia macOS app, choose your library folder, and then save from the browser. Captured content and media become ordinary files you own. The companion app and native host are required; this extension does not save to a cloud account.
 
@@ -46,7 +46,9 @@ Refresh the required screenshot to show the compact in-page toast with **Saving�
 link-style **Screenshot instead?** action to its right on the same row, above its three-second
 countdown bar. The action uses white text at medium weight in dark appearance, and the countdown
 is 4 px high with fully rounded ends. Include a real saved result; screenshot capture dismisses
-the pending toast immediately and shows only its result notification. Do not reuse screenshots
+the pending toast immediately and stays quiet while scrolling. After page restoration,
+**Saving screenshot…** remains visible through image assembly and persistence, then shows the result.
+Do not reuse screenshots
 of the removed toolbar popup. Graphics have not been visually checked as part of this preparation.
 
 ## Permissions justification
@@ -119,7 +121,7 @@ submission.
 |---------|------|---------|--------|
 | 0.1.0 | 2026-10-11 | Automatic Save, explicit screenshot capture, selected-media and text saves; separate Chromium and Firefox packages; local privacy disclosures. | Local draft; not submitted |
 | 0.1.0 | 2026-10-12 | Fixed automatic product recognition and reclassification of previously saved articles. | Local draft update; not submitted |
-| 0.1.0 | 2026-10-15 | Replaced the toolbar popup with a compact in-page Saving… toast and three-second countdown. The inline Screenshot instead? action uses white text at medium weight in dark appearance, above a 4 px countdown with fully rounded ends. Choosing it dismisses the pending toast immediately and shows only the screenshot result notification; otherwise the page saves when the countdown ends. Keyboard and context-menu page saves use the same countdown. | Local draft update; not submitted |
+| 0.1.0 | 2026-10-15 | Replaced the toolbar popup with a compact in-page Saving… toast and three-second countdown. The inline Screenshot instead? action uses white text at medium weight in dark appearance, above a 4 px countdown with fully rounded ends. Choosing it dismisses the pending toast immediately; capture stays quiet while scrolling, then Saving screenshot… remains visible after restoration through image assembly and persistence until the result. Otherwise the page saves when the countdown ends. Keyboard and context-menu page saves use the same countdown. | Local draft update; not submitted |
 
 This records the current local manifest version, not a verified published version. Confirm the
 existing listing's version and bump `extension/manifest.json` if required before uploading.

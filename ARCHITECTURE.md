@@ -33,8 +33,10 @@ Clicking the extension toolbar shows a compact in-page toast with **Saving…** 
 **Screenshot instead?** action to its right on the same row, above a three-second countdown bar.
 The action uses white text at medium weight in dark appearance; the countdown is 4 px high with fully rounded ends.
 Nothing persists during the countdown. Its expiry saves the page; choosing the screenshot action
-dismisses the pending toast immediately and captures a full-page image instead. Screenshot capture
-shows only its result notification. Keyboard and context-menu page saves use the same countdown. Page saves supply cleaned content,
+dismisses the pending toast immediately and captures a full-page image instead. Capture stays quiet
+while the page scrolls. After restoration, **Saving screenshot…** remains visible through image
+assembly, hashing, and native persistence, followed by the result. Keyboard and context-menu page
+saves use the same countdown. Page saves supply cleaned content,
 live metadata, and raw prose measurements to Rust, which chooses a full article or lightweight
 link and applies recognized-source and product/book/music/movie classification. The screenshot action
 captures the full scrollable page as one long screenshot. The context menu also captures a right-clicked

@@ -71,7 +71,7 @@ describe("background screenshot save", () => {
     expect(sendNativeMessage).not.toHaveBeenCalled();
   });
 
-  it("runs the full-page tile session and persists the composed PNG", async () => {
+  it("shows saving feedback after restoring the page, through PNG assembly and native persistence", async () => {
     vi.resetModules();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-10T12:00:00.000Z"));
@@ -81,6 +81,13 @@ describe("background screenshot save", () => {
     const scrollOffsets: number[] = [];
     const visibleCaptureTimes: number[] = [];
     const nativeRequests: object[] = [];
+    const toasts: { status?: string; title?: string }[] = [];
+    const milestones: string[] = [];
+    let finishEncoding: (blob: Blob) => void = () => undefined;
+    const encodedPng = new Promise<Blob>((resolve) => {
+      finishEncoding = resolve;
+    });
+    let finishPersistence: () => void = () => undefined;
     const tab: chrome.tabs.Tab = {
       id: 42,
       index: 0,
@@ -98,25 +105,33 @@ describe("background screenshot save", () => {
     };
     let scrollY = 250;
 
-    const sendMessage = vi.fn(async (_tabId: number, message: { action?: string }) => {
-      if (!message.action || message.action === "toast") return undefined;
-      pageActions.push(message.action);
-      if (message.action === SCREENSHOT_PAGE_BEGIN_ACTION) {
-        return pageState(scrollY);
-      }
-      if (message.action === SCREENSHOT_PAGE_SCROLL_ACTION) {
-        const requested = (message as { scrollY: number }).scrollY;
-        scrollY = Math.min(requested, 900);
-        scrollOffsets.push(scrollY);
-        return pageState(scrollY);
-      }
-      if (message.action === SCREENSHOT_PAGE_MEASURE_ACTION) return pageState(scrollY);
-      if (message.action === SCREENSHOT_PAGE_FINISH_ACTION) {
-        scrollY = 250;
-        return { ok: true };
-      }
-      throw new Error(`Unexpected page action: ${message.action}`);
-    });
+    const sendMessage = vi.fn(
+      async (_tabId: number, message: { action?: string; status?: string; title?: string }) => {
+        if (message.action === "toast") {
+          toasts.push({ status: message.status, title: message.title });
+          milestones.push(`toast:${message.status}`);
+          return undefined;
+        }
+        if (!message.action) return undefined;
+        pageActions.push(message.action);
+        if (message.action === SCREENSHOT_PAGE_BEGIN_ACTION) {
+          return pageState(scrollY);
+        }
+        if (message.action === SCREENSHOT_PAGE_SCROLL_ACTION) {
+          const requested = (message as { scrollY: number }).scrollY;
+          scrollY = Math.min(requested, 900);
+          scrollOffsets.push(scrollY);
+          return pageState(scrollY);
+        }
+        if (message.action === SCREENSHOT_PAGE_MEASURE_ACTION) return pageState(scrollY);
+        if (message.action === SCREENSHOT_PAGE_FINISH_ACTION) {
+          scrollY = 250;
+          milestones.push("restored");
+          return { ok: true };
+        }
+        throw new Error(`Unexpected page action: ${message.action}`);
+      },
+    );
 
     const chromeMock = {
       action: {
@@ -145,7 +160,9 @@ describe("background screenshot save", () => {
         sendNativeMessage: vi.fn(
           (_host: string, request: object, callback: (response: object) => void) => {
             nativeRequests.push(request);
-            callback({ protocol_version: 4, ok: true, id: "reading-1", path: "article.md" });
+            milestones.push("persisting");
+            finishPersistence = () =>
+              callback({ protocol_version: 4, ok: true, id: "reading-1", path: "article.md" });
           },
         ),
         lastError: undefined,
@@ -184,7 +201,8 @@ describe("background screenshot save", () => {
         }
 
         async convertToBlob(): Promise<Blob> {
-          return new Blob([Uint8Array.of(1, 2, 3).buffer], { type: "image/png" });
+          milestones.push("encoding");
+          return encodedPng;
         }
       },
     );
@@ -202,7 +220,20 @@ describe("background screenshot save", () => {
     });
     await vi.runAllTimersAsync();
 
+    expect(scrollY).toBe(250);
+    expect(nativeRequests).toHaveLength(0);
+    expect(milestones).toEqual(["restored", "toast:loading", "encoding"]);
+    expect(toasts).toEqual([{ status: "loading", title: "Saving screenshot…" }]);
+
+    finishEncoding(new Blob([Uint8Array.of(1, 2, 3).buffer], { type: "image/png" }));
+    await vi.waitFor(() => expect(nativeRequests).toHaveLength(1));
+    expect(toasts).toEqual([{ status: "loading", title: "Saving screenshot…" }]);
+    finishPersistence();
     await expect(response).resolves.toEqual({ accepted: true });
+    expect(toasts).toEqual([
+      { status: "loading", title: "Saving screenshot…" },
+      { status: "ok", title: "Screenshot saved" },
+    ]);
     expect(scrollOffsets).toEqual([0, 600, 900]);
     expect(chromeMock.tabs.captureVisibleTab).toHaveBeenCalledTimes(3);
     expect(visibleCaptureTimes.map((time) => time - visibleCaptureTimes[0])).toEqual([

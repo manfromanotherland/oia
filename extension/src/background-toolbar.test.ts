@@ -7,7 +7,16 @@ import type { PageCapture } from "./content.js";
 vi.mock("./log.js", () => ({ log: async () => undefined }));
 vi.mock("./full-page-screenshot.js", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./full-page-screenshot.js")>()),
-  captureFullPageScreenshot: vi.fn(async () => "data:image/png;base64,AQID"),
+  captureFullPageScreenshot: vi.fn(
+    async (dependencies: import("./full-page-screenshot.js").FullPageScreenshotDependencies) =>
+      dependencies.compose({
+        documentHeight: 600,
+        viewportWidth: 800,
+        viewportHeight: 600,
+        tiles: [],
+      }),
+  ),
+  composeFullPageScreenshot: vi.fn(async () => "data:image/png;base64,AQID"),
 }));
 
 afterEach(() => {
@@ -131,7 +140,7 @@ describe("toolbar save countdown", () => {
     expect(mock.nativeRequests[0].action).toBe("save_page");
   });
 
-  it("saves only a screenshot and shows only its result after persistence completes", async () => {
+  it("saves only a screenshot and keeps saving feedback until persistence completes", async () => {
     const mock = await harness(true);
     mock.choose("screenshot");
     await vi.waitFor(() => expect(mock.nativeRequests).toHaveLength(1));
@@ -139,7 +148,13 @@ describe("toolbar save countdown", () => {
     expect(mock.sendMessage.mock.calls.some(([, sent]) => sent.action === "capture-page")).toBe(
       false,
     );
-    expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toEqual([]);
+    expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toEqual([
+      [
+        42,
+        expect.objectContaining({ status: "loading", title: "Saving screenshot…" }),
+        { frameId: 0 },
+      ],
+    ]);
     mock.finishSave();
     await vi.waitFor(() =>
       expect(mock.sendMessage).toHaveBeenCalledWith(
@@ -149,11 +164,11 @@ describe("toolbar save countdown", () => {
       ),
     );
     expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toHaveLength(
-      1,
+      2,
     );
   });
 
-  it("reports screenshot persistence failure without showing a loading or success notification", async () => {
+  it("replaces screenshot saving feedback with a persistence error", async () => {
     const mock = await harness(true);
     mock.choose("screenshot");
     await vi.waitFor(() => expect(mock.nativeRequests).toHaveLength(1));
@@ -166,7 +181,7 @@ describe("toolbar save countdown", () => {
       ),
     );
     expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toHaveLength(
-      1,
+      2,
     );
   });
 

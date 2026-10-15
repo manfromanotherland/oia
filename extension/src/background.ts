@@ -420,7 +420,12 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
           action: SCREENSHOT_PAGE_MEASURE_ACTION,
           sessionId,
         }),
-      compose: composeFullPageScreenshot,
+      compose: async (composition) => {
+        // Scrolling has finished and the page is restored before composition.
+        // Keep feedback visible through PNG assembly, hashing, and native persistence.
+        await showToast(tabId, "loading", "Saving screenshot…");
+        return composeFullPageScreenshot(composition);
+      },
       finish: (sessionId) => finishScreenshotPage(tabId, sessionId),
     });
     const [afterCapture] = await chrome.tabs.query({ active: true, windowId: tab.windowId });
