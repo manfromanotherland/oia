@@ -36,11 +36,6 @@ struct LocalReadingVideo: View {
                 )
                 .foregroundStyle(.white)
                 .accessibilityIdentifier(A11y.Detail.videoUnavailable)
-            } else {
-                ProgressView("Loading video…")
-                    .controlSize(.large)
-                    .tint(.white)
-                    .foregroundStyle(.white)
             }
         }
         .task(id: loadKey) {

@@ -243,7 +243,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   view stores a per-device preference, retained across navigation and reopening detail. Articles
   without a web origin show Saved without changing the preference. Original loads the live origin
   in an embedded WebView when selected. Switching preserves the saved reader and original page's
-  position. Failed loads offer Try Again and Open in Browser; Saved
+  position. Detail views show no loading indicators, labels, animated backgrounds, or extra toolbar
+  status items while article content or local media arrives. Failed loads offer Try Again and
+  Open in Browser; Saved
   remains available offline. In-page links scroll Original; links to other pages open in the system
   browser. Images offer **Fit** and **Original Size** in the toolbar. Fit shows the whole local asset
   within the window; Original Size

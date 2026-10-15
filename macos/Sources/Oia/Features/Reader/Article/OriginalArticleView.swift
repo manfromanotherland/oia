@@ -23,11 +23,6 @@ struct OriginalArticleView: View {
                     Button("Try Again") { page.load() }
                     Link("Open in Browser", destination: page.url)
                 }
-            } else if page.isLoading {
-                ProgressView()
-                    .controlSize(.small)
-                    .accessibilityLabel("Loading original")
-                    .allowsHitTesting(false)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -58,13 +58,13 @@ struct ArticleDetailView: View {
         Group {
             if appState.selectedId != nil {
                 if isLoading {
-                    ProgressView()
+                    Color(nsColor: .textBackgroundColor)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else if let row {
                     articleView(row: row)
                 } else if !isLoading {
                     // selectedId set but row not loaded yet — happens on first render
-                    ProgressView()
+                    Color(nsColor: .textBackgroundColor)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             } else {

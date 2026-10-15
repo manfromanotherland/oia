@@ -65,9 +65,7 @@ struct ImageLightbox: View {
         } else if failed {
             failureView
         } else {
-            ProgressView()
-                .controlSize(.large)
-                .tint(.white)
+            Color.clear
         }
     }
 

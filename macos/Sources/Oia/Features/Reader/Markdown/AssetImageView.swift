@@ -86,7 +86,7 @@ struct AssetImageView: View {
         } else if failed {
             placeholder
         } else {
-            ProgressView()
+            Color.clear
                 .frame(maxWidth: .infinity, minHeight: 80)
         }
     }

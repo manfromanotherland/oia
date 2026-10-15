@@ -30,8 +30,7 @@ struct OiaImageDetailView: View {
                     .padding(Self.imagePadding)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                ProgressView("Loading image")
-                    .controlSize(.small)
+                Color.clear
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
