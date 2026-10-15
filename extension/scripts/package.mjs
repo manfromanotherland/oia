@@ -17,7 +17,16 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 // Everything the packaged extension loads at runtime. Anything not listed here
 // (src/, node_modules/, package files, *.pem) stays out of the zip.
-const CONTENTS = ["manifest.json", "dist", "icons", "popup.html", "options.html", "install.html"];
+const CONTENTS = [
+  "manifest.json",
+  "dist/background.js",
+  "dist/content.js",
+  "dist/options.js",
+  "dist/page-video-main.js",
+  "icons",
+  "options.html",
+  "install.html",
+];
 
 function fail(message) {
   console.error(`✗ ${message}`);
@@ -51,6 +60,7 @@ function stageRuntime(directory, manifest) {
   mkdirSync(directory, { recursive: true });
   for (const entry of CONTENTS) {
     if (entry !== "manifest.json") {
+      mkdirSync(dirname(join(directory, entry)), { recursive: true });
       cpSync(join(root, entry), join(directory, entry), { recursive: true });
     }
   }

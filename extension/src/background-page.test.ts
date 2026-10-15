@@ -69,7 +69,12 @@ async function harness(
     return capture;
   });
   vi.stubGlobal("chrome", {
-    action: { setIcon: vi.fn(), setBadgeText: vi.fn(), setBadgeBackgroundColor: vi.fn() },
+    action: {
+      onClicked: event(),
+      setIcon: vi.fn(),
+      setBadgeText: vi.fn(),
+      setBadgeBackgroundColor: vi.fn(),
+    },
     commands: { onCommand: event() },
     contextMenus: { onClicked: event(), removeAll: vi.fn(), create: vi.fn() },
     notifications: { onClicked: event(), create: vi.fn(), clear: vi.fn() },

@@ -29,9 +29,10 @@ describe("browser packaging", () => {
         writeFileSync(join(fixture, `dist/${script}.js`), "/* bundled runtime */");
       }
       cpSync(resolve(root, "icons"), join(fixture, "icons"), { recursive: true });
-      for (const page of ["popup.html", "options.html", "install.html"]) {
+      for (const page of ["options.html", "install.html"]) {
         cpSync(resolve(root, page), join(fixture, page));
       }
+      writeFileSync(join(fixture, "popup.html"), "Do not ship the removed toolbar popup.");
       writeFileSync(join(fixture, "README.md"), "Do not ship project documentation.");
       writeFileSync(join(fixture, ".env"), "Do not ship environment files.");
       for (const directory of ["unpacked", "unpacked-firefox"]) {
@@ -76,7 +77,9 @@ describe("browser packaging", () => {
         const files = execFileSync("unzip", ["-Z1", archive], { encoding: "utf8" }).split("\n");
         const background = manifest.background.service_worker ?? manifest.background.scripts[0];
         expect(files).toContain(background);
-        expect(files).toContain(manifest.action.default_popup);
+        expect(manifest.action).not.toHaveProperty("default_popup");
+        expect(files).not.toContain("popup.html");
+        expect(files).not.toContain("dist/popup.js");
         expect(files).toContain(manifest.options_ui.page);
         for (const icon of Object.values(manifest.icons)) expect(files).toContain(icon);
         expect(files).not.toContain("README.md");

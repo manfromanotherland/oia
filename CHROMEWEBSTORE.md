@@ -1,6 +1,6 @@
 # Chrome Web Store listing — Save to Óia
 
-Last updated: 2026-10-12
+Last updated: 2026-10-15
 
 Status: local submission draft. No store submission, dashboard update, public privacy-policy
 hosting, or publisher identity has been verified by this document.
@@ -16,7 +16,7 @@ hosting, or publisher identity has been verified by this document.
 ```text
 Save pages, screenshots, images, videos, and selected text to your private Óia library on your Mac.
 
-Choose Save to keep a page as an article or link automatically. Choose Save as screenshot for one long image of the page. Right-click an image, video, or text selection and choose Save to Óia. Selected text becomes a highlight on its source article, or a quote when quotation evidence is present.
+Click the Óia toolbar button to show Saving page… with a three-second countdown. The in-page save message offers Screenshot instead. Nothing is saved during the countdown. When it ends, Óia saves the page as an article or link automatically; the screenshot action saves one long image instead. The keyboard shortcut and a page save from the context menu use the same countdown. Right-click an image, video, or text selection and choose Save to Óia. Selected text becomes a highlight on its source article, or a quote when quotation evidence is present.
 
 Install and open the Óia macOS app, choose your library folder, and then save from the browser. Captured content and media become ordinary files you own. The companion app and native host are required; this extension does not save to a cloud account.
 
@@ -42,9 +42,10 @@ Report an issue: https://github.com/manfromanotherland/oia/issues
 | Required screenshot | 1280 × 800 or 640 × 400 | Pending; user captures and reviews current behavior | Not supplied |
 | Optional promotional tile | 440 × 280 | Not supplied | Not supplied |
 
-The required screenshot should show the current **Save** and **Save as screenshot** menu and a
-real saved result. Do not reuse older screenshots with three menu choices. Graphics have not been
-visually checked as part of this preparation.
+Refresh the required screenshot to show the in-page toast with **Saving page…**,
+**Screenshot instead** and its three-second countdown bar, plus a real saved
+result. Do not reuse screenshots of the removed toolbar popup. Graphics have not been visually
+checked as part of this preparation.
 
 ## Permissions justification
 
@@ -116,6 +117,7 @@ submission.
 |---------|------|---------|--------|
 | 0.1.0 | 2026-10-11 | Automatic Save, explicit screenshot capture, selected-media and text saves; separate Chromium and Firefox packages; local privacy disclosures. | Local draft; not submitted |
 | 0.1.0 | 2026-10-12 | Fixed automatic product recognition and reclassification of previously saved articles. | Local draft update; not submitted |
+| 0.1.0 | 2026-10-15 | Replaced the toolbar popup with an in-page Saving page… toast and three-second countdown. Screenshot instead chooses a screenshot; otherwise the page saves when the countdown ends. Keyboard and context-menu page saves use the same countdown. | Local draft update; not submitted |
 
 This records the current local manifest version, not a verified published version. Confirm the
 existing listing's version and bump `extension/manifest.json` if required before uploading.

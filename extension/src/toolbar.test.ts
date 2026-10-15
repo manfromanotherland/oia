@@ -16,18 +16,12 @@ import {
   toolbarSaveMessage,
 } from "./toolbar.js";
 
-describe("toolbar popup", () => {
-  it("renders Save and Save as screenshot as native buttons in order", () => {
-    const html = readFileSync(resolve(process.cwd(), "popup.html"), "utf8");
-    const popup = new DOMParser().parseFromString(html, "text/html");
-    const buttons = Array.from(popup.querySelectorAll<HTMLButtonElement>("button[data-save-kind]"));
+describe("toolbar save", () => {
+  it("lets toolbar clicks reach the save handler without opening a browser popup", () => {
+    const manifest = JSON.parse(readFileSync(resolve(process.cwd(), "manifest.json"), "utf8"));
 
-    expect(buttons.map((button) => button.textContent?.trim())).toEqual([
-      "Save",
-      "Save as screenshot",
-    ]);
-    expect(buttons.map((button) => button.dataset.saveKind)).toEqual(["page", "screenshot"]);
-    expect(buttons.every((button) => button.type === "button")).toBe(true);
+    expect(manifest.action).toMatchObject({ default_title: "Save to Óia" });
+    expect(manifest.action).not.toHaveProperty("default_popup");
   });
 
   it("builds and validates typed toolbar messages", () => {

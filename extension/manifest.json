@@ -34,7 +34,6 @@
   },
   "action": {
     "default_title": "Save to Óia",
-    "default_popup": "popup.html",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",

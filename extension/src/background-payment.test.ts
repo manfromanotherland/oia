@@ -54,6 +54,7 @@ describe("payment-required saves", () => {
       const visibleCaptureTimes: number[] = [];
       const chromeMock = {
         action: {
+          onClicked: event(),
           setIcon: vi.fn(async () => undefined),
           setBadgeText: vi.fn(async () => undefined),
           setBadgeBackgroundColor: vi.fn(async () => undefined),

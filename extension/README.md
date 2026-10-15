@@ -10,10 +10,11 @@
 
 # Browser extension
 
-The Manifest V3 browser extension for **Óia**, the local-first native macOS library. Its toolbar
-offers **Save** and **Save as screenshot**. With **Save**, the engine uses the page's content and
-source to choose how to keep it, as a cleaned article or a lightweight link. **Save as screenshot**
-captures one long screenshot of the full scrollable page. The context menu also saves right-clicked
+The Manifest V3 browser extension for **Óia**, the local-first native macOS library. Clicking its
+toolbar button shows the in-page toast with **Saving page…**, **Screenshot instead**, and a three-second countdown bar. Nothing is saved until the countdown ends;
+then the engine uses the page's content and source to keep it as a cleaned article or a lightweight
+link. Choosing the screenshot action saves one long screenshot of the full scrollable page instead.
+The context menu also saves right-clicked
 images/videos and selected-text quotes. Article and link saves
 retain live page metadata, social previews, and favicons as local assets. Captures travel through the
 `is.edmundo.cuttings.host` native messaging host and become Markdown plus local assets in your
@@ -43,7 +44,8 @@ npm run package
 ```
 
 Builds a fresh bundle, then copies only runtime files
-(`manifest.json`, `dist/`, `icons/`, `popup.html`, `options.html`, `install.html`) into these outputs:
+(`manifest.json`, the four runtime bundles in `dist/`, `icons/`, `options.html`, `install.html`)
+into these outputs:
 
 - `unpacked/` — a stable clean directory for **Load unpacked** in Dia/Chrome during development.
 - `unpacked-firefox/` — the Firefox build for **Load Temporary Add-on**.
@@ -83,9 +85,11 @@ manual checks.
 After editing source, re-run `npm run package` and click the **reload ↻** icon on the extension
 card. Dia/Chrome keeps the same unpacked path and stable development extension ID.
 
-Click the Óia toolbar button and choose **Save** or **Save as screenshot**. **Save** lets the engine
-choose how to keep the page. **Save as screenshot** captures the full scrollable page as one long
-screenshot. The keyboard shortcut performs the same **Save** action.
+Click the Óia toolbar button to show **Saving page…** in the in-page toast. The three-second
+countdown gives you time to choose **Screenshot instead**. When it ends,
+Óia saves the page. Choosing the screenshot action saves the full scrollable page as one long
+image instead. Nothing is saved during the countdown. The keyboard shortcut and a page save
+from the context menu use the same countdown.
 
 On app-style pages, Óia can follow one scrolling surface that fills the browser viewport. If a
 page has multiple large, independently scrolling panes, capture stops with an error rather than

@@ -59,6 +59,7 @@ import { isSamePage, isWebPage, PageChangedError } from "./capture-context.js";
 import { assertMessageBudget, fitMessageImages, MessageBudgetError } from "./message-budget.js";
 
 const NOTIF_HOST_MISSING = "host-missing";
+const SAVE_CHOICE_DURATION_MS = 3000;
 
 /** Cap on the total decoded image bytes inlined into one save message. Images
  *  beyond this stay as remote-URL placeholders so a save can't buffer unbounded. */
@@ -400,6 +401,7 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
 
   let capture: PageCapture;
   try {
+    await showToast(tabId, "loading", "Saving screenshot…");
     await waitForVisibleTabCaptureWindow();
     const dataUrl = await captureFullPageScreenshot({
       begin: () =>
@@ -442,7 +444,6 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
   }
 
   await log("info", "Save triggered", { kind: "screenshot", url: tab.url });
-  await showToast(tabId, "loading", "Saving screenshot…");
   return saveCapture(tab, capture, { item: "screenshot" });
 }
 
@@ -898,6 +899,40 @@ function markSaved(tabId: number, tabUrl: string, canonicalUrl: string): void {
 
 // ── Triggers ──────────────────────────────────────────────────────────────────
 
+async function savePageWithScreenshotOption(tab: chrome.tabs.Tab): Promise<void> {
+  try {
+    if (tab.id === undefined || !isWebPage(tab.url)) {
+      throw new Error("This page isn't available to Óia. Open a regular web page and try again.");
+    }
+    // The content script owns the short timer and replies on the same channel.
+    // No file is written until a single choice settles; the worker needs no timer/state.
+    const choice = await requestContentResponse<{ kind: "page" | "screenshot" | "cancel" }>(
+      tab.id,
+      {
+        action: "save-choice",
+        status: "loading",
+        title: "Saving page…",
+        cta: {
+          label: "Screenshot instead",
+          command: "save-screenshot",
+          expiresAt: Date.now() + SAVE_CHOICE_DURATION_MS,
+        },
+      },
+    );
+    if (!choice || choice.kind === "cancel") return;
+    if (!(await isCurrentTabPage(tab))) return;
+    if (choice.kind === "screenshot") await saveScreenshot(tab);
+    else if (choice.kind === "page") await savePage(tab);
+  } catch (error) {
+    if (tab.id !== undefined) await showCaptureFailure(tab.id, "page", error);
+    else await log("error", "Save failed without a source tab", { error });
+  }
+}
+
+chrome.action.onClicked.addListener((tab) => {
+  void savePageWithScreenshotOption(tab);
+});
+
 async function handleToolbarSave(kind: ToolbarSaveKind, tabId: number): Promise<SaveOutcome> {
   let tab: chrome.tabs.Tab | undefined;
   try {
@@ -927,7 +962,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 
   const target = contextCaptureTarget(info);
   if (target.kind === "article") {
-    void savePage(tab);
+    void savePageWithScreenshotOption(tab);
   } else if (target.kind === "selection") {
     void saveSelection(tab, target.text, info.frameId ?? 0, info.frameUrl ?? tab.url ?? "");
   } else if (target.mediaUrl) {
@@ -938,7 +973,7 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 chrome.commands.onCommand.addListener((command) => {
   if (command === "save-page") {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (tab) void savePage(tab);
+      if (tab) void savePageWithScreenshotOption(tab);
     });
   }
 });
@@ -995,8 +1030,7 @@ chrome.notifications.onClicked.addListener((id) => {
   }
 });
 
-// The "How to install" button on the in-page host-missing toast; the content
-// script can't open an extension page, so it asks the worker to.
+// Toast actions use the worker for browser APIs and native persistence.
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   if (isPreparePageVideoBridgeMessage(msg)) {
     const tabId = _sender.tab?.id;
@@ -1039,8 +1073,8 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         });
       },
     );
-    // Respond after capture and native persistence so the popup can show dispatch
-    // failures. Worker lifetime during streaming is owned by the native port.
+    // Respond after capture and native persistence so callers can show failures.
+    // Worker lifetime during streaming is owned by the native port.
     return true;
   }
 

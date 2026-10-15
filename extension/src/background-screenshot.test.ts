@@ -32,7 +32,12 @@ describe("background screenshot save", () => {
     const tab = { id: 42, url: "https://chromewebstore.google.com/detail/extension", windowId: 7 };
     const sendNativeMessage = vi.fn();
     vi.stubGlobal("chrome", {
-      action: { setIcon: vi.fn(), setBadgeText: vi.fn(), setBadgeBackgroundColor: vi.fn() },
+      action: {
+        onClicked: event(),
+        setIcon: vi.fn(),
+        setBadgeText: vi.fn(),
+        setBadgeBackgroundColor: vi.fn(),
+      },
       commands: { onCommand: event() },
       contextMenus: { onClicked: event(), removeAll: vi.fn(), create: vi.fn() },
       notifications: { onClicked: event() },
@@ -115,6 +120,7 @@ describe("background screenshot save", () => {
 
     const chromeMock = {
       action: {
+        onClicked: event(),
         setIcon: vi.fn(async () => undefined),
         setBadgeText: vi.fn(async () => undefined),
         setBadgeBackgroundColor: vi.fn(async () => undefined),

@@ -26,14 +26,15 @@ export interface CaptureFailure {
   error_code?: string;
 }
 
-/** An optional action button on a toast. Clicking it messages the background
- *  worker (which alone can open extension pages) and dismisses the toast. */
-export interface ToastCta {
-  label: string;
-  command: "open-install";
-}
+/** An optional action handled by the background worker. Screenshot offers have
+ *  one fixed deadline, including when an existing toast updates in place. */
+export type ToastCta =
+  | { label: string; command: "open-install" }
+  | { label: string; command: "save-screenshot"; expiresAt: number };
 
-/** In-page toast request sent by the background worker after a save attempt. */
+export type SaveChoice = "page" | "screenshot" | "cancel";
+
+/** In-page toast request for a pending save or its result. */
 export interface ToastMessage {
   action: "toast";
   status: "ok" | "error" | "loading";
@@ -235,6 +236,11 @@ export function initializeContentScript(): void {
       return true;
     }
 
+    if (msg?.action === "save-choice") {
+      showToast({ ...msg, action: "toast" } as ToastMessage, (kind) => sendResponse({ kind }));
+      return true;
+    }
+
     if (msg?.action === "toast") {
       showToast(msg as ToastMessage);
     }
@@ -244,6 +250,7 @@ export function initializeContentScript(): void {
     runtime,
     dispose: () => {
       document.removeEventListener("contextmenu", onContextMenu, true);
+      if (pendingChoiceHost) removeToast(pendingChoiceHost);
       try {
         runtime.removeListener?.(listener);
       } catch {
@@ -371,22 +378,73 @@ export async function captureStandaloneMediaRequest(
 
 const TOAST_HOST_ID = "oia-toast-host";
 
+interface ToastLifecycle {
+  timers: Set<ReturnType<typeof setTimeout>>;
+  stopAnimationListener?: () => void;
+  cancelChoice?: () => void;
+}
+
+const toastLifecycles = new WeakMap<HTMLElement, ToastLifecycle>();
+let pendingChoiceHost: HTMLElement | undefined;
+
+function clearToastLifecycle(host: HTMLElement): void {
+  const lifecycle = toastLifecycles.get(host);
+  if (!lifecycle) return;
+  for (const timer of lifecycle.timers) clearTimeout(timer);
+  lifecycle.stopAnimationListener?.();
+  toastLifecycles.delete(host);
+  lifecycle.cancelChoice?.();
+}
+
+function beginToastLifecycle(host: HTMLElement): ToastLifecycle {
+  clearToastLifecycle(host);
+  const lifecycle: ToastLifecycle = { timers: new Set() };
+  toastLifecycles.set(host, lifecycle);
+  return lifecycle;
+}
+
+function removeToast(host: HTMLElement): void {
+  clearToastLifecycle(host);
+  host.remove();
+}
+
+function toastTimeout(
+  host: HTMLElement,
+  lifecycle: ToastLifecycle,
+  callback: () => void,
+  delay: number,
+): void {
+  const timer = setTimeout(() => {
+    lifecycle.timers.delete(timer);
+    if (toastLifecycles.get(host) === lifecycle) callback();
+  }, delay);
+  lifecycle.timers.add(timer);
+}
+
 /**
  * Show or update the toast. If a loading toast is already present and the new
  * status is ok/error, the existing toast transitions in place instead of being
  * replaced. If the loading toast was already dismissed by the user, a fresh
  * toast is created with the result status.
  */
-export function showToast({ status, title, detail, cta }: ToastMessage): void {
+export function showToast(
+  { status, title, detail, cta }: ToastMessage,
+  onChoice?: (kind: SaveChoice) => void,
+): void {
+  // A late update from an earlier save must not interrupt the current choice.
+  if (pendingChoiceHost && !onChoice) return;
   const existingHost = document.getElementById(TOAST_HOST_ID) as HTMLElement | null;
+  if (pendingChoiceHost && pendingChoiceHost !== existingHost) {
+    clearToastLifecycle(pendingChoiceHost);
+  }
 
   if (status !== "loading" && existingHost?.dataset.status === "loading") {
     existingHost.dataset.status = status;
-    updateToast(existingHost, status, title, detail, cta);
+    updateToast(existingHost, status, title, detail, cta, onChoice);
     return;
   }
 
-  existingHost?.remove();
+  if (existingHost) removeToast(existingHost);
 
   const isLoading = status === "loading";
 
@@ -394,7 +452,12 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
   host.id = TOAST_HOST_ID;
   host.dataset.status = status;
   host.style.cssText =
-    "all: initial; position: fixed; top: 16px; right: 16px; z-index: 2147483647;";
+    "all: initial; position: fixed; inset: 16px 16px auto auto; margin: 0; padding: 0; border: 0; background: transparent; overflow: visible; z-index: 2147483647;";
+  // The top layer keeps the toast above page dialogs and stacking contexts.
+  // Older browsers retain the same fixed-position fallback.
+  const supportsPopover = typeof host.showPopover === "function";
+  if (supportsPopover) host.setAttribute("popover", "manual");
+  const lifecycle = beginToastLifecycle(host);
 
   const root = host.attachShadow({ mode: "open" });
   // Inline the app's eye mark so it works on every page without a web-accessible asset.
@@ -426,6 +489,7 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
       @keyframes oia-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
       @keyframes oia-out { to { opacity: 0; transform: translateY(-6px); } }
       @keyframes oia-spin { to { transform: rotate(360deg); } }
+      @keyframes oia-countdown { to { transform: scaleX(0); } }
       .toast {
         display: flex; align-items: center; gap: 11px;
         box-sizing: border-box; width: min(340px, calc(100vw - 32px));
@@ -486,13 +550,27 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
       .close:focus-visible, .cta:focus-visible {
         outline: 2px solid var(--ink); outline-offset: 2px;
       }
+      .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
       .cta {
-        margin-top: 8px; cursor: pointer;
+        cursor: pointer;
+        min-height: 28px;
         background: var(--action); color: var(--action-text); border: none;
         border-radius: 7px; padding: 7px 12px;
         font: 600 12px/1 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
       }
       .cta:hover { opacity: 0.84; }
+      .cta:disabled { cursor: wait; opacity: 0.6; }
+      .countdown {
+        height: 2px; margin-top: 8px; overflow: hidden;
+        background: var(--line); border-radius: 1px;
+      }
+      .countdown::after {
+        content: ""; display: block; height: 100%; background: var(--ink);
+        transform-origin: left;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        .countdown::after { animation: oia-countdown var(--countdown-duration) linear forwards; }
+      }
       @media (prefers-reduced-motion: reduce) {
         .toast, .toast.hide, .spinner::after { animation: none; }
       }
@@ -503,6 +581,8 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
         .close, .detail { color: CanvasText; }
         .close:focus-visible, .cta:focus-visible { outline-color: Highlight; }
         .cta { color: HighlightText; background: Highlight; }
+        .countdown { background: Canvas; outline: 1px solid CanvasText; }
+        .countdown::after { background: CanvasText; }
       }
     </style>
     <div class="toast" role="${status === "error" ? "alert" : "status"}" aria-live="${status === "error" ? "assertive" : "polite"}">
@@ -532,33 +612,92 @@ export function showToast({ status, title, detail, cta }: ToastMessage): void {
   // Page-derived strings go in via textContent, never innerHTML, to avoid injection.
   root.querySelector(".title")!.textContent = title;
   if (detail) root.querySelector(".detail")!.textContent = detail;
-  root.querySelector(".close")!.addEventListener("click", () => host.remove());
-  renderCta(root, host, cta);
+  root.querySelector(".close")!.addEventListener("click", () => {
+    // Dismissing the notification leaves the pending default save scheduled.
+    if (toastLifecycles.get(host)?.cancelChoice) host.remove();
+    else removeToast(host);
+  });
 
   (document.body ?? document.documentElement).appendChild(host);
+  if (supportsPopover) {
+    try {
+      host.showPopover();
+    } catch {
+      host.removeAttribute("popover");
+    }
+  }
+  renderCta(root, host, lifecycle, cta, onChoice);
 
-  // A toast with an action stays until the user acts on or dismisses it, the
-  // way a "needs your attention" prompt should.
+  // Install prompts persist; screenshot offers use their fixed worker deadline.
   if (!isLoading && !cta) {
-    scheduleDismiss(host);
+    scheduleDismiss(host, lifecycle);
   }
 }
 
 /** Add (or clear) the action button and wire its click to the background. */
-function renderCta(root: ShadowRoot, host: HTMLElement, cta?: ToastCta): void {
-  root.querySelector(".cta")?.remove();
+function renderCta(
+  root: ShadowRoot,
+  host: HTMLElement,
+  lifecycle: ToastLifecycle,
+  cta?: ToastCta,
+  onChoice?: (kind: SaveChoice) => void,
+): void {
+  root.querySelector(".actions")?.remove();
+  root.querySelector(".countdown")?.remove();
   if (!cta) return;
 
+  const actions = document.createElement("div");
+  actions.className = "actions";
   const button = document.createElement("button");
   button.className = "cta";
   button.type = "button";
   button.textContent = cta.label;
+  actions.appendChild(button);
+  root.querySelector(".text")!.appendChild(actions);
+
+  if (cta.command === "open-install") {
+    button.addEventListener("click", () => {
+      // The content script can't open an extension page; the worker does it.
+      void chrome.runtime.sendMessage({ action: "toast-cta", command: cta.command });
+      removeToast(host);
+    });
+    return;
+  }
+
+  pendingChoiceHost = host;
+  let decided = false;
+  const choose = (kind: SaveChoice) => {
+    if (decided) return;
+    decided = true;
+    if (pendingChoiceHost === host) pendingChoiceHost = undefined;
+    lifecycle.cancelChoice = undefined;
+    button.disabled = true;
+    for (const timer of lifecycle.timers) clearTimeout(timer);
+    lifecycle.timers.clear();
+    actions.remove();
+    root.querySelector(".countdown")?.remove();
+    if (kind === "cancel" && toastLifecycles.get(host) === lifecycle) removeToast(host);
+    else if (kind === "screenshot")
+      root.querySelector(".title")!.textContent = "Saving screenshot…";
+    if (!host.isConnected) clearToastLifecycle(host);
+    onChoice?.(kind);
+  };
+  lifecycle.cancelChoice = () => choose("cancel");
   button.addEventListener("click", () => {
-    // The content script can't open an extension page; the worker does it.
-    void chrome.runtime.sendMessage({ action: "toast-cta", command: cta.command });
-    host.remove();
+    choose(Date.now() >= cta.expiresAt ? "page" : "screenshot");
   });
-  root.querySelector(".text")!.appendChild(button);
+
+  const remaining = cta.expiresAt - Date.now();
+  if (remaining <= 0) {
+    choose("page");
+    return;
+  }
+  const countdown = document.createElement("div");
+  countdown.className = "countdown";
+  countdown.setAttribute("aria-hidden", "true");
+  countdown.style.setProperty("--countdown-duration", `${remaining}ms`);
+  root.querySelector(".text")!.appendChild(countdown);
+  toastTimeout(host, lifecycle, () => choose("page"), remaining);
 }
 
 function updateToast(
@@ -567,18 +706,21 @@ function updateToast(
   title: string,
   detail?: string,
   cta?: ToastCta,
+  onChoice?: (kind: SaveChoice) => void,
 ): void {
+  const lifecycle = beginToastLifecycle(host);
+  host.dataset.status = status;
   const root = host.shadowRoot!;
   const toastEl = root.querySelector<HTMLElement>(".toast")!;
   toastEl.setAttribute("role", status === "error" ? "alert" : "status");
   toastEl.setAttribute("aria-live", status === "error" ? "assertive" : "polite");
 
-  const spinner = root.querySelector(".spinner");
-  if (spinner) {
+  const indicator = root.querySelector(".spinner, .badge");
+  if (indicator) {
     const badge = document.createElement("span");
     badge.className = `badge badge--${status}`;
     badge.textContent = status === "ok" ? "✓" : "!";
-    spinner.replaceWith(badge);
+    indicator.replaceWith(badge);
   }
 
   root.querySelector(".title")!.textContent = title;
@@ -596,20 +738,28 @@ function updateToast(
     detailEl?.remove();
   }
 
-  renderCta(root, host, cta);
+  renderCta(root, host, lifecycle, cta, onChoice);
 
-  // Keep an actionable toast on screen until the user responds to it.
-  if (!cta) scheduleDismiss(host);
+  if (!cta) scheduleDismiss(host, lifecycle);
 }
 
-function scheduleDismiss(host: HTMLElement): void {
+function scheduleDismiss(host: HTMLElement, lifecycle: ToastLifecycle): void {
+  toastTimeout(host, lifecycle, () => dismissToast(host, lifecycle), 3200);
+}
+
+function dismissToast(host: HTMLElement, lifecycle: ToastLifecycle): void {
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    removeToast(host);
+    return;
+  }
   const toast = host.shadowRoot!.querySelector(".toast")!;
-  const dismiss = () => host.remove();
-  setTimeout(() => {
-    toast.classList.add("hide");
-    toast.addEventListener("animationend", dismiss, { once: true });
-    setTimeout(dismiss, 400); // fallback in case animationend doesn't fire
-  }, 3200);
+  const dismiss = (event: Event) => {
+    if (event.target === toast) removeToast(host);
+  };
+  toast.classList.add("hide");
+  toast.addEventListener("animationend", dismiss);
+  lifecycle.stopAnimationListener = () => toast.removeEventListener("animationend", dismiss);
+  toastTimeout(host, lifecycle, () => removeToast(host), 400);
 }
 
 function captureImageUrls(

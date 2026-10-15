@@ -29,7 +29,12 @@ async function harness() {
   });
   const executeScript = vi.fn(async () => []);
   vi.stubGlobal("chrome", {
-    action: { setIcon: vi.fn(), setBadgeText: vi.fn(), setBadgeBackgroundColor: vi.fn() },
+    action: {
+      onClicked: event(),
+      setIcon: vi.fn(),
+      setBadgeText: vi.fn(),
+      setBadgeBackgroundColor: vi.fn(),
+    },
     commands: { onCommand: event() },
     contextMenus: {
       onClicked: {

@@ -29,9 +29,12 @@ index is a disposable, per-device cache.
                                               SQLite + FTS5 (per-device, NOT synced)
 ```
 
-The extension toolbar offers **Save** and **Save as screenshot**. Save supplies cleaned content,
+Clicking the extension toolbar shows **Saving page…** in the existing in-page toast with
+**Screenshot instead** and a three-second countdown bar. Nothing persists
+during the countdown. Its expiry saves the page; the screenshot action chooses a full-page image
+instead. Keyboard and context-menu page saves use the same countdown. Page saves supply cleaned content,
 live metadata, and raw prose measurements to Rust, which chooses a full article or lightweight
-link and applies recognized-source and product/book/music/movie classification. Save as screenshot
+link and applies recognized-source and product/book/music/movie classification. The screenshot action
 captures the full scrollable page as one long screenshot. The context menu also captures a right-clicked
 image, saves a right-clicked video as a local movie, or saves selected text. Rust classifies new
 browser selections as article highlights by default and quotes only with enclosing quotation
@@ -108,7 +111,7 @@ Rust core. Keeping them in one Git history lets protocol and format changes land
 every affected component.
 
 ### Browser extension (`extension`)
-- **Responsibility:** expose automatic Save and explicit full-page screenshot actions;
+- **Responsibility:** stage page saves behind a three-second countdown with a full-page screenshot alternative;
   capture a selected image; record a selected video and poster; or capture selected
   text as a quote.
   Every path produces Markdown plus origin metadata and any local image bytes needed by the card.
