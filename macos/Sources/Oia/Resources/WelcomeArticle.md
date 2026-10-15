@@ -10,7 +10,7 @@ Install the Óia browser extension from this project. Use its toolbar button to 
 
 Everything you save lands on one visual board. Use the toolbar to search, filter by kind or tag, or change the card size.
 
-Click any card to open it. Use **←** and **→** to move through nearby ideas without reaching for the mouse.
+Double-click a card, or select it and press **Return**, to open it. Use **←** and **→** to move through nearby ideas without reaching for the mouse. Press **⌘O** to open the source in your browser.
 
 ## Highlights
 
@@ -22,11 +22,11 @@ Here is one now, so you can see how it looks:
 
 ## Search
 
-Press **⌘K** to search. It looks through everything you have saved and puts the closest matches first.
+Press **⌘F** to search. It looks through everything you have saved and puts the closest matches first.
 
 ## Tags
 
-With an item open, press **⌘⇧T** to add tags. Tags help you group ideas by project, topic, or anything else that makes sense to you.
+Press **⌘T** to add tags to selected cards. With an item open, the same shortcut focuses its tag field. Tags help you group ideas by project, topic, or anything else that makes sense to you.
 
 ## Typography and appearance
 

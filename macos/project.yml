@@ -114,6 +114,7 @@ targets:
       - path: Sources/Oia/State/BoardSearch.swift
       - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
       - path: Sources/Oia/Platform/TextEditing/TextEditingMonitor.swift
+      - path: Sources/Oia/Platform/TextEditing/ItemCopyKeyMonitor.swift
       - path: Sources/Oia/Platform/Web/OriginalArticleNavigation.swift
       - path: Sources/Oia/Platform/Web/OriginalArticlePage.swift
       - path: Sources/Oia/Platform/Web/OriginalArticleWebView.swift

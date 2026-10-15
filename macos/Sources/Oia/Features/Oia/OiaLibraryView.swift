@@ -76,6 +76,8 @@ struct OiaLibraryView: View {
             deleteDialogMessage(for: rows)
         }
         .background {
+            ItemCopyKeyMonitor(onCopy: copySelectedReading)
+                .frame(width: 0, height: 0)
             ReadingSidebarTitlebarAccessory(
                 isPresented: presentedReading != nil,
                 showsInspector: showsInspector,
@@ -110,6 +112,15 @@ private struct SearchQueryChangeModifier: ViewModifier {
 }
 
 extension OiaLibraryView {
+    private func copySelectedReading() -> Bool {
+        guard boardTagRequest == nil, appState.pendingDelete == nil,
+              let row = presentedReading ?? singleSelectedRow,
+              ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
+        else { return false }
+        ReadingClipboard.copyFile(row, libraryURL: appState.libraryURL)
+        return true
+    }
+
     private func toggleInspector() {
         DispatchQueue.main.async {
             withAnimation(accessibilityReduceMotion ? nil : .smooth(duration: 0.26)) {
@@ -372,6 +383,10 @@ extension OiaLibraryView {
                 .onKeyPress(
                     keys: [
                         ShortcutCatalog.copy.primary.key,
+                        ShortcutCatalog.openSource.primary.key,
+                        ShortcutCatalog.decreaseCardSize.primary.key,
+                        ShortcutCatalog.increaseCardSize.primary.key,
+                        "=",
                         ShortcutCatalog.selectAll.primary.key,
                         ShortcutCatalog.openWithReturn.key,
                         ShortcutCatalog.focusSearchWithSlash.key,

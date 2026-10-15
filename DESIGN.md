@@ -131,7 +131,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   visual terms remain search facts rather than separate Tag suggestions. Board order is fixed:
   newest saved first when browsing and relevance when searching.
 - `⌘F` focuses the native search field; `/` does the same while the board has keyboard focus.
-  `⌘1`–`⌘6` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle the scopes.
+  On the board, `⌘1`–`⌘6` select All through Quotes in toolbar order, and `⌘[` / `⌘]` cycle
+  the scopes. Detail uses `⌘1` and `⌘2` for its preview modes instead.
 
 ### Masonry cards
 
@@ -188,17 +189,19 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   focused card into view; Shift-click and Shift-arrow extend the selection from its anchor.
   Command-click toggles an individual card; Command-Shift-click adds a range to the existing
   selection. `⌘A` selects every card in the current board scope and search results.
-- Double-click, `⌘O`, or Return opens the focused card. Space opens system Quick Look for its local
+- Double-click or Return opens the focused card. `⌘O` opens its source in the system browser.
+  Space opens system Quick Look for its local
   media asset, falling back to the source-of-truth `article.md`; Quick Look never receives a remote
   origin URL. Pinching changes the same five card-size levels as the toolbar and existing keyboard
-  zoom commands.
-- The card context menu's **Add Tag…** action and `⌘⇧T` open an **Add tags** dialog for the
+  zoom commands. On the board, `⌘-` decreases card size and `⌘+` increases it; `⌘=` also increases
+  card size. These commands do not change card size from detail.
+- The card context menu's **Add Tag…** action and `⌘T` open an **Add tags** dialog for the
   selected cards. The board toolbar has no tag control.
   Its inline field uses the same library Tag suggestions as the Inspector; clicking a suggestion
   completes the field. The field receives initial keyboard focus. Suggestions float below the
   field without changing the dialog’s size. The dialog fits its Tags; long Tag collections scroll.
   Return adds one user Tag to every target, preserving each card's existing Tags and avoiding duplicates.
-  `⌘⇧T` remains available while editing text and can reopen the dialog after dismissal.
+  `⌘T` remains available while editing text and can reopen the dialog after dismissal.
   The dialog retains its target cards while background refreshes run and remains open for
   additional names until the top-right close button, Escape, or a backdrop click. The padded
   dialog has a subtle border, appears over a dark backdrop, and fades in and out without movement.
@@ -213,6 +216,9 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   selected. `⌘Delete` requests the same confirmed permanent deletion.
 - Every card kind exposes its **origin page** (page URL, canonical URL, title/site, saved date).
   Image/video `media_url` is secondary metadata and never replaces the origin.
+- In grid and detail, `⌘C` copies the selected reading's local content: the image, video, or
+  saved Markdown as appropriate. `⇧⌘C` copies its source URL. Native editable text fields keep their
+  standard `⌘C` behavior.
 
 ### Context menu and capture
 
@@ -228,11 +234,13 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 
 ### Card detail
 
-- Double-click, `⌘O`, or Return opens a full-window Gallery detail for articles, images, videos,
+- Double-click or Return opens a full-window Gallery detail for articles, images, videos,
   quotes, and captured social posts while preserving the board behind the navigation destination.
   A lightweight link opens its origin in the system browser instead and never enters Gallery.
   Opening collapses a multi-selection to that card. Escape or Close returns focus to the board;
   left/right and J/K move through the frozen detail-capable board order, skipping lightweight links.
+  In detail, `⌘O` opens the source in the system browser and `⌘T` focuses the Inspector's tag
+  field, showing the Inspector when needed.
 - The selected preview fills the available space, extending behind the transparent toolbar for
   saved articles, Original pages, and images. Collapse, Previous, Next, and Close sit on the
   left in that order. Previous and Next move through the frozen detail-capable board order. `⌘B`
@@ -243,13 +251,14 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   view stores a per-device preference, retained across navigation and reopening detail. Articles
   without a web origin show Saved without changing the preference. Original loads the live origin
   in an embedded WebView when selected. Switching preserves the saved reader and original page's
-  position. Detail views show no loading indicators, labels, animated backgrounds, or extra toolbar
+  position. `⌘1` selects Saved and `⌘2` selects Original, including while the original page has
+  focus. Detail views show no loading indicators, labels, animated backgrounds, or extra toolbar
   status items while article content or local media arrives. Failed loads offer Try Again and
   Open in Browser; Saved
   remains available offline. In-page links scroll Original; links to other pages open in the system
   browser. Images offer **Fit** and **Original Size** in the toolbar. Fit shows the whole local asset
-  within the window; Original Size
-  displays one source pixel per display pixel, with horizontal and vertical scrolling. Images taller
+  within the window; Original Size displays one source pixel per display pixel, with horizontal
+  and vertical scrolling. Images use `⌘1` for Fit and `⌘2` for Original Size. Images taller
   than 2.5 times their width initially open at Original Size, aligned to the top; other images
   initially open in Fit. Choosing either size saves a per-device preference, retained across
   previous/next navigation and reopening detail. Images that fit stay centered in both modes;
@@ -480,7 +489,7 @@ the selectable text run and image-bearing blocks.
 
 ### Text selection
 
-The reader supports **continuous, native selection** (drag, double/triple-click, ⌘C copy) across
+The reader supports **continuous, native selection** (drag, double/triple-click, context-menu copy) across
 contiguous text. SwiftUI's `Text` + `.textSelection` only selects inside one `Text`, so headings,
 paragraphs, and **image-free lists and quotes** are coalesced into a single `NSAttributedString`
 rendered by a read-only `NSTextView` (`SelectableTextView`). The theme's spacing, list hanging
@@ -492,7 +501,7 @@ not WebKit.
 - Run height is driven by the text view's `intrinsicContentSize` (invalidated whenever the text or
   width changes), keeping long articles visible while the type settings change.
 - ⌘F find-bar isn't offered per run (a standalone `NSTextView` needs an enclosing scroll view for
-  it); selection and copy are unaffected.
+  it). Selected text can be copied from the context menu; `⌘C` copies the reading's local file.
 
 ### Element coverage & known limitations
 

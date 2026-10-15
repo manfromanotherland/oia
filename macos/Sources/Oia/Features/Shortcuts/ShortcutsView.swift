@@ -57,7 +57,7 @@ struct ShortcutsView: View {
     }
 }
 
-/// A small key-cap rendering of a shortcut's symbols, e.g. ⌘⇧T.
+/// A small key-cap rendering of a shortcut's symbols, e.g. ⇧⌘C.
 private struct KeyCap: View {
     let symbols: String
 

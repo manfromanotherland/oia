@@ -23,9 +23,9 @@ struct ArticleToolbar: ToolbarContent {
                 Button {
                     ReadingLink.open(url)
                 } label: {
-                    Label("Open in Browser", systemImage: "safari")
+                    Label("Open Source", systemImage: "safari")
                 }
-                .help("Open original URL")
+                .help("Open Source (\(ShortcutCatalog.openSource.display))")
                 .accessibilityIdentifier(A11y.Toolbar.openInBrowser)
             }
 

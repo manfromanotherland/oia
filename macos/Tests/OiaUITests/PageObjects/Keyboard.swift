@@ -10,8 +10,8 @@ struct Keyboard {
 
     /// ── Article actions (act on the current selection) ────────────────────
     func open() {
-        app.typeKey("o", modifierFlags: .command)
-    } // ⌘O
+        app.typeKey(.return, modifierFlags: [])
+    } // Return
     func openWithReturn() {
         app.typeKey(.return, modifierFlags: [])
     }
@@ -21,8 +21,8 @@ struct Keyboard {
     }
 
     func editTags() {
-        app.typeKey("t", modifierFlags: [.command, .shift])
-    } // ⌘⇧T
+        app.typeKey("t", modifierFlags: .command)
+    } // ⌘T
     func toggleHighlights() {
         app.typeKey("h", modifierFlags: [.command, .shift])
     } // ⌘⇧H
@@ -30,8 +30,8 @@ struct Keyboard {
         app.typeKey(.delete, modifierFlags: .command)
     } // ⌘⌫
     func openInBrowser() {
-        app.typeKey("o", modifierFlags: [.command, .shift])
-    } // ⌘⇧O
+        app.typeKey("o", modifierFlags: .command)
+    } // ⌘O
 
     /// ── View / navigation ─────────────────────────────────────────────────
     func focusSearch() {

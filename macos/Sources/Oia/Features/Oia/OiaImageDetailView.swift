@@ -43,10 +43,20 @@ struct OiaImageDetailView: View {
                 .pickerStyle(.segmented)
                 .fixedSize()
                 .disabled(pixelSize == nil)
-                .help("Fit the image to the window or view its original pixel size")
+                .help(
+                    "Fit (\(ShortcutCatalog.selectFirstView.display)) or "
+                        + "Original Size (\(ShortcutCatalog.selectOriginalView.display))"
+                )
                 .accessibilityIdentifier(A11y.Detail.imageSize)
             }
         }
+        .focusedSceneValue(\.detailViewActions, DetailViewActions(
+            firstTitle: "Fit", originalTitle: "Original Size",
+            canSelectFirst: pixelSize != nil, canSelectOriginal: pixelSize != nil,
+            canAdjustTypography: false,
+            selectFirst: { preferredImageScale = .fit },
+            selectOriginal: { preferredImageScale = .original }
+        ))
         .task(id: imageRequest) {
             await loadMetadata()
         }

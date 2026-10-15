@@ -11,6 +11,16 @@ struct DetailNavigationActions {
     let toggleInspector: () -> Void
 }
 
+struct DetailViewActions {
+    let firstTitle: String
+    let originalTitle: String
+    let canSelectFirst: Bool
+    let canSelectOriginal: Bool
+    let canAdjustTypography: Bool
+    let selectFirst: () -> Void
+    let selectOriginal: () -> Void
+}
+
 /// View-local actions that menu commands can invoke without moving board
 /// presentation or search-focus state into the shared app model.
 struct BoardActions {
@@ -33,7 +43,16 @@ private struct BoardActionsKey: FocusedValueKey {
     typealias Value = BoardActions
 }
 
+private struct DetailViewActionsKey: FocusedValueKey {
+    typealias Value = DetailViewActions
+}
+
 extension FocusedValues {
+    var detailViewActions: DetailViewActions? {
+        get { self[DetailViewActionsKey.self] }
+        set { self[DetailViewActionsKey.self] = newValue }
+    }
+
     var detailNavigationActions: DetailNavigationActions? {
         get { self[DetailNavigationActionsKey.self] }
         set { self[DetailNavigationActionsKey.self] = newValue }
@@ -50,6 +69,7 @@ struct NavigationCommands: Commands {
     var appState: AppState
     @AppStorage("cardSize", store: AppDefaults.store) private var cardSize: CardSize = .small
     @FocusedValue(\.detailNavigationActions) private var detailNavigationActions
+    @FocusedValue(\.detailViewActions) private var detailViewActions
     @FocusedValue(\.boardActions) private var boardActions
 
     var body: some Commands {
@@ -73,46 +93,39 @@ struct NavigationCommands: Commands {
 
             Divider()
 
-            Menu("Filter") {
-                ForEach(LibraryScope.allCases) { scope in
-                    Button(scope.label) {
-                        appState.selectScope(scope)
-                    }
-                    .keyboardShortcut(ShortcutCatalog.filterShortcut(for: scope))
-                    .disabled(appState.activeScope == scope)
-                }
+            if detailNavigationActions == nil {
+                filterMenu
+            }
 
+            if let detailViewActions {
+                Button(detailViewActions.firstTitle, action: detailViewActions.selectFirst)
+                    .keyboardShortcut(ShortcutCatalog.selectFirstView)
+                    .disabled(!detailViewActions.canSelectFirst)
+
+                Button(detailViewActions.originalTitle, action: detailViewActions.selectOriginal)
+                    .keyboardShortcut(ShortcutCatalog.selectOriginalView)
+                    .disabled(!detailViewActions.canSelectOriginal)
+            }
+
+            if detailNavigationActions == nil {
                 Divider()
 
-                Button("Previous Filter") {
-                    appState.selectScope(appState.activeScope.previous)
+                Button("Zoom Out") {
+                    if let smaller = cardSize.smaller {
+                        cardSize = smaller
+                    }
                 }
-                .keyboardShortcut(ShortcutCatalog.previousFilter)
+                .keyboardShortcut(ShortcutCatalog.decreaseCardSize)
+                .disabled(boardActions == nil || appState.isEditingText || cardSize.smaller == nil)
 
-                Button("Next Filter") {
-                    appState.selectScope(appState.activeScope.next)
+                Button("Zoom In") {
+                    if let larger = cardSize.larger {
+                        cardSize = larger
+                    }
                 }
-                .keyboardShortcut(ShortcutCatalog.nextFilter)
+                .keyboardShortcut(ShortcutCatalog.increaseCardSize)
+                .disabled(boardActions == nil || appState.isEditingText || cardSize.larger == nil)
             }
-            .disabled(detailNavigationActions != nil || appState.isEditingText)
-
-            Divider()
-
-            Button("Decrease Card Size") {
-                if let smaller = cardSize.smaller {
-                    cardSize = smaller
-                }
-            }
-            .keyboardShortcut(ShortcutCatalog.decreaseCardSize)
-            .disabled(detailNavigationActions != nil || cardSize.smaller == nil)
-
-            Button("Increase Card Size") {
-                if let larger = cardSize.larger {
-                    cardSize = larger
-                }
-            }
-            .keyboardShortcut(ShortcutCatalog.increaseCardSize)
-            .disabled(detailNavigationActions != nil || cardSize.larger == nil)
 
             if let detailNavigationActions {
                 Divider()
@@ -141,5 +154,30 @@ struct NavigationCommands: Commands {
                 .disabled(appState.isEditingText)
             }
         }
+    }
+
+    private var filterMenu: some View {
+        Menu("Filter") {
+            ForEach(LibraryScope.allCases) { scope in
+                Button(scope.label) {
+                    appState.selectScope(scope)
+                }
+                .keyboardShortcut(ShortcutCatalog.filterShortcut(for: scope))
+                .disabled(appState.activeScope == scope)
+            }
+
+            Divider()
+
+            Button("Previous Filter") {
+                appState.selectScope(appState.activeScope.previous)
+            }
+            .keyboardShortcut(ShortcutCatalog.previousFilter)
+
+            Button("Next Filter") {
+                appState.selectScope(appState.activeScope.next)
+            }
+            .keyboardShortcut(ShortcutCatalog.nextFilter)
+        }
+        .disabled(appState.isEditingText)
     }
 }

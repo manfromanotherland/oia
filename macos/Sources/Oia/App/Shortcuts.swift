@@ -10,7 +10,7 @@ struct AppShortcutKey {
     let modifiers: EventModifiers
     let keyGlyph: String
 
-    /// macOS-style rendering, e.g. "⌘⇧T". Modifier order matches the menu bar:
+    /// macOS-style rendering, e.g. "⇧⌘C". Modifier order matches the menu bar:
     /// Control, Option, Shift, Command.
     var display: String {
         var glyphs = ""
@@ -101,16 +101,14 @@ enum ShortcutCatalog {
     // Item actions
     static let copy = AppShortcut(title: "Copy", key: "c", modifiers: .command, keyGlyph: "C")
     static let openWithReturn = AppShortcutKey(key: .return, modifiers: [], keyGlyph: "↩")
-    static let open = AppShortcut(
-        title: "Open", key: "o", modifiers: .command, keyGlyph: "O",
-        alternatives: [openWithReturn]
-    )
+    static let open = AppShortcut(title: "Open Detail", key: .return, modifiers: [], keyGlyph: "↩")
+    static let openSource = AppShortcut(title: "Open Source", key: "o", modifiers: .command, keyGlyph: "O")
+    static let copySourceURL = AppShortcut(title: "Copy Source URL", key: "c", modifiers: [.command, .shift], keyGlyph: "C")
     static let quickLook = AppShortcut(title: "Quick Look", key: .space, modifiers: [], keyGlyph: "Space")
-    static let editTags = AppShortcut(title: "Add Tag…", key: "t", modifiers: [.command, .shift], keyGlyph: "T")
+    static let editTags = AppShortcut(title: "Edit Tags", key: "t", modifiers: .command, keyGlyph: "T")
     static let selectAll = AppShortcut(title: "Select All Cards", key: "a", modifiers: .command, keyGlyph: "A")
     static let toggleHighlights = AppShortcut(title: "Show / Hide Highlights", key: "h", modifiers: [.command, .shift], keyGlyph: "H")
     static let delete = AppShortcut(title: "Delete", key: .delete, modifiers: .command, keyGlyph: "⌫")
-    static let openInBrowser = AppShortcut(title: "Open in Browser", key: "o", modifiers: [.command, .shift], keyGlyph: "O")
 
     // View / navigation
     static let focusSearchWithSlash = AppShortcutKey(key: "/", modifiers: [], keyGlyph: "/")
@@ -121,8 +119,11 @@ enum ShortcutCatalog {
     static let toggleFocusMode = AppShortcut(title: "Toggle Focus Mode", key: "r", modifiers: [.command, .shift], keyGlyph: "R")
     static let toggleSidebar = AppShortcut(title: "Show / Hide Sidebar", key: "b", modifiers: .command, keyGlyph: "B")
     static let scrollToTop = AppShortcut(title: "Scroll to Top", key: .upArrow, modifiers: .command, keyGlyph: "↑")
-    static let decreaseCardSize = AppShortcut(title: "Decrease Card Size", key: "-", modifiers: [.command, .shift], keyGlyph: "-")
-    static let increaseCardSize = AppShortcut(title: "Increase Card Size", key: "=", modifiers: [.command, .shift], keyGlyph: "+")
+    static let decreaseCardSize = AppShortcut(title: "Decrease Card Size", key: "-", modifiers: .command, keyGlyph: "-")
+    static let increaseCardSize = AppShortcut(
+        title: "Increase Card Size", key: "+", modifiers: .command, keyGlyph: "+",
+        alternatives: [AppShortcutKey(key: "=", modifiers: .command, keyGlyph: "=")]
+    )
     static let showAll = AppShortcut(title: "Show All", key: "1", modifiers: .command, keyGlyph: "1")
     static let showImages = AppShortcut(title: "Show Images", key: "2", modifiers: .command, keyGlyph: "2")
     static let showVideos = AppShortcut(title: "Show Videos", key: "3", modifiers: .command, keyGlyph: "3")
@@ -134,6 +135,10 @@ enum ShortcutCatalog {
     static let previousItem = AppShortcut(title: "Previous Item", key: "k", modifiers: [], keyGlyph: "K")
     static let nextItem = AppShortcut(title: "Next Item", key: "j", modifiers: [], keyGlyph: "J")
 
+    // Detail view modes share their keys with grid filters.
+    static let selectFirstView = AppShortcut(title: "Saved / Fit", key: "1", modifiers: .command, keyGlyph: "1")
+    static let selectOriginalView = AppShortcut(title: "Original / Original Size", key: "2", modifiers: .command, keyGlyph: "2")
+
     // Typography
     static let increaseFont = AppShortcut(title: "Increase Text Size", key: "+", modifiers: .command, keyGlyph: "+")
     static let decreaseFont = AppShortcut(title: "Decrease Text Size", key: "-", modifiers: .command, keyGlyph: "-")
@@ -143,16 +148,21 @@ enum ShortcutCatalog {
 
     /// Groups in cheat-sheet display order.
     static let groups: [Group] = [
-        Group(name: "Item", shortcuts: [open, quickLook, copy, selectAll, editTags, toggleHighlights, delete, openInBrowser]),
+        Group(name: "Grid & Detail", shortcuts: [openSource, editTags, copy, copySourceURL, delete]),
         Group(
-            name: "View",
+            name: "Grid",
             shortcuts: [
+                open, quickLook, selectAll,
                 focusSearch, showAll, showImages, showVideos, showArticles, showLinks, showQuotes,
                 previousFilter, nextFilter, toggleFocusMode, decreaseCardSize, increaseCardSize,
-                previousItem, nextItem, scrollToTop, toggleSidebar
+                scrollToTop
             ]
         ),
-        Group(name: "Typography", shortcuts: [increaseFont, decreaseFont]),
+        Group(
+            name: "Detail",
+            shortcuts: [selectFirstView, selectOriginalView, previousItem, nextItem, toggleSidebar, toggleHighlights]
+        ),
+        Group(name: "Saved Article Text", shortcuts: [increaseFont, decreaseFont]),
         Group(name: "Help", shortcuts: [showShortcuts])
     ]
 

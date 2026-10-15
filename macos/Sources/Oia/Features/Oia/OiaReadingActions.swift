@@ -16,6 +16,12 @@ struct OiaReadingActions: View {
         .keyboardShortcut(ShortcutCatalog.copy)
         .disabled(ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) == nil)
 
+        Button("Copy Source URL") {
+            ReadingClipboard.copySourceURL(row)
+        }
+        .keyboardShortcut(ShortcutCatalog.copySourceURL)
+        .disabled(row.sourceURL == nil || disablesSingleReadingActions)
+
         Divider()
 
         Button("Add Tag…") { onAddTag() }
@@ -26,7 +32,7 @@ struct OiaReadingActions: View {
             Button("Open Source") {
                 ReadingLink.open(url)
             }
-            .keyboardShortcut(ShortcutCatalog.openInBrowser)
+            .keyboardShortcut(ShortcutCatalog.openSource)
             .disabled(disablesSingleReadingActions)
         }
 

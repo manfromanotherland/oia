@@ -5,7 +5,7 @@ import SwiftUI
 struct TypographyCommands: Commands {
     @AppStorage("readerFont", store: AppDefaults.store) private var readerFont: ReaderFont = .defaultChoice
     @AppStorage("readerFontSize", store: AppDefaults.store) private var readerFontSize: ReaderFontSize = .medium
-    @FocusedValue(\.detailNavigationActions) private var detailNavigationActions
+    @FocusedValue(\.detailViewActions) private var detailViewActions
 
     var body: some Commands {
         CommandMenu("Typography") {
@@ -23,7 +23,7 @@ struct TypographyCommands: Commands {
                 }
                 .keyboardShortcut(ShortcutCatalog.increaseFont)
                 .disabled(
-                    detailNavigationActions == nil
+                    detailViewActions?.canAdjustTypography != true
                         || readerFontSize == ReaderFontSize.allCases.last
                 )
 
@@ -33,7 +33,7 @@ struct TypographyCommands: Commands {
                     }
                 }
                 .keyboardShortcut(ShortcutCatalog.decreaseFont)
-                .disabled(detailNavigationActions == nil || readerFontSize == .small)
+                .disabled(detailViewActions?.canAdjustTypography != true || readerFontSize == .small)
 
                 Divider()
 

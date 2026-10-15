@@ -75,19 +75,63 @@ final class ReadingQuickLookURLResolverTests: XCTestCase {
         XCTAssertNil(resolve(row))
     }
 
-    func testCopyUsesLocalFile() throws {
-        let row = makeReadingRow(kind: .image, previewAsset: "assets/image.jpg")
-        _ = try writeArticle(for: row)
-        let imageURL = try writeAsset(named: "image.jpg", for: row)
+    func testCopyUsesLocalMediaOrMarkdownFileForEachKind() throws {
+        let article = makeReadingRow(kind: .article)
+        let articleURL = try writeArticle(for: article)
+        let quote = makeReadingRow(kind: .quote)
+        let image = makeReadingRow(kind: .image, previewAsset: "assets/image.jpg")
+        let imageURL = try writeAsset(named: "image.jpg", for: image)
+        let video = makeReadingRow(
+            kind: .video,
+            mediaUrl: "cuttings-asset:assets/movie.mp4",
+            previewAsset: "assets/poster.jpg"
+        )
+        _ = try writeAsset(named: "poster.jpg", for: video)
+        let movieURL = try writeAsset(named: "movie.mp4", for: video)
         let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
         defer { pasteboard.releaseGlobally() }
 
-        ReadingClipboard.copyFile(row, libraryURL: libraryURL, to: pasteboard)
-        XCTAssertEqual(
-            (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first,
-            imageURL
-        )
+        for (row, expectedURL) in [
+            (article, articleURL), (quote, articleURL), (image, imageURL), (video, movieURL)
+        ] {
+            ReadingClipboard.copyFile(row, libraryURL: libraryURL, to: pasteboard)
+            XCTAssertEqual(
+                (pasteboard.readObjects(forClasses: [NSURL.self]) as? [URL])?.first,
+                expectedURL,
+                "Copy must use the saved file for \(row.kind)"
+            )
+        }
+    }
 
+    func testCopySourceURLUsesOriginRatherThanCanonicalOrMediaURL() {
+        var row = makeReadingRow(kind: .video, mediaUrl: "https://cdn.example.com/movie.mp4")
+        row.url = "https://example.com/origin?edition=2#passage"
+        row.canonicalUrl = "https://example.com/canonical"
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        defer { pasteboard.releaseGlobally() }
+
+        ReadingClipboard.copySourceURL(row, to: pasteboard)
+
+        XCTAssertEqual(pasteboard.string(forType: .string), row.url)
+        XCTAssertNil(pasteboard.string(forType: .fileURL))
+    }
+
+    func testCopyWithoutSourceOrLocalFileLeavesClipboardUntouched() {
+        var row = makeReadingRow()
+        let pasteboard = NSPasteboard(name: NSPasteboard.Name(UUID().uuidString))
+        defer { pasteboard.releaseGlobally() }
+        pasteboard.setString("Previous clipboard content", forType: .string)
+        let previousChangeCount = pasteboard.changeCount
+
+        for origin in ["cuttings://local/image", "file:///private/image.jpg", "invalid URL"] {
+            row.url = origin
+            ReadingClipboard.copySourceURL(row, to: pasteboard)
+            XCTAssertEqual(pasteboard.changeCount, previousChangeCount)
+        }
+        ReadingClipboard.copyFile(row, libraryURL: libraryURL, to: pasteboard)
+
+        XCTAssertEqual(pasteboard.changeCount, previousChangeCount)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Previous clipboard content")
     }
 
     private func resolve(_ row: ReadingRow) -> URL? {

@@ -11,7 +11,7 @@ struct ArticleCommands: Commands {
     var body: some Commands {
         CommandMenu("Item") {
             if !selectedRows.isEmpty {
-                Button("Open") {
+                Button("Open Detail") {
                     boardActions?.openSelection()
                 }
                 .keyboardShortcut(ShortcutCatalog.open)
@@ -21,6 +21,22 @@ struct ArticleCommands: Commands {
                     boardActions?.toggleQuickLook()
                 }
                 .disabled(boardActions?.canQuickLookSelection != true || appState.isEditingText)
+
+                Divider()
+
+                if let url = selectedRow?.sourceURL {
+                    Button("Open Source") {
+                        ReadingLink.open(url)
+                    }
+                    .keyboardShortcut(ShortcutCatalog.openSource)
+
+                    Button("Copy Source URL") {
+                        if let selectedRow {
+                            ReadingClipboard.copySourceURL(selectedRow)
+                        }
+                    }
+                    .keyboardShortcut(ShortcutCatalog.copySourceURL)
+                }
 
                 Divider()
 
@@ -34,7 +50,7 @@ struct ArticleCommands: Commands {
 
                 Divider()
 
-                Button("Add Tag…") {
+                Button(detailNavigationActions == nil ? "Add Tag…" : "Focus Tag Field") {
                     boardActions?.editTags()
                 }
                 .keyboardShortcut(ShortcutCatalog.editTags)
@@ -59,14 +75,6 @@ struct ArticleCommands: Commands {
                 .keyboardShortcut(ShortcutCatalog.delete)
                 .disabled(appState.isEditingText || appState.isBrowsingWebContent || appState.isDeleting)
 
-                Divider()
-
-                if let url = selectedRow?.sourceURL {
-                    Button("Open in Browser") {
-                        ReadingLink.open(url)
-                    }
-                    .keyboardShortcut(ShortcutCatalog.openInBrowser)
-                }
             } else {
                 Text("No item selected")
                     .foregroundStyle(.secondary)
@@ -87,7 +95,7 @@ struct ArticleCommands: Commands {
     }
 
     private var canCopySelection: Bool {
-        guard let selectedRow, !appState.isEditingText, !appState.isBrowsingWebContent,
+        guard let selectedRow, !appState.isEditingText,
               boardActions != nil else { return false }
         return ReadingClipboard.fileURL(for: selectedRow, libraryURL: appState.libraryURL) != nil
     }

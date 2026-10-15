@@ -19,10 +19,10 @@ struct InspectorSource: View {
             .font(.system(size: 12))
             .help(url.absoluteString)
             .contextMenu {
-                Button("Copy source URL") {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(url.absoluteString, forType: .string)
+                Button("Copy Source URL") {
+                    ReadingClipboard.copySourceURL(row)
                 }
+                .keyboardShortcut(ShortcutCatalog.copySourceURL)
             }
         } else {
             Text("Saved locally").font(.system(size: 12))

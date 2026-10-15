@@ -43,16 +43,15 @@ extension OiaLibraryView {
     func performBoardShortcut(_ press: KeyPress) -> KeyPress.Result {
         guard !appState.isEditingText, presentedReading == nil else { return .ignored }
 
-        if ShortcutCatalog.selectAll.matches(key: press.key, modifiers: press.modifiers) {
-            appState.boardSelection.selectAll(in: appState.readings.map(\.id))
+        if resizeBoard(for: press) {
             return .handled
         }
+        if let result = performBoardItemShortcut(press) {
+            return result
+        }
 
-        if ShortcutCatalog.copy.matches(key: press.key, modifiers: press.modifiers),
-           let row = singleSelectedRow,
-           ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
-        {
-            ReadingClipboard.copyFile(row, libraryURL: appState.libraryURL)
+        if ShortcutCatalog.selectAll.matches(key: press.key, modifiers: press.modifiers) {
+            appState.boardSelection.selectAll(in: appState.readings.map(\.id))
             return .handled
         }
 
@@ -80,6 +79,47 @@ extension OiaLibraryView {
         }
 
         return .ignored
+    }
+
+    private func performBoardItemShortcut(_ press: KeyPress) -> KeyPress.Result? {
+        if ShortcutCatalog.copy.matches(key: press.key, modifiers: press.modifiers),
+           let row = singleSelectedRow,
+           ReadingClipboard.fileURL(for: row, libraryURL: appState.libraryURL) != nil
+        {
+            ReadingClipboard.copyFile(row, libraryURL: appState.libraryURL)
+            return .handled
+        }
+
+        if ShortcutCatalog.copySourceURL.matches(key: press.key, modifiers: press.modifiers),
+           let row = singleSelectedRow, row.sourceURL != nil
+        {
+            ReadingClipboard.copySourceURL(row)
+            return .handled
+        }
+
+        if ShortcutCatalog.openSource.matches(key: press.key, modifiers: press.modifiers),
+           let url = singleSelectedRow?.sourceURL
+        {
+            ReadingLink.open(url)
+            return .handled
+        }
+        return nil
+    }
+
+    private func resizeBoard(for press: KeyPress) -> Bool {
+        if ShortcutCatalog.decreaseCardSize.matches(key: press.key, modifiers: press.modifiers) {
+            if let smaller = cardSize.smaller {
+                cardSize = smaller
+            }
+            return true
+        }
+        if ShortcutCatalog.increaseCardSize.matches(key: press.key, modifiers: press.modifiers) {
+            if let larger = cardSize.larger {
+                cardSize = larger
+            }
+            return true
+        }
+        return false
     }
 
     private func navigationDirection(for key: KeyEquivalent) -> BoardNavigationDirection? {

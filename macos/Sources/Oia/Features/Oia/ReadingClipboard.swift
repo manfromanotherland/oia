@@ -2,7 +2,7 @@
 
 import AppKit
 
-/// Copies the local file represented by a card.
+/// Copies a reading's local file or its web origin.
 enum ReadingClipboard {
     static func fileURL(for row: ReadingRow, libraryURL: URL?) -> URL? {
         ReadingQuickLookURLResolver.previewURL(for: row, libraryURL: libraryURL)
@@ -14,5 +14,11 @@ enum ReadingClipboard {
         guard let url = fileURL(for: row, libraryURL: libraryURL) else { return }
         pasteboard.clearContents()
         pasteboard.writeObjects([url as NSURL])
+    }
+
+    static func copySourceURL(_ row: ReadingRow, to pasteboard: NSPasteboard = .general) {
+        guard let url = row.sourceURL else { return }
+        pasteboard.clearContents()
+        pasteboard.setString(url.absoluteString, forType: .string)
     }
 }

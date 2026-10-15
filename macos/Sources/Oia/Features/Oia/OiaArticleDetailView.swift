@@ -31,11 +31,25 @@ struct OiaArticleDetailView: View {
                     }
                     .pickerStyle(.segmented)
                     .fixedSize()
-                    .help("Read the saved article or view its original web page")
+                    .help(
+                        "Saved (\(ShortcutCatalog.selectFirstView.display)) or "
+                            + "Original (\(ShortcutCatalog.selectOriginalView.display))"
+                    )
                     .accessibilityIdentifier(A11y.Detail.articleView)
                 }
             }
         }
+        .focusedSceneValue(\.detailViewActions, DetailViewActions(
+            firstTitle: "Saved", originalTitle: "Original",
+            canSelectFirst: true, canSelectOriginal: originalURL != nil,
+            canAdjustTypography: !showsOriginal,
+            selectFirst: { prefersOriginal = false },
+            selectOriginal: {
+                if originalURL != nil {
+                    prefersOriginal = true
+                }
+            }
+        ))
         .onChange(of: row.id) { _, _ in
             originalPage?.stopLoading()
             originalPage = nil
