@@ -63,6 +63,33 @@ enum AssetImageLoader {
         !name.isEmpty && !name.contains("/") && name != "." && name != ".."
     }
 
+    /// Source dimensions, independent of any cached thumbnail. ImageIO applies
+    /// orientation when decoding, so dimensions must follow the same transform.
+    /// Reading metadata avoids materializing the original bitmap just to size it.
+    nonisolated static func imagePixelSize(at url: URL) -> CGSize? {
+        guard url.isFileURL else { return nil }
+        let options = [kCGImageSourceShouldCache: false] as CFDictionary
+        if let source = CGImageSourceCreateWithURL(url as CFURL, options),
+           let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, options) as? [CFString: Any],
+           let width = (properties[kCGImagePropertyPixelWidth] as? NSNumber)?.doubleValue,
+           let height = (properties[kCGImagePropertyPixelHeight] as? NSNumber)?.doubleValue,
+           width.isFinite, height.isFinite, width > 0, height > 0
+        {
+            let orientation = (properties[kCGImagePropertyOrientation] as? NSNumber)?.intValue ?? 1
+            return (5 ... 8).contains(orientation)
+                ? CGSize(width: height, height: width)
+                : CGSize(width: width, height: height)
+        }
+
+        guard url.pathExtension.caseInsensitiveCompare("svg") == .orderedSame,
+              let data = try? Data(contentsOf: url),
+              let image = NSImage(data: data),
+              image.size.width.isFinite, image.size.height.isFinite,
+              image.size.width > 0, image.size.height > 0
+        else { return nil }
+        return image.size
+    }
+
     /// Decode `url` into an image whose largest dimension is at most `maxPixel`
     /// device pixels. Raster images use ImageIO so the full-resolution bitmap is
     /// never materialized; SVGs use AppKit for an equivalently bounded raster

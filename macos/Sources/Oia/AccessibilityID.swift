@@ -101,6 +101,8 @@ enum A11y {
         static let oversizeOpenInBrowser = "detail.oversize.openInBrowser"
         static let videoPlayer = "detail.videoPlayer"
         static let videoUnavailable = "detail.videoUnavailable"
+        static let imageSize = "detail.imageSize"
+        static let imageViewport = "detail.imageViewport"
     }
 
     enum Inspector {

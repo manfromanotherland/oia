@@ -167,7 +167,8 @@ struct OiaReadingOverlay: View {
                     .background(Color(nsColor: .textBackgroundColor))
             }
         case .image:
-            mediaDetail(showsPlay: false)
+            OiaImageDetailView(row: row, libraryURL: appState.libraryURL)
+                .id(row.id)
         case .video:
             if row.hasLocalVideoAsset {
                 ZStack {
