@@ -165,7 +165,7 @@ enum InlineRenderer {
         // Start from the context's base font (body size, or a heading's size and
         // weight) then layer inline emphasis on top so nested styles compose.
         attrs.font = (code ? ReaderFont.mono : ctx.font).swiftUIFont(
-            size: code ? ctx.size * 0.9 : ctx.size,
+            size: code ? ctx.size * 0.8 : ctx.size,
             weight: ctx.weight,
             bold: style.bold,
             italic: style.italic || ctx.italic

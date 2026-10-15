@@ -204,11 +204,13 @@ private struct CodeBlockView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             Text(code.hasSuffix("\n") ? String(code.dropLast()) : code)
                 .font(theme.codeFont)
+                .lineSpacing(theme.bodySize * 0.72 * 0.25)
                 .textSelection(.enabled)
-                .padding(theme.codePadding)
         }
+        .padding(theme.codePadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color.secondary.opacity(0.06))
+        .background(Color.secondary.opacity(0.06), in: RoundedRectangle(cornerRadius: 12))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
     }
 }
 

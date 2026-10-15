@@ -111,7 +111,7 @@ enum AppKitInline {
         var attrs: [NSAttributedString.Key: Any] = [:]
         attrs[.font] = (!code ? run.readerFont : nil)?.nativeFont(
             size: run.size, weight: run.weight, bold: style.bold, italic: style.italic
-        ) ?? makeFont(size: code ? run.size * 0.9 : run.size, weight: run.weight,
+        ) ?? makeFont(size: code ? run.size * 0.8 : run.size, weight: run.weight,
                       design: code ? .monospaced : run.design,
                       bold: style.bold, italic: style.italic)
         attrs[.foregroundColor] = run.color
@@ -119,7 +119,7 @@ enum AppKitInline {
             attrs[.strikethroughStyle] = NSUnderlineStyle.single.rawValue
         }
         if code {
-            attrs[.backgroundColor] = NSColor.secondaryLabelColor.withAlphaComponent(0.15)
+            attrs[.readerInlineCode] = true
         }
         if let link = style.link {
             attrs[.link] = link

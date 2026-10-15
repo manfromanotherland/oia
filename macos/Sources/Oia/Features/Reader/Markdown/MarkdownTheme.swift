@@ -53,7 +53,7 @@ struct MarkdownTheme {
     }
 
     var codeFont: Font {
-        .system(size: bodySize * 0.9, design: .monospaced)
+        .system(size: bodySize * 0.72, design: .monospaced)
     }
 
     // ── Headings ────────────────────────────────────────────────────────────
@@ -165,7 +165,7 @@ struct MarkdownTheme {
     // ── Code ────────────────────────────────────────────────────────────────
 
     var codePadding: CGFloat {
-        14
+        16
     }
 
     // ── Rules, images, captions ───────────────────────────────────────────────

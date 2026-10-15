@@ -3,6 +3,9 @@
 import AppKit
 
 extension NSAttributedString.Key {
+    /// Inline code uses a glyph-sized rounded background instead of a full line fill.
+    static let readerInlineCode = NSAttributedString.Key("ReaderInlineCode")
+
     /// Left position and thickness of a native article quote rule.
     static let readerQuoteRule = NSAttributedString.Key("ReaderQuoteRule")
 
@@ -214,8 +217,36 @@ final class ReaderLayoutManager: NSLayoutManager {
         super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
         guard let textStorage else { return }
 
+        drawInlineCode(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
         drawQuoteRules(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
         drawHighlights(forGlyphRange: glyphsToShow, at: origin, textStorage: textStorage)
+    }
+
+    /// Background height follows the code font, independent of paragraph leading.
+    /// Each wrapped fragment gets the same small inset and four-point corners.
+    private func drawInlineCode(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint,
+                                textStorage: NSTextStorage)
+    {
+        guard let container = textContainers.first else { return }
+        let chars = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+        NSColor.secondaryLabelColor.withAlphaComponent(0.15).setFill()
+        textStorage.enumerateAttribute(.readerInlineCode, in: chars) { value, range, _ in
+            guard value != nil else { return }
+            let glyphs = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+            self.enumerateLineFragments(forGlyphRange: glyphs) { lineRect, _, _, lineGlyphs, _ in
+                let fragment = NSIntersectionRange(glyphs, lineGlyphs)
+                guard fragment.length > 0,
+                      let font = textStorage.attribute(.font, at: self.characterIndexForGlyph(at: fragment.location),
+                                                       effectiveRange: nil) as? NSFont else { return }
+                let bounds = self.boundingRect(forGlyphRange: fragment, in: container)
+                let baseline = lineRect.minY + self.location(forGlyphAt: fragment.location).y
+                let background = NSRect(x: origin.x + bounds.minX - 3,
+                                        y: origin.y + baseline - font.ascender - 2,
+                                        width: bounds.width + 6,
+                                        height: font.ascender - font.descender + 4)
+                NSBezierPath(roundedRect: background, xRadius: 4, yRadius: 4).fill()
+            }
+        }
     }
 
     /// Keep the quote rule inside the shared text run, preserving selection
