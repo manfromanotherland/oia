@@ -113,9 +113,13 @@ struct OiaCardView: View {
     }
 
     private func imageCard(in size: CGSize) -> some View {
+        boardImage(in: size, aspectRatio: row.standaloneMediaAspectRatio ?? 4 / 3)
+    }
+
+    private func boardImage(in size: CGSize, aspectRatio: CGFloat) -> some View {
         LocalReadingImage(
             row: row, libraryURL: appState.libraryURL,
-            fallbackAspectRatio: row.standaloneMediaAspectRatio ?? 4 / 3,
+            fallbackAspectRatio: aspectRatio,
             maxPixel: AssetPreviewLoadPlan.displayMaxPixel(
                 for: size, displayScale: displayScale
             ),
@@ -124,7 +128,9 @@ struct OiaCardView: View {
             isVisible: isInViewport,
             scrollState: scrollState
         )
-        .frame(width: size.width, height: size.height)
+        // Fit the full image to the card width before clipping its bottom.
+        .frame(width: size.width, height: max(size.height, size.width / aspectRatio))
+        .frame(width: size.width, height: size.height, alignment: .top)
         .clipped()
     }
 
@@ -199,20 +205,10 @@ struct OiaCardView: View {
                 let aspectRatio = row.articlePreviewAspectRatio ?? ReadingRow.socialPreviewAspectRatio
                 let previewHeight = row.articlePreviewHeight(for: size.width)
                     ?? size.width / ReadingRow.socialPreviewAspectRatio
-                LocalReadingImage(
-                    row: row, libraryURL: appState.libraryURL,
-                    fallbackAspectRatio: aspectRatio,
-                    maxPixel: AssetPreviewLoadPlan.displayMaxPixel(
-                        for: CGSize(width: size.width, height: previewHeight),
-                        displayScale: displayScale
-                    ),
-                    contentMode: .fit,
-                    loadsProgressively: true,
-                    isVisible: isInViewport,
-                    scrollState: scrollState
+                boardImage(
+                    in: CGSize(width: size.width, height: previewHeight),
+                    aspectRatio: aspectRatio
                 )
-                .frame(width: size.width, height: previewHeight)
-                .clipped()
             }
 
             FullArticleCardText(
@@ -231,20 +227,10 @@ struct OiaCardView: View {
             ?? size.width / ReadingRow.socialPreviewAspectRatio
 
         return VStack(alignment: .leading, spacing: 0) {
-            LocalReadingImage(
-                row: row, libraryURL: appState.libraryURL,
-                fallbackAspectRatio: aspectRatio,
-                maxPixel: AssetPreviewLoadPlan.displayMaxPixel(
-                    for: CGSize(width: size.width, height: previewHeight),
-                    displayScale: displayScale
-                ),
-                contentMode: .fit,
-                loadsProgressively: true,
-                isVisible: isInViewport,
-                scrollState: scrollState
+            boardImage(
+                in: CGSize(width: size.width, height: previewHeight),
+                aspectRatio: aspectRatio
             )
-            .frame(width: size.width, height: previewHeight)
-            .clipped()
 
             articleText
                 .layoutPriority(1)

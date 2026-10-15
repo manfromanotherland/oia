@@ -4,10 +4,10 @@ import CoreGraphics
 
 extension ReadingRow {
     static let socialPreviewAspectRatio: CGFloat = 1200 / 630
+    private static let maximumBoardImageHeightToWidth: CGFloat = 3
 
-    /// The display ratio used by both LazyLayoutKit and the standalone media view.
-    /// Keeping one value authoritative prevents decoded media from changing an
-    /// already placed card's frame while the user scrolls.
+    /// The intrinsic ratio stays available to full-size detail presentation.
+    /// Board image heights apply their own cap without changing this ratio.
     var standaloneMediaAspectRatio: CGFloat? {
         switch kind {
         case .image:
@@ -25,7 +25,7 @@ extension ReadingRow {
     }
 
     func articlePreviewHeight(for width: CGFloat) -> CGFloat? {
-        height(for: width, aspectRatio: articlePreviewAspectRatio)
+        boardImageHeight(for: width, aspectRatio: articlePreviewAspectRatio)
     }
 
     /// Product previews use a square or gently portrait canvas so the overlaid
@@ -40,12 +40,22 @@ extension ReadingRow {
     }
 
     func standaloneMediaHeight(for width: CGFloat) -> CGFloat? {
-        height(for: width, aspectRatio: standaloneMediaAspectRatio)
+        if kind == .image {
+            return boardImageHeight(for: width, aspectRatio: standaloneMediaAspectRatio)
+        }
+        return height(for: width, aspectRatio: standaloneMediaAspectRatio)
     }
 
     var hasLocalSocialPreview: Bool {
         guard let profile = socialPostProfile else { return false }
         return profile.avatarAsset != nil || profile.primaryAttachment != nil
+    }
+
+    /// Only exceptionally tall images are clipped; ordinary portrait shapes
+    /// keep their full height. Both masonry placement and card rendering use it.
+    private func boardImageHeight(for width: CGFloat, aspectRatio: CGFloat?) -> CGFloat? {
+        guard let naturalHeight = height(for: width, aspectRatio: aspectRatio) else { return nil }
+        return min(naturalHeight, width * Self.maximumBoardImageHeightToWidth)
     }
 
     private func height(for width: CGFloat, aspectRatio: CGFloat?) -> CGFloat? {
