@@ -8,6 +8,9 @@ struct OriginalArticleView: View {
     var body: some View {
         ZStack {
             OriginalArticleWebView(page: page)
+                // A representable's native view is created once per identity.
+                // Replacing the page must also replace its owned WKWebView.
+                .id(ObjectIdentifier(page))
                 .opacity(page.failure == nil ? 1 : 0)
                 .accessibilityHidden(page.failure != nil)
 

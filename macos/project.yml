@@ -115,6 +115,10 @@ targets:
       - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
       - path: Sources/Oia/Platform/TextEditing/TextEditingMonitor.swift
       - path: Sources/Oia/Platform/Web/OriginalArticleNavigation.swift
+      - path: Sources/Oia/Platform/Web/OriginalArticlePage.swift
+      - path: Sources/Oia/Platform/Web/OriginalArticleWebView.swift
+      - path: Sources/Oia/Features/Reader/Article/OriginalArticleView.swift
+      - path: Sources/Oia/AccessibilityID.swift
       - path: Sources/Oia/State/ReadingSort.swift
       - path: Sources/Oia/App/Shortcuts.swift
       - path: Sources/Oia/App/TestHooks.swift
