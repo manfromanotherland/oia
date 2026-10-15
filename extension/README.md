@@ -11,10 +11,11 @@
 # Browser extension
 
 The Manifest V3 browser extension for **Óia**, the local-first native macOS library. Clicking its
-toolbar button shows a compact in-page toast with **Saving…** and a link-style **Screenshot instead**
+toolbar button shows a compact in-page toast with **Saving…** and a link-style **Screenshot instead?**
 action to its right on the same row, above a three-second countdown bar. Nothing is saved until
 the countdown ends; then the engine uses the page's content and source to keep it as a cleaned article or a lightweight
-link. Choosing the screenshot action saves one long screenshot of the full scrollable page instead.
+link. Choosing the screenshot action dismisses the pending toast immediately and saves one long
+screenshot of the full scrollable page instead, with only a result notification when finished.
 The context menu also saves right-clicked
 images/videos and selected-text quotes. Article and link saves
 retain live page metadata, social previews, and favicons as local assets. Captures travel through the
@@ -87,10 +88,11 @@ After editing source, re-run `npm run package` and click the **reload ↻** icon
 card. Dia/Chrome keeps the same unpacked path and stable development extension ID.
 
 Click the Óia toolbar button to show **Saving…** in the compact in-page toast. The link-style
-**Screenshot instead** action sits to its right on the same row. The three-second countdown
-gives you time to choose it. When it ends,
-Óia saves the page. Choosing the screenshot action saves the full scrollable page as one long
-image instead. Nothing is saved during the countdown. The keyboard shortcut and a page save
+**Screenshot instead?** action sits to its right on the same row, in white text at medium weight
+in dark appearance. The countdown bar is 4 px high with fully rounded ends and gives you three
+seconds to choose it. When it ends, Óia saves the page. Choosing the screenshot action dismisses
+the pending toast immediately and saves the full scrollable page as one long image instead;
+only the result notification appears when finished. Nothing is saved during the countdown. The keyboard shortcut and a page save
 from the context menu use the same countdown.
 
 On app-style pages, Óia can follow one scrolling surface that fills the browser viewport. If a

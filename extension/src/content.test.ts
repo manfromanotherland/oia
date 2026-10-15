@@ -140,7 +140,7 @@ describe("showToast", () => {
         status: "loading",
         title: "Saving…",
         cta: {
-          label: "Screenshot instead",
+          label: "Screenshot instead?",
           command: "save-screenshot",
           expiresAt,
         },
@@ -166,7 +166,7 @@ describe("showToast", () => {
             status: "loading",
             title: "Saving…",
             cta: {
-              label: "Screenshot instead",
+              label: "Screenshot instead?",
               command: "save-screenshot",
               expiresAt: Date.now() + 3000,
             },
@@ -191,7 +191,7 @@ describe("showToast", () => {
     const onChoice = vi.fn();
     const host = offerSaveChoice(undefined, onChoice);
     const root = host.shadowRoot!;
-    expect(root.querySelector(".cta")!.textContent).toBe("Screenshot instead");
+    expect(root.querySelector(".cta")!.textContent).toBe("Screenshot instead?");
     expect(root.querySelector(".cancel")).toBeNull();
     expect(root.querySelector<HTMLButtonElement>(".close")!.hidden).toBe(false);
     expect(root.querySelector(".countdown")).not.toBeNull();
@@ -244,11 +244,11 @@ describe("showToast", () => {
     expect(chrome.runtime.sendMessage).not.toHaveBeenCalled();
     expect(host.shadowRoot!.querySelector(".actions")).toBeNull();
     expect(host.shadowRoot!.querySelector(".countdown")).toBeNull();
-    expect(host.shadowRoot!.querySelector(".title")!.textContent).toBe("Saving screenshot…");
+    expect(document.getElementById(HOST_ID)).toBeNull();
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(5000);
     expect(onChoice).toHaveBeenCalledTimes(1);
-    expect(document.getElementById(HOST_ID)).toBe(host);
+    expect(document.getElementById(HOST_ID)).toBeNull();
   });
 
   it("chooses the page if a screenshot click reaches the handler after the deadline", () => {

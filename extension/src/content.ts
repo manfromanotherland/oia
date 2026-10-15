@@ -472,6 +472,7 @@ export function showToast(
         --hover: #eeedec;
         --action: #17181a;
         --action-text: #f7f6f4;
+        --link: #17181a;
         color-scheme: light dark;
       }
       @media (prefers-color-scheme: dark) {
@@ -484,6 +485,7 @@ export function showToast(
           --hover: #242426;
           --action: #e8e9eb;
           --action-text: #17181a;
+          --link: #fff;
         }
       }
       @keyframes oia-in { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
@@ -568,17 +570,17 @@ export function showToast(
       .actions--inline { flex: 0 0 auto; margin: 0; }
       .cta--link {
         min-height: 24px; padding: 0; border-radius: 2px;
-        color: var(--muted); background: transparent;
+        color: var(--link); background: transparent;
         font-weight: 500; white-space: nowrap;
         text-decoration: underline; text-underline-offset: 2px;
       }
       .countdown {
-        height: 2px; margin-top: 8px; overflow: hidden;
-        background: var(--line); border-radius: 1px;
+        height: 4px; margin-top: 8px; overflow: hidden;
+        background: var(--line); border-radius: 999px;
       }
       .countdown::after {
         content: ""; display: block; height: 100%; background: var(--ink);
-        transform-origin: left;
+        border-radius: inherit; transform-origin: left;
       }
       @media (prefers-reduced-motion: no-preference) {
         .countdown::after { animation: oia-countdown var(--countdown-duration) linear forwards; }
@@ -695,9 +697,9 @@ function renderCta(
     lifecycle.timers.clear();
     actions.remove();
     root.querySelector(".countdown")?.remove();
-    if (kind === "cancel" && toastLifecycles.get(host) === lifecycle) removeToast(host);
-    else if (kind === "screenshot")
-      root.querySelector(".title")!.textContent = "Saving screenshot…";
+    if (kind === "screenshot" || (kind === "cancel" && toastLifecycles.get(host) === lifecycle)) {
+      removeToast(host);
+    }
     if (!host.isConnected) clearToastLifecycle(host);
     onChoice?.(kind);
   };

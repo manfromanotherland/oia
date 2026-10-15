@@ -15,11 +15,12 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-async function harness() {
+async function harness(deferNativeSave = false) {
   vi.resetModules();
   let click: (tab: chrome.tabs.Tab) => void = () => undefined;
   let choose: (choice: { kind: "page" | "screenshot" | "cancel" }) => void = () => undefined;
   let rejectChoice: (error: Error) => void = () => undefined;
+  let finishSave: (response?: object) => void = () => undefined;
   const event = () => ({ addListener: vi.fn() });
   const tab = { id: 42, url: "https://example.com/page", title: "Page title", windowId: 7 };
   let currentUrl = tab.url;
@@ -71,7 +72,9 @@ async function harness() {
           return;
         }
         nativeRequests.push(request);
-        callback({ protocol_version: 4, ok: true, id: "saved", path: "article.md" });
+        const response = { protocol_version: 4, ok: true, id: "saved", path: "article.md" };
+        if (deferNativeSave) finishSave = (result = response) => callback(result);
+        else callback(response);
       },
     },
     scripting: { executeScript: vi.fn(async () => [{ result: false }]) },
@@ -97,6 +100,7 @@ async function harness() {
     nativeRequests,
     sendMessage,
     startedAt,
+    finishSave: (response?: object) => finishSave(response),
     choose: (kind: "page" | "screenshot" | "cancel") => choose({ kind }),
     disconnect: () => {
       sendMessage.mockRejectedValue(new Error("The source document closed."));
@@ -113,7 +117,7 @@ describe("toolbar save countdown", () => {
     expect(message).toMatchObject({
       action: "save-choice",
       title: "Saving…",
-      cta: { label: "Screenshot instead", command: "save-screenshot" },
+      cta: { label: "Screenshot instead?", command: "save-screenshot" },
     });
     const expiresAt = (message as unknown as { cta: { expiresAt: number } }).cta.expiresAt;
     expect(expiresAt - mock.startedAt).toBeGreaterThanOrEqual(3000);
@@ -127,13 +131,42 @@ describe("toolbar save countdown", () => {
     expect(mock.nativeRequests[0].action).toBe("save_page");
   });
 
-  it("saves only a screenshot when selected, without starting the normal page save", async () => {
-    const mock = await harness();
+  it("saves only a screenshot and shows only its result after persistence completes", async () => {
+    const mock = await harness(true);
     mock.choose("screenshot");
     await vi.waitFor(() => expect(mock.nativeRequests).toHaveLength(1));
     expect(mock.nativeRequests[0]).toMatchObject({ action: "save", metadata: { kind: "image" } });
     expect(mock.sendMessage.mock.calls.some(([, sent]) => sent.action === "capture-page")).toBe(
       false,
+    );
+    expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toEqual([]);
+    mock.finishSave();
+    await vi.waitFor(() =>
+      expect(mock.sendMessage).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({ action: "toast", status: "ok", title: "Screenshot saved" }),
+        { frameId: 0 },
+      ),
+    );
+    expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toHaveLength(
+      1,
+    );
+  });
+
+  it("reports screenshot persistence failure without showing a loading or success notification", async () => {
+    const mock = await harness(true);
+    mock.choose("screenshot");
+    await vi.waitFor(() => expect(mock.nativeRequests).toHaveLength(1));
+    mock.finishSave({ protocol_version: 4, ok: false, error: "io_error", message: "Disk full." });
+    await vi.waitFor(() =>
+      expect(mock.sendMessage).toHaveBeenCalledWith(
+        42,
+        expect.objectContaining({ status: "error", title: "Couldn't save screenshot" }),
+        { frameId: 0 },
+      ),
+    );
+    expect(mock.sendMessage.mock.calls.filter(([, sent]) => sent.action === "toast")).toHaveLength(
+      1,
     );
   });
 

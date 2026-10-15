@@ -401,7 +401,6 @@ async function saveScreenshot(tab: chrome.tabs.Tab): Promise<SaveOutcome> {
 
   let capture: PageCapture;
   try {
-    await showToast(tabId, "loading", "Saving screenshot…");
     await waitForVisibleTabCaptureWindow();
     const dataUrl = await captureFullPageScreenshot({
       begin: () =>
@@ -843,9 +842,11 @@ async function presentSaveResponse(
   const tabId = tab.id!;
   if (response.ok) {
     const title =
-      feedback.selection && response.selection_kind
-        ? `Saved ${response.selection_kind} to Óia`
-        : "Saved to Óia";
+      feedback.item === "screenshot"
+        ? "Screenshot saved"
+        : feedback.selection && response.selection_kind
+          ? `Saved ${response.selection_kind} to Óia`
+          : "Saved to Óia";
     await showToast(tabId, "ok", title, feedback.title);
     if (
       feedback.kind === "article" &&
@@ -913,7 +914,7 @@ async function savePageWithScreenshotOption(tab: chrome.tabs.Tab): Promise<void>
         status: "loading",
         title: "Saving…",
         cta: {
-          label: "Screenshot instead",
+          label: "Screenshot instead?",
           command: "save-screenshot",
           expiresAt: Date.now() + SAVE_CHOICE_DURATION_MS,
         },
