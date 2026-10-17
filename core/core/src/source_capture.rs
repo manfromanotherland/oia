@@ -480,14 +480,11 @@ fn save_ordinary_url_with(
     }
     // One optional HTML retrieval feeds both classifiers. Narrow provider
     // routes retain their category even when HTTP is unavailable.
-    let detected = fetch(&request.url).unwrap_or_else(|_| crate::DetectedPageMetadata {
-        link: crate::parse_link_metadata("", &request.url),
-        product: None,
-    });
+    let detected =
+        fetch(&request.url).unwrap_or_else(|_| crate::parse_page_metadata("", &request.url));
     let artwork = detected
-        .link
-        .as_ref()
-        .and_then(|link| link.image_url.as_deref())
+        .image_url
+        .as_deref()
         .and_then(|url| fetch_artwork(url).ok());
     let preview_url = artwork.as_ref().map(|image| image.url.clone());
     Ok(crate::save_link_capture(
@@ -498,9 +495,7 @@ fn save_ordinary_url_with(
                 .canonical_url_hint
                 .unwrap_or_else(|| request.url.clone()),
             title: detected
-                .link
-                .as_ref()
-                .and_then(|link| link.title.clone())
+                .title
                 .or(request.title_hint)
                 .unwrap_or_else(|| request.url.clone()),
             author: detected.link.as_ref().and_then(|link| link.author.clone()),
@@ -2511,12 +2506,7 @@ mod tests {
         let saved = save_ordinary_url_with(
             &library,
             request,
-            |_| {
-                Ok(crate::DetectedPageMetadata {
-                    link: crate::parse_link_metadata(html, url),
-                    product: None,
-                })
-            },
+            |_| Ok(crate::parse_page_metadata(html, url)),
             |url| {
                 Ok(crate::ImageBytes {
                     url: url.into(),
@@ -2555,12 +2545,7 @@ mod tests {
         let saved = save_ordinary_url_with(
             &library,
             UrlSaveRequest::new(url),
-            |_| {
-                Ok(crate::DetectedPageMetadata {
-                    link: crate::parse_link_metadata(html, url),
-                    product: crate::parse_product_metadata(html, url),
-                })
-            },
+            |_| Ok(crate::parse_page_metadata(html, url)),
             |url| {
                 Ok(crate::ImageBytes {
                     url: url.into(),
@@ -2583,6 +2568,68 @@ mod tests {
             fs::read(library.reading_dir(&saved.id).join(preview)).unwrap(),
             b"captured cover"
         );
+    }
+
+    #[test]
+    fn product_url_save_persists_its_own_image_title_and_price() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://shop.example/lamp";
+        let html = r#"<script type="application/ld+json">{"@type":"Product","url":"https://shop.example/lamp","name":"Shore Table Lamp","image":"/lamp.png","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#;
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| Ok(crate::parse_page_metadata(html, url)),
+            |image_url| {
+                assert_eq!(image_url, "https://shop.example/lamp.png");
+                Ok(crate::ImageBytes {
+                    url: image_url.into(),
+                    content_type: "image/png".into(),
+                    bytes: b"saved product image".to_vec(),
+                })
+            },
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert_eq!(reading.metadata.title, "Shore Table Lamp");
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("140")
+        );
+        assert!(reading.metadata.lightweight);
+        assert!(reading.metadata.link_category.is_none());
+        let preview = reading
+            .metadata
+            .preview_asset
+            .expect("product image was saved");
+        assert_eq!(
+            fs::read(library.reading_dir(&saved.id).join(preview)).unwrap(),
+            b"saved product image"
+        );
+    }
+
+    #[test]
+    fn product_image_retrieval_failure_still_saves_the_price_and_title() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://shop.example/lamp";
+        let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Shore Table Lamp","image":"/lamp.png","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#;
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| Ok(crate::parse_page_metadata(html, url)),
+            |_| anyhow::bail!("image unavailable"),
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert_eq!(reading.metadata.title, "Shore Table Lamp");
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("140")
+        );
+        assert!(reading.metadata.preview_asset.is_none());
     }
 
     #[test]

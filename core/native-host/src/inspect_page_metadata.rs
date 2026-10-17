@@ -31,8 +31,8 @@ pub fn handle(request: InspectPageMetadataRequest) -> SaveResponse {
     }
     let mut response = SaveResponse::ack();
     response.preview_candidates = Some(
-        oia_core::parse_link_metadata(&request.product_html, &request.url)
-            .and_then(|detected| detected.image_url)
+        oia_core::parse_page_metadata(&request.product_html, &request.url)
+            .image_url
             .into_iter()
             .collect::<Vec<_>>()
             .into_boxed_slice(),
@@ -60,6 +60,16 @@ mod tests {
         assert_eq!(
             response,
             json!({"protocol_version":4,"ok":true,"preview_candidates":["https://example.com/cover.jpg"]})
+        );
+    }
+
+    #[test]
+    fn inspection_selects_main_product_image_without_a_cultural_category() {
+        let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Lamp","image":{"contentUrl":"/lamp.jpg"},"offers":{"price":"229.00","priceCurrency":"EUR"}}</script>"#;
+        let response = handle(request(html));
+        assert_eq!(
+            response.preview_candidates,
+            Some(vec!["https://example.com/lamp.jpg".into()].into_boxed_slice())
         );
     }
 

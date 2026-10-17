@@ -56,6 +56,37 @@ pub struct DetectedLinkMetadata {
 pub struct DetectedPageMetadata {
     pub link: Option<DetectedLinkMetadata>,
     pub product: Option<crate::ProductMetadata>,
+    pub title: Option<String>,
+    pub image_url: Option<String>,
+}
+
+/// Shared, network-free presentation evidence for cultural and product pages.
+pub fn parse_page_metadata(html: &str, page_url: &str) -> DetectedPageMetadata {
+    merge_page_metadata(
+        parse_link_metadata(html, page_url),
+        crate::product::parse_product_page_metadata(html, page_url),
+    )
+}
+
+fn merge_page_metadata(
+    link: Option<DetectedLinkMetadata>,
+    product: Option<crate::product::DetectedProductMetadata>,
+) -> DetectedPageMetadata {
+    // An established cultural main entity owns its presentation. A separate
+    // Product elsewhere in the page is not evidence for that entity's artwork.
+    let (title, image_url) = if let Some(link) = link.as_ref() {
+        (link.title.clone(), link.image_url.clone())
+    } else if let Some(product) = product.as_ref() {
+        (product.title.clone(), product.image_url.clone())
+    } else {
+        (None, None)
+    };
+    DetectedPageMetadata {
+        title,
+        image_url,
+        link,
+        product: product.map(|product| product.product),
+    }
 }
 
 /// Inspect structured metadata without network or library access. A title or
@@ -215,7 +246,7 @@ fn entity_isbn(node: &Value) -> Option<String> {
     isbn(node.get("isbn")).or_else(|| isbn(node.get("gtin13")))
 }
 
-fn og_image_url(og: &HashMap<String, Value>, page: &Url) -> Option<String> {
+pub(crate) fn og_image_url(og: &HashMap<String, Value>, page: &Url) -> Option<String> {
     ["og:image:secure_url", "og:image", "og:image:url"]
         .iter()
         .find_map(|key| image_url(og.get(*key), &HashMap::new(), page))
@@ -236,12 +267,16 @@ fn entity_category(node: &Value) -> Option<LinkCategory> {
     }
 }
 
-fn text(value: Option<&Value>) -> Option<String> {
+pub(crate) fn text(value: Option<&Value>) -> Option<String> {
     let value = value?.as_str()?.trim();
     (!value.is_empty()).then(|| value.to_string())
 }
 
-fn image_url(value: Option<&Value>, ids: &HashMap<&str, &Value>, page: &Url) -> Option<String> {
+pub(crate) fn image_url(
+    value: Option<&Value>,
+    ids: &HashMap<&str, &Value>,
+    page: &Url,
+) -> Option<String> {
     let value = resolved(value?, ids);
     if let Some(values) = value.as_array() {
         return values
@@ -261,7 +296,7 @@ fn image_url(value: Option<&Value>, ids: &HashMap<&str, &Value>, page: &Url) -> 
     is_public_metadata_url(&url).then(|| url.to_string())
 }
 
-fn open_graph(document: &Html) -> HashMap<String, Value> {
+pub(crate) fn open_graph(document: &Html) -> HashMap<String, Value> {
     let selector = Selector::parse("meta[property],meta[name]").expect("static selector");
     let mut values = HashMap::new();
     let mut image_count = 0;
@@ -433,26 +468,14 @@ fn fetch_page_metadata_with(
                 let html = String::from_utf8_lossy(&bytes);
                 inspect_fetched_page(&html, url, &final_url)
             }
-            Ok(_) => (
-                DetectedPageMetadata {
-                    link: fallback,
-                    product: None,
-                },
-                true,
-            ),
+            Ok(_) => (merge_page_metadata(fallback, None), true),
             // Evidence truncated by the retrieval cap cannot safely discard a
             // conflicting page context and then classify from its route alone.
             Err(error) if error.to_string().contains("exceeded size limit") => {
                 return Ok(DetectedPageMetadata::default());
             }
             Err(error) if fallback.is_none() && title_id.is_none() => return Err(error),
-            Err(_) => (
-                DetectedPageMetadata {
-                    link: fallback,
-                    product: None,
-                },
-                true,
-            ),
+            Err(_) => (merge_page_metadata(fallback, None), true),
         };
     if catalog_allowed && metadata.link.is_none() && metadata.product.is_none() {
         if let Some(title_id) = title_id.as_deref() {
@@ -465,6 +488,10 @@ fn fetch_page_metadata_with(
                         .flatten()
                 });
         }
+    }
+    if let Some(link) = metadata.link.as_ref() {
+        metadata.title = link.title.clone().or(metadata.title);
+        metadata.image_url = link.image_url.clone().or(metadata.image_url);
     }
     Ok(metadata)
 }
@@ -489,10 +516,10 @@ fn inspect_fetched_page(
         .flatten()
     });
     (
-        DetectedPageMetadata {
+        merge_page_metadata(
             link,
-            product: crate::parse_product_metadata(html, final_url),
-        },
+            crate::product::parse_product_page_metadata(html, final_url),
+        ),
         catalog_allowed,
     )
 }
@@ -590,6 +617,19 @@ pub fn fetch_link_metadata(url: &str) -> Result<Option<DetectedLinkMetadata>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cultural_main_entity_without_artwork_never_uses_an_unrelated_product_image() {
+        let html = r##"<script type="application/ld+json">{"@graph":[
+            {"@type":"WebPage","url":"https://example.com/film","mainEntity":{"@id":"#film"}},
+            {"@id":"#film","@type":"Movie","name":"The film"},
+            {"@type":"Product","name":"Advertisement","image":"/advertisement.jpg"}
+        ]}</script>"##;
+        let detected = parse_page_metadata(html, "https://example.com/film");
+        assert_eq!(detected.link.unwrap().category, LinkCategory::Movie);
+        assert_eq!(detected.title.as_deref(), Some("The film"));
+        assert!(detected.image_url.is_none());
+    }
 
     fn parse(data: &str) -> Option<DetectedLinkMetadata> {
         parse_link_metadata(

@@ -263,22 +263,24 @@ pub fn save_capture(library: &LibraryRoot, input: SaveInput) -> Result<SaveOutco
     let category = input
         .link_category
         .filter(|_| input.kind == ReadingKind::Article);
-    let category_artwork = category
-        .and_then(|_| {
+    let product = (input.kind == ReadingKind::Article)
+        .then(|| input.product.clone())
+        .flatten();
+    let has_product = product.is_some();
+    let mut preview_artwork = (category.is_some() || has_product)
+        .then(|| {
             input
                 .preview_url
                 .as_ref()
                 .and_then(|url| input.images.iter().find(|image| &image.url == url))
         })
+        .flatten()
         .filter(|image| crate::category_update::category_artwork_is_supported(&image.bytes))
         .map(|image| ImageBytes {
             url: image.url.clone(),
             content_type: image.content_type.clone(),
             bytes: image.bytes.clone(),
         });
-    let product = (input.kind == ReadingKind::Article)
-        .then(|| input.product.clone())
-        .flatten();
     let mut outcome = save_with_imported_state(
         library,
         input,
@@ -310,7 +312,29 @@ pub fn save_capture(library: &LibraryRoot, input: SaveInput) -> Result<SaveOutco
                 &outcome.id,
                 category,
                 &sha256_hex(&bytes),
-                category_artwork,
+                if has_product {
+                    None
+                } else {
+                    preview_artwork.take()
+                },
+            )?
+            .changed
+                && outcome.disposition == SaveDisposition::Duplicate
+            {
+                outcome.disposition = SaveDisposition::Upgraded;
+            }
+        }
+    }
+    // Products can already have a cultural category, which makes category
+    // enrichment a no-op. Their missing artwork still needs its own guarded
+    // patch, using the snapshot after all metadata enrichment has settled.
+    if let Some(artwork) = preview_artwork {
+        if let Ok(bytes) = fs::read(library.article_path(&outcome.id)) {
+            if crate::category_update::update_product_preview_if_unchanged(
+                library,
+                &outcome.id,
+                &sha256_hex(&bytes),
+                artwork,
             )?
             .changed
                 && outcome.disposition == SaveDisposition::Duplicate
@@ -2418,6 +2442,88 @@ mod tests {
             fs::read_to_string(library.article_path(&saved.id)).unwrap(),
             after
         );
+    }
+
+    #[test]
+    fn duplicate_product_capture_fills_missing_preview_without_replacing_saved_content() {
+        for (lightweight, category) in [
+            (true, None),
+            (false, None),
+            (true, Some(crate::LinkCategory::Book)),
+            (false, Some(crate::LinkCategory::Book)),
+        ] {
+            let (_directory, library) = library();
+            let url = "https://example.com/product";
+            let product = crate::parse_product_metadata("<meta property='og:type' content='product'><meta property='product:price:amount' content='140'><meta property='product:price:currency' content='EUR'>", url).unwrap();
+            let mut initial = full_capture(url);
+            initial.lightweight = lightweight;
+            initial.product = Some(product.clone());
+            initial.link_category = category;
+            let saved = save_capture(&library, initial).unwrap();
+            let path = library.article_path(&saved.id);
+            let original = fs::read_to_string(&path)
+                .unwrap()
+                .replace("tags: []", "tags:\n- Keep tag")
+                .replacen(
+                    "\n---\n",
+                    "\n# external comment\ncustom_key:\n  arbitrary: true\n---\n",
+                    1,
+                );
+            fs::write(&path, &original).unwrap();
+            let original_reading = parse_reading(&original).unwrap();
+            let preview_url = "https://example.com/product.png";
+            let png = hex::decode("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b49444154789c636000020000050001a5f645400000000049454e44ae426082").unwrap();
+            let capture = || {
+                let mut input = link_metadata_capture(url);
+                input.title = "New title must not replace original".into();
+                input.saved_at = "2026-10-17T12:00:00.000Z".into();
+                input.product = Some(product.clone());
+                input.link_category = category;
+                input.preview_url = Some(preview_url.into());
+                input.images = vec![ImageBytes {
+                    url: preview_url.into(),
+                    content_type: "image/png".into(),
+                    bytes: png.clone(),
+                }];
+                input
+            };
+            let enriched = save_link_capture(&library, capture()).unwrap();
+            assert_eq!(enriched.disposition, SaveDisposition::Upgraded);
+            let updated = fs::read_to_string(&path).unwrap();
+            let mut updated_reading = parse_reading(&updated).unwrap();
+            let preview = updated_reading
+                .metadata
+                .preview_asset
+                .take()
+                .expect("re-saving a product must fill its missing preview");
+            assert_eq!(
+                fs::read(library.reading_dir(&saved.id).join(&preview)).unwrap(),
+                png
+            );
+            assert_eq!(updated_reading.metadata, original_reading.metadata);
+            assert_eq!(updated_reading.body, original_reading.body);
+            assert!(updated.contains("# external comment\ncustom_key:\n  arbitrary: true\n"));
+            assert_eq!(
+                updated_reading.metadata.link_category.as_deref(),
+                category.map(|category| category.as_str())
+            );
+            let mut repeated = capture();
+            repeated.images[0].bytes = hex::decode("47494638396101000100800000000000ffffff21f90401000000002c00000000010001000002024401003b").unwrap();
+            save_link_capture(&library, repeated).unwrap();
+            let repeated = parse_reading(&fs::read_to_string(&path).unwrap()).unwrap();
+            assert_eq!(
+                repeated.metadata.preview_asset.as_deref(),
+                Some(preview.as_str())
+            );
+            let mut expected = original_reading.metadata;
+            expected.preview_asset = Some(preview);
+            assert_eq!(repeated.metadata, expected);
+            assert_eq!(repeated.body, original_reading.body);
+            assert_eq!(
+                fs::read_dir(library.assets_dir(&saved.id)).unwrap().count(),
+                1
+            );
+        }
     }
 
     #[test]

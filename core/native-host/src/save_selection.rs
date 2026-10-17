@@ -75,17 +75,13 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
     }
     let kind = selection_kind(&request.selected_text, request.selection_context.as_ref());
     let capture = request.capture;
-    let product = capture
-        .metadata
-        .product_html
-        .as_deref()
-        .and_then(|html| oia_core::parse_product_metadata(html, &capture.metadata.url));
-    let detected = oia_core::parse_link_metadata(
+    let detected = oia_core::parse_page_metadata(
         capture.metadata.product_html.as_deref().unwrap_or(""),
         &capture.metadata.url,
     );
     let images = decode_images(&capture.images);
-    let preview_url = detected_preview_url(detected.as_ref(), &images, capture.preview_url);
+    let preview_url =
+        detected_preview_url(detected.image_url.as_deref(), &images, capture.preview_url);
     let input = SelectionSaveInput {
         selected_text: request.selected_text,
         context: request.selection_context,
@@ -96,11 +92,9 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
             url: capture.metadata.url,
             media_url: capture.metadata.media_url,
             canonical_url: capture.metadata.canonical_url,
-            title: detected
-                .as_ref()
-                .and_then(|value| value.title.clone())
-                .unwrap_or(capture.metadata.title),
+            title: detected.title.unwrap_or(capture.metadata.title),
             author: detected
+                .link
                 .as_ref()
                 .and_then(|value| value.author.clone())
                 .or(capture.metadata.author),
@@ -111,8 +105,8 @@ fn handle_in_library(request: SaveSelectionRequest, library: &LibraryRoot) -> Re
             preview_url,
             favicon_url: capture.favicon_url,
             theme_color: capture.metadata.theme_color,
-            product,
-            link_category: detected.map(|value| value.category),
+            product: detected.product,
+            link_category: detected.link.map(|value| value.category),
             excerpt: capture.metadata.excerpt,
             word_count: capture.metadata.word_count,
             lang: capture.metadata.lang,

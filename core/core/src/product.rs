@@ -29,10 +29,24 @@ const MAX_DOM_SCOPE_DEPTH: usize = 32;
 const MAX_DOM_ANCESTRY: usize = 128;
 const FETCH_DEADLINE: Duration = Duration::from_secs(8);
 
+/// Presentation evidence used only while capturing a page. Remote artwork is
+/// captured into local assets and never added to the durable product snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DetectedProductMetadata {
+    pub product: ProductMetadata,
+    pub title: Option<String>,
+    pub image_url: Option<String>,
+}
+
 /// Identify the main product using JSON-LD, scoped schema.org markup, or explicit
 /// product Open Graph metadata. Bare amounts and commerce-looking URLs never
 /// establish product identity. Missing or invalid prices do not hide a product.
 pub fn parse_product_metadata(html: &str, page_url: &str) -> Option<ProductMetadata> {
+    parse_product_page_metadata(html, page_url).map(|detected| detected.product)
+}
+
+/// Select title and artwork from the same main product as the saved price.
+pub fn parse_product_page_metadata(html: &str, page_url: &str) -> Option<DetectedProductMetadata> {
     if html.len() > MAX_PRODUCT_HTML_BYTES {
         return None;
     }
@@ -64,18 +78,58 @@ pub fn parse_product_metadata(html: &str, page_url: &str) -> Option<ProductMetad
         })
         .collect();
     if let Some(product) = choose_product(&nodes, &ids, &page) {
-        return Some(with_og_price(metadata_for(product, &ids, &page), &document));
+        return Some(product_page_metadata(product, &ids, &page, &document));
     }
     if negative_page_context(&nodes) {
         return None;
     }
     if let Some(product) = choose_product(&dom_nodes, &HashMap::new(), &page) {
-        return Some(with_og_price(
-            metadata_for(product, &HashMap::new(), &page),
+        return Some(product_page_metadata(
+            product,
+            &HashMap::new(),
+            &page,
             &document,
         ));
     }
-    open_graph_product(&document)
+    let product = open_graph_product(&document)?;
+    let og = crate::link_metadata::open_graph(&document);
+    Some(DetectedProductMetadata {
+        product,
+        title: crate::link_metadata::text(og.get("og:title")),
+        image_url: crate::link_metadata::og_image_url(&og, &page),
+    })
+}
+
+fn selected_variant<'a>(
+    product: &'a Value,
+    ids: &HashMap<&str, &'a Value>,
+    page: &Url,
+) -> Option<&'a Value> {
+    product
+        .get("hasVariant")
+        .into_iter()
+        .flat_map(array_values)
+        .map(|variant| resolved(variant, ids))
+        .find(|variant| url_score(variant, page) == 3)
+}
+
+fn product_page_metadata(
+    product: &Value,
+    ids: &HashMap<&str, &Value>,
+    page: &Url,
+    document: &Html,
+) -> DetectedProductMetadata {
+    let selected = selected_variant(product, ids, page).unwrap_or(product);
+    let og = crate::link_metadata::open_graph(document);
+    DetectedProductMetadata {
+        product: with_og_price(metadata_for(product, ids, page), document),
+        title: crate::link_metadata::text(selected.get("name"))
+            .or_else(|| crate::link_metadata::text(product.get("name")))
+            .or_else(|| crate::link_metadata::text(og.get("og:title"))),
+        image_url: crate::link_metadata::image_url(selected.get("image"), ids, page)
+            .or_else(|| crate::link_metadata::image_url(product.get("image"), ids, page))
+            .or_else(|| crate::link_metadata::og_image_url(&og, page)),
+    }
 }
 
 fn with_og_price(mut product: ProductMetadata, document: &Html) -> ProductMetadata {
@@ -387,12 +441,7 @@ fn contains_node(parent: &Value, node: &Value) -> bool {
             .is_some_and(|values| values.iter().any(|v| contains_node(v, node)))
 }
 fn metadata_for(product: &Value, ids: &HashMap<&str, &Value>, page: &Url) -> ProductMetadata {
-    let selected_variant = product
-        .get("hasVariant")
-        .into_iter()
-        .flat_map(array_values)
-        .map(|v| resolved(v, ids))
-        .find(|v| url_score(v, page) == 3);
+    let selected_variant = selected_variant(product, ids, page);
     let selected = selected_variant.unwrap_or(product);
     let mut offers: Vec<_> = selected
         .get("offers")
@@ -1023,6 +1072,99 @@ mod tests {
         assert_eq!(p.price.as_deref(), Some("125.5"));
         assert_eq!(p.currency.as_deref(), Some("EUR"));
         assert!(!p.price_is_from);
+    }
+
+    #[test]
+    fn main_product_artwork_resolves_graph_images_and_ignores_recommendations() {
+        let html = r##"<script type="application/ld+json">{"@graph":[
+            {"@type":"WebPage","url":"https://shop.example/lamp","mainEntity":{"@id":"#lamp"}},
+            {"@id":"#lamp","@type":"Product","name":" Selected lamp ","image":["data:image/png;base64,AA",{"@id":"#image"}],"offers":{"price":"229.00","priceCurrency":"EUR"}},
+            {"@id":"#image","@type":"ImageObject","contentUrl":"/lamp.jpg"},
+            {"@type":"Product","url":"/other","name":"Recommendation","image":"/other.jpg"}
+        ]}</script><meta property="og:image" content="/social.jpg">"##;
+        let detected = parse_product_page_metadata(html, "https://shop.example/lamp").unwrap();
+        assert_eq!(detected.title.as_deref(), Some("Selected lamp"));
+        assert_eq!(
+            detected.image_url.as_deref(),
+            Some("https://shop.example/lamp.jpg")
+        );
+        assert_eq!(detected.product.price.as_deref(), Some("229"));
+    }
+
+    #[test]
+    fn product_group_uses_the_exact_selected_variants_title_price_and_image() {
+        let html = r##"<script type="application/ld+json">{"@graph":[
+            {"@type":"WebPage","url":"/lamp?variant=blue","mainEntity":{"@id":"#group"}},
+            {"@id":"#group","@type":"ProductGroup","name":"Lamp","image":"/group.jpg","hasVariant":[{"@id":"#red"},{"@id":"#blue"}]},
+            {"@id":"#red","@type":"Product","url":"/lamp?variant=red","name":"Red lamp","image":"/red.jpg","offers":{"price":10,"priceCurrency":"EUR"}},
+            {"@id":"#blue","@type":"Product","url":"/lamp?variant=blue","name":"Blue lamp","image":{"url":"/blue.jpg"},"offers":{"price":20,"priceCurrency":"EUR"}}
+        ]}</script>"##;
+        let detected =
+            parse_product_page_metadata(html, "https://shop.example/lamp?variant=blue").unwrap();
+        assert_eq!(detected.title.as_deref(), Some("Blue lamp"));
+        assert_eq!(
+            detected.image_url.as_deref(),
+            Some("https://shop.example/blue.jpg")
+        );
+        assert_eq!(detected.product.price.as_deref(), Some("20"));
+    }
+
+    #[test]
+    fn product_group_without_a_selected_variant_uses_group_or_social_artwork() {
+        let data = r#"{"@type":"ProductGroup","url":"/lamp","hasVariant":[{"@type":"Product","url":"/lamp?variant=red","image":"/red.jpg"},{"@type":"Product","url":"/lamp?variant=blue","image":"/blue.jpg"}]}"#;
+        let html = format!("<script type='application/ld+json'>{data}</script>");
+        assert!(
+            parse_product_page_metadata(&html, "https://shop.example/lamp")
+                .unwrap()
+                .image_url
+                .is_none()
+        );
+        let social = format!("{html}<meta property='og:image' content='/social.jpg'>");
+        assert_eq!(
+            parse_product_page_metadata(&social, "https://shop.example/lamp")
+                .unwrap()
+                .image_url
+                .as_deref(),
+            Some("https://shop.example/social.jpg")
+        );
+    }
+
+    #[test]
+    fn product_artwork_supports_scoped_markup_and_explicit_og_products() {
+        for html in [
+            "<div itemscope itemtype='https://schema.org/Product'><meta itemprop='name' content='Lamp'><img itemprop='image' src='/lamp.jpg'></div>",
+            "<meta property='og:type' content='product'><meta property='og:title' content='Lamp'><meta property='og:image' content='/lamp.jpg'>",
+        ] {
+            let detected = parse_product_page_metadata(html, "https://shop.example/lamp").unwrap();
+            assert_eq!(detected.title.as_deref(), Some("Lamp"));
+            assert_eq!(detected.image_url.as_deref(), Some("https://shop.example/lamp.jpg"));
+        }
+    }
+
+    #[test]
+    fn incidental_products_and_unsafe_images_never_supply_product_artwork() {
+        for data in [
+            r#"{"@type":"Article","mentions":{"@type":"Product","image":"/wrong.jpg"}}"#,
+            r#"{"@type":"CollectionPage","itemListElement":[{"@type":"Product","image":"/wrong.jpg"}]}"#,
+            r#"[{"@type":"Product","url":"/other","image":"/wrong.jpg"}]"#,
+        ] {
+            let html = format!("<script type='application/ld+json'>{data}</script>");
+            assert!(parse_product_page_metadata(&html, "https://shop.example/lamp").is_none());
+        }
+        for image in [
+            "file:///tmp/private.png",
+            "https://user:secret@example.com/private.jpg",
+            "http://127.0.0.1/private.jpg",
+        ] {
+            let data = json!({"@type":"Product", "image":image});
+            let html = format!("<script type='application/ld+json'>{data}</script>");
+            assert!(
+                parse_product_page_metadata(&html, "https://shop.example/lamp")
+                    .unwrap()
+                    .image_url
+                    .is_none()
+            );
+        }
     }
     #[test]
     fn graph_main_entity_and_offer_id() {

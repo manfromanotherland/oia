@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-//! Recoverable category enrichment without rewriting a saved reading.
+//! Recoverable category and preview enrichment without rewriting a saved reading.
 
 use std::{
     fs,
@@ -87,10 +87,41 @@ pub fn update_link_category_if_unchanged(
     update_link_category_with_hook(library, id, category, expected_sha256, artwork, || {})
 }
 
+/// Fill a product's missing or unusable preview without changing its category,
+/// price snapshot, any other frontmatter, or its raw Markdown body. A valid
+/// existing local preview is retained. The complete article fingerprint is
+/// checked under its reading lock and immediately before the atomic commit.
+pub fn update_product_preview_if_unchanged(
+    library: &LibraryRoot,
+    id: &str,
+    expected_sha256: &str,
+    artwork: ImageBytes,
+) -> Result<CategoryUpdateOutcome> {
+    update_enrichment_with_hook(library, id, None, expected_sha256, Some(artwork), || {})
+}
+
 fn update_link_category_with_hook(
     library: &LibraryRoot,
     id: &str,
     category: LinkCategory,
+    expected_sha256: &str,
+    artwork: Option<ImageBytes>,
+    before_commit: impl FnOnce(),
+) -> Result<CategoryUpdateOutcome> {
+    update_enrichment_with_hook(
+        library,
+        id,
+        Some(category),
+        expected_sha256,
+        artwork,
+        before_commit,
+    )
+}
+
+fn update_enrichment_with_hook(
+    library: &LibraryRoot,
+    id: &str,
+    category: Option<LinkCategory>,
     expected_sha256: &str,
     artwork: Option<ImageBytes>,
     before_commit: impl FnOnce(),
@@ -121,7 +152,8 @@ fn update_link_category_with_hook(
             .source_profile
             .as_ref()
             .is_some_and(|source| source.source_type == "social_post")
-        || metadata.link_category.is_some()
+        || (category.is_some() && metadata.link_category.is_some())
+        || (category.is_none() && metadata.product.is_none())
         || crate::url_id(&metadata.url).ok().as_deref() != Some(id)
     {
         return Ok(CategoryUpdateOutcome::default());
@@ -135,8 +167,12 @@ fn update_link_category_with_hook(
     } else {
         artwork
     };
+    if category.is_none() && artwork.is_none() {
+        return Ok(CategoryUpdateOutcome::default());
+    }
     // Validate the surgical header format before creating any new asset.
-    patch_category(text, category.as_str(), None)?;
+    let category_name = category.map(|category| category.as_str());
+    patch_enrichment(text, category_name, None)?;
     let mut outcome = CategoryUpdateOutcome::default();
     let mut installed_assets = None;
     let preview = if let Some(artwork) = artwork {
@@ -155,7 +191,7 @@ fn update_link_category_with_hook(
     } else {
         None
     };
-    let result = patch_category(text, category.as_str(), preview.as_deref())?;
+    let result = patch_enrichment(text, category_name, preview.as_deref())?;
     before_commit();
     let temp_name = format!(".category.{}.tmp", crate::new_id());
     let write_result = (|| -> Result<bool> {
@@ -339,7 +375,11 @@ fn install_immutable_asset(
     result
 }
 
-fn patch_category(original: &str, category: &str, preview: Option<&str>) -> Result<String> {
+fn patch_enrichment(
+    original: &str,
+    category: Option<&str>,
+    preview: Option<&str>,
+) -> Result<String> {
     let rest = original
         .strip_prefix("---\n")
         .context("missing category frontmatter")?;
@@ -353,7 +393,8 @@ fn patch_category(original: &str, category: &str, preview: Option<&str>) -> Resu
         if top && !line.starts_with('#') {
             skipping = line.split_once(':').is_some_and(|(key, _)| {
                 let key = key.trim().trim_matches(['\'', '"']);
-                key == "link_category" || (preview.is_some() && key == "preview_asset")
+                (category.is_some() && key == "link_category")
+                    || (preview.is_some() && key == "preview_asset")
             });
         }
         if !skipping || line.trim_start().starts_with('#') || line.trim().is_empty() {
@@ -363,7 +404,9 @@ fn patch_category(original: &str, category: &str, preview: Option<&str>) -> Resu
     if !retained.ends_with('\n') {
         retained.push('\n');
     }
-    retained.push_str(&format!("link_category: {category}\n"));
+    if let Some(category) = category {
+        retained.push_str(&format!("link_category: {category}\n"));
+    }
     if let Some(preview) = preview {
         retained.push_str(&format!("preview_asset: {preview}\n"));
     }
@@ -446,6 +489,96 @@ mod tests {
             .unwrap()
             .changed
         );
+    }
+
+    #[test]
+    fn product_preview_patch_preserves_every_other_byte_and_existing_category() {
+        let (_dir, library, id) = saved();
+        let path = library.article_path(&id);
+        let original = fs::read_to_string(&path).unwrap().replacen("\n---\n", "\n# external comment\ncustom_key:\n  arbitrary: true\nlink_category: book\nproduct:\n  version: 1\n  price: '140'\n  currency: EUR\n  price_is_from: false\n---\n", 1);
+        fs::write(&path, &original).unwrap();
+        let outcome = update_product_preview_if_unchanged(
+            &library,
+            &id,
+            &sha256_hex(original.as_bytes()),
+            artwork(),
+        )
+        .unwrap();
+        assert!(outcome.changed);
+        let updated = fs::read_to_string(&path).unwrap();
+        let preview = parse_reading(&updated)
+            .unwrap()
+            .metadata
+            .preview_asset
+            .unwrap();
+        assert_eq!(
+            updated.replace(&format!("preview_asset: {preview}\n"), ""),
+            original
+        );
+        assert_eq!(
+            fs::read(library.reading_dir(&id).join(&preview)).unwrap(),
+            png()
+        );
+        let repeated = update_product_preview_if_unchanged(
+            &library,
+            &id,
+            &sha256_hex(updated.as_bytes()),
+            artwork(),
+        )
+        .unwrap();
+        assert!(!repeated.changed);
+        assert!(repeated.created_asset.is_none());
+        assert_eq!(fs::read_to_string(path).unwrap(), updated);
+        assert_eq!(fs::read_dir(library.assets_dir(&id)).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn product_preview_patch_requires_a_product_snapshot() {
+        let (_dir, library, id) = saved();
+        let original = fs::read(library.article_path(&id)).unwrap();
+        let outcome =
+            update_product_preview_if_unchanged(&library, &id, &sha256_hex(&original), artwork())
+                .unwrap();
+        assert!(!outcome.changed);
+        assert!(outcome.created_asset.is_none());
+        assert_eq!(fs::read(library.article_path(&id)).unwrap(), original);
+        assert_eq!(fs::read_dir(library.assets_dir(&id)).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn product_preview_patch_never_overwrites_stale_or_concurrently_edited_articles() {
+        let (_dir, library, id) = saved();
+        let path = library.article_path(&id);
+        let original = fs::read_to_string(&path).unwrap().replacen(
+            "\n---\n",
+            "\nproduct:\n  version: 1\n  price: '140'\n  currency: EUR\n---\n",
+            1,
+        );
+        fs::write(&path, &original).unwrap();
+        let edited = format!("{original}\nExternal writer's text.\n");
+        fs::write(&path, &edited).unwrap();
+        let stale = update_product_preview_if_unchanged(
+            &library,
+            &id,
+            &sha256_hex(original.as_bytes()),
+            artwork(),
+        )
+        .unwrap();
+        assert!(!stale.changed);
+        assert!(stale.created_asset.is_none());
+        assert_eq!(fs::read_dir(library.assets_dir(&id)).unwrap().count(), 0);
+        fs::write(&path, &original).unwrap();
+        let concurrent = update_enrichment_with_hook(
+            &library,
+            &id,
+            None,
+            &sha256_hex(original.as_bytes()),
+            Some(artwork()),
+            || fs::write(&path, &edited).unwrap(),
+        )
+        .unwrap();
+        assert!(!concurrent.changed);
+        assert_eq!(fs::read_to_string(path).unwrap(), edited);
     }
 
     #[test]

@@ -77,32 +77,22 @@ fn handle_in_library_with_source_resolver(
         Err(error) => return response_for_source_error(error),
     }
 
-    let product = (request.metadata.kind == oia_core::ReadingKind::Article)
-        .then(|| {
-            request
-                .metadata
-                .product_html
-                .as_deref()
-                .and_then(|html| oia_core::parse_product_metadata(html, &request.metadata.url))
-        })
-        .flatten();
-    let detected = oia_core::parse_link_metadata(
+    let detected = oia_core::parse_page_metadata(
         request.metadata.product_html.as_deref().unwrap_or(""),
         &request.metadata.url,
     );
     let images = decode_images(&request.images);
-    let preview_url = detected_preview_url(detected.as_ref(), &images, request.preview_url);
+    let preview_url =
+        detected_preview_url(detected.image_url.as_deref(), &images, request.preview_url);
 
     let outcome = match save_link_capture(
         library,
         SaveLinkInput {
             url: request.metadata.url,
             canonical_url: request.metadata.canonical_url,
-            title: detected
-                .as_ref()
-                .and_then(|value| value.title.clone())
-                .unwrap_or(request.metadata.title),
+            title: detected.title.unwrap_or(request.metadata.title),
             author: detected
+                .link
                 .as_ref()
                 .and_then(|value| value.author.clone())
                 .or(request.metadata.author),
@@ -112,8 +102,8 @@ fn handle_in_library_with_source_resolver(
             preview_url,
             favicon_url: request.favicon_url,
             theme_color: request.metadata.theme_color,
-            product,
-            link_category: detected.map(|value| value.category),
+            product: detected.product,
+            link_category: detected.link.map(|value| value.category),
             excerpt: request.metadata.excerpt,
             lang: request.metadata.lang,
         },
@@ -132,6 +122,38 @@ fn handle_in_library_with_source_resolver(
 mod tests {
     use super::*;
     use oia_core::SaveUrlError;
+
+    #[test]
+    fn product_link_saves_captured_main_product_artwork_with_its_price() {
+        let temporary = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(temporary.path()).unwrap();
+        let mut request = product_request(
+            r#"<script type="application/ld+json">{"@type":"Product","name":"Exact lamp","image":"/lamp.png","offers":{"price":"229","priceCurrency":"EUR"}}</script>"#,
+        );
+        request.images = serde_json::from_value(serde_json::json!([
+            {"url":"https://shop.example/social.png","content_type":"image/png","data_base64":"c29jaWFs"},
+            {"url":"https://shop.example/lamp.png","content_type":"image/png","data_base64":"bGFtcA=="},
+        ])).unwrap();
+        request.preview_url = Some("https://shop.example/social.png".into());
+        let response =
+            handle_in_library_with_source_resolver(request, &library, |_, _| Ok(None)).unwrap();
+        assert!(response.ok);
+        let id = response.id.unwrap();
+        let reading =
+            oia_core::parse_reading(&std::fs::read_to_string(library.article_path(&id)).unwrap())
+                .unwrap();
+        assert_eq!(reading.metadata.title, "Exact lamp");
+        assert!(reading.metadata.link_category.is_none());
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("229")
+        );
+        let preview = reading.metadata.preview_asset.unwrap();
+        assert_eq!(
+            std::fs::read(library.reading_dir(&id).join(preview)).unwrap(),
+            b"lamp"
+        );
+    }
 
     #[test]
     fn book_product_link_keeps_price_and_uses_book_cover() {

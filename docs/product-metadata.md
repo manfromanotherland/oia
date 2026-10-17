@@ -26,6 +26,12 @@ without making the native host fetch the page again. Ordinary URL-only saves, in
 Shortcut, can attempt a bounded public HTML fetch and remain normal lightweight links if offline,
 blocked, or missing reliable metadata.
 
+Recognized products also supply their main product title and image from the same page snapshot.
+Structured product images take precedence over the page's Open Graph image. The extension captures
+the selected image in the browser; URL-only saves retrieve it through the bounded public artwork
+fetcher. Both paths store image bytes in the reading's local assets and persist only a relative
+`preview_asset`. An unavailable image does not prevent saving the product or its price.
+
 The card fits its local preview inside a square or gently portrait canvas. The saved price appears
 in a theme-aware top-right badge, with a larger title over a dark gradient at the bottom of the
 image and no source footer. Products without previews use a neutral surface and semantic title
@@ -37,6 +43,8 @@ Re-saving a recognized product can enrich an existing full article as well as a 
 The update preserves the original body, assets, title, save date, Tags, and user state; a fingerprint
 check under the reading lock prevents stale captures from overwriting an external edit. The product
 metadata moves the card into Links without discarding the earlier capture.
+When a recognized product has no usable local preview, re-saving it can fill that preview while
+preserving the existing article file's other frontmatter and body. A usable saved preview is kept.
 
 The importer has a separate product enrichment mode that scans existing lightweight article links,
 including those already enriched with previews. It leaves unrecognised/unreachable links alone and

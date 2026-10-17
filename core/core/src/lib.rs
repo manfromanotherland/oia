@@ -43,7 +43,8 @@ mod writer;
 pub mod x_source;
 
 pub use category_update::{
-    fetch_category_artwork, update_link_category_if_unchanged, CategoryUpdateOutcome,
+    fetch_category_artwork, update_link_category_if_unchanged, update_product_preview_if_unchanged,
+    CategoryUpdateOutcome,
 };
 pub use delete::{delete_reading, delete_unenriched_link_files_if_unchanged};
 pub use frontmatter::{parse_reading, read_metadata, render_reading};
@@ -66,7 +67,7 @@ pub use ingest::{
 };
 pub use link_metadata::{
     fetch_link_metadata, fetch_page_metadata, normalize_isbn, parse_link_metadata,
-    DetectedLinkMetadata, DetectedPageMetadata, LinkCategory,
+    parse_page_metadata, DetectedLinkMetadata, DetectedPageMetadata, LinkCategory,
 };
 pub use list::{
     get_reading, list_readings, sidebar_counts, view_counts, CountScope, ListOptions, ReadingRow,
@@ -77,7 +78,8 @@ pub use page_capture::{
     classify_page_capture, PageCaptureEvidence, PageCaptureKind, MAX_PAGE_CAPTURE_PARAGRAPHS,
 };
 pub use product::{
-    fetch_product_metadata, parse_product_metadata, update_product_metadata_if_unchanged,
+    fetch_product_metadata, parse_product_metadata, parse_product_page_metadata,
+    update_product_metadata_if_unchanged, DetectedProductMetadata,
 };
 pub use rating::{list_ratings, set_rating};
 pub use reconcile::{apply_diffs, rebuild};

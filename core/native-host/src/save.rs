@@ -95,24 +95,17 @@ pub(crate) fn persist_capture_in_library(
 ) -> Result<SaveResponse> {
     // Decode the image bytes the extension captured. An image whose base64 won't
     // decode is skipped, so its URL stays in the Markdown as a placeholder.
-    let product = (req.metadata.kind == oia_core::ReadingKind::Article)
-        .then(|| {
-            req.metadata
-                .product_html
-                .as_deref()
-                .and_then(|html| oia_core::parse_product_metadata(html, &req.metadata.url))
-        })
-        .flatten();
-    let detected = (req.metadata.kind == ReadingKind::Article)
-        .then(|| {
-            oia_core::parse_link_metadata(
-                req.metadata.product_html.as_deref().unwrap_or(""),
-                &req.metadata.url,
-            )
-        })
-        .flatten();
+    let detected = if req.metadata.kind == ReadingKind::Article {
+        oia_core::parse_page_metadata(
+            req.metadata.product_html.as_deref().unwrap_or(""),
+            &req.metadata.url,
+        )
+    } else {
+        oia_core::DetectedPageMetadata::default()
+    };
     let images = decode_images(&req.images);
-    let preview_url = detected_preview_url(detected.as_ref(), &images, req.preview_url);
+    let preview_url = detected_preview_url(detected.image_url.as_deref(), &images, req.preview_url);
+    let product = detected.product;
 
     let saved = match page_kind {
         PageCaptureKind::Link => save_link_capture(
@@ -120,11 +113,9 @@ pub(crate) fn persist_capture_in_library(
             SaveLinkInput {
                 url: req.metadata.url,
                 canonical_url: req.metadata.canonical_url,
-                title: detected
-                    .as_ref()
-                    .and_then(|value| value.title.clone())
-                    .unwrap_or(req.metadata.title),
+                title: detected.title.unwrap_or(req.metadata.title),
                 author: detected
+                    .link
                     .as_ref()
                     .and_then(|value| value.author.clone())
                     .or(req.metadata.author),
@@ -135,7 +126,7 @@ pub(crate) fn persist_capture_in_library(
                 favicon_url: req.favicon_url,
                 theme_color: req.metadata.theme_color,
                 product,
-                link_category: detected.map(|value| value.category),
+                link_category: detected.link.map(|value| value.category),
                 excerpt: req.metadata.excerpt,
                 lang: req.metadata.lang,
             },
@@ -149,11 +140,9 @@ pub(crate) fn persist_capture_in_library(
                 url: req.metadata.url,
                 media_url: req.metadata.media_url,
                 canonical_url: req.metadata.canonical_url,
-                title: detected
-                    .as_ref()
-                    .and_then(|value| value.title.clone())
-                    .unwrap_or(req.metadata.title),
+                title: detected.title.unwrap_or(req.metadata.title),
                 author: detected
+                    .link
                     .as_ref()
                     .and_then(|value| value.author.clone())
                     .or(req.metadata.author),
@@ -165,7 +154,7 @@ pub(crate) fn persist_capture_in_library(
                 favicon_url: req.favicon_url,
                 theme_color: req.metadata.theme_color,
                 product,
-                link_category: detected.map(|value| value.category),
+                link_category: detected.link.map(|value| value.category),
                 excerpt: req.metadata.excerpt,
                 word_count: req.metadata.word_count,
                 lang: req.metadata.lang,
@@ -225,14 +214,13 @@ pub(crate) fn decode_images(images: &[crate::protocol::RequestImage]) -> Vec<Ima
 
 /// The exact main entity image can replace the social preview only when captured.
 pub(crate) fn detected_preview_url(
-    detected: Option<&oia_core::DetectedLinkMetadata>,
+    image_url: Option<&str>,
     images: &[ImageBytes],
     fallback: Option<String>,
 ) -> Option<String> {
-    detected
-        .and_then(|value| value.image_url.as_ref())
-        .filter(|url| images.iter().any(|image| &image.url == *url))
-        .cloned()
+    image_url
+        .filter(|url| images.iter().any(|image| image.url == *url))
+        .map(str::to_owned)
         .or(fallback)
 }
 
@@ -316,7 +304,9 @@ mod tests {
         }];
         assert_eq!(
             detected_preview_url(
-                detected.as_ref(),
+                detected
+                    .as_ref()
+                    .and_then(|value| value.image_url.as_deref()),
                 &images,
                 Some("https://example.com/social.png".into())
             )
