@@ -41,13 +41,17 @@ npm install
 npm run build
 ```
 
+Every build refreshes both unpacked browser copies and the ZIP archives below. The repository's
+`make build` runs this same command, so the extension loaded by the browser stays current on disk.
+
 ## Package for each browser
 
 ```bash
 npm run package
 ```
 
-Builds a fresh bundle, then copies only runtime files
+`npm run package` is an alias for the same complete build. It creates a fresh bundle, then copies
+only runtime files
 (`manifest.json`, the four runtime bundles in `dist/`, `icons/`, `options.html`, `install.html`)
 into these outputs:
 

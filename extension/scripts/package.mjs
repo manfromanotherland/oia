@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Packages the built extension for Chromium and Firefox.
 //
-// Run via `npm run package`, which builds first, then invokes this script. It
-// stages only what the manifest references — no src/, node_modules/, or signing
+// Both `npm run build` and its `npm run package` alias bundle first, then invoke
+// this script. It stages only what the manifest references — no src/, node_modules/, or signing
 // keys — into stable browser-specific unpacked directories and ZIP archives.
 //
 // Chromium retains the source key only in the development directory. Firefox

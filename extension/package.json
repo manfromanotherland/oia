@@ -5,8 +5,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "NODE_PATH=node_modules esbuild src/background.ts src/content.ts src/options.ts src/page-video-main.ts --bundle --outdir=dist --target=chrome120,firefox115",
-    "package": "npm run build && node scripts/package.mjs",
+    "build": "NODE_PATH=node_modules esbuild src/background.ts src/content.ts src/options.ts src/page-video-main.ts --bundle --outdir=dist --target=chrome120,firefox115 && node scripts/package.mjs",
+    "package": "npm run build",
     "typecheck": "tsc --noEmit",
     "lint": "tsc --noEmit && eslint src --max-warnings 0 && prettier --check src",
     "lint:fix": "eslint src --fix && prettier --write src",
