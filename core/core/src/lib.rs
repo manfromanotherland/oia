@@ -2,6 +2,7 @@
 
 uniffi::setup_scaffolding!();
 
+mod amazon_product;
 mod article_html;
 pub mod bluesky_source;
 mod card_description;

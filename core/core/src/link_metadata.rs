@@ -218,7 +218,7 @@ fn inspect_link_metadata(
         return Err(());
     }
     let Some(category) = category else {
-        return Ok(None);
+        return Ok(crate::amazon_product::inspect(&document, &page).and_then(|(_, link)| link));
     };
     let isbn = isbn(og.get("book:isbn")).or(route_isbn);
     Ok(Some(DetectedLinkMetadata {

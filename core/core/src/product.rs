@@ -91,7 +91,9 @@ pub fn parse_product_page_metadata(html: &str, page_url: &str) -> Option<Detecte
             &document,
         ));
     }
-    let product = open_graph_product(&document)?;
+    let Some(product) = open_graph_product(&document) else {
+        return crate::amazon_product::inspect(&document, &page).map(|(product, _)| product);
+    };
     let og = crate::link_metadata::open_graph(&document);
     Some(DetectedProductMetadata {
         product,

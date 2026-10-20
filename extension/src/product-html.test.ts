@@ -14,6 +14,23 @@ function buildDoc(head: string, body = ""): Document {
 }
 
 describe("structured product evidence", () => {
+  it("preserves Amazon's main book DOM without scripts or private metadata", () => {
+    const html = readFileSync("../core/core/tests/fixtures/amazon-book.html", "utf8");
+    const doc = new DOMParser().parseFromString(html, "text/html");
+    doc
+      .querySelector("#bylineInfo")!
+      .insertAdjacentHTML(
+        "beforeend",
+        '<meta name="anti-csrftoken-a2z" content="PRIVATE"><script>PRIVATE</script>',
+      );
+    const evidence = captureProductHtml(doc)!;
+    expect(evidence).toContain('id="productTitle"');
+    expect(evidence).toContain("Ray Dalio");
+    expect(evidence).toContain("61suprU8a5L");
+    expect(evidence).toContain("a-price-fraction");
+    expect(evidence).not.toContain("PRIVATE");
+  });
+
   it("preserves the Harvard main book facts without interpreting them", () => {
     const html = readFileSync("../core/core/tests/fixtures/harvard-book.html", "utf8");
     const doc = new DOMParser().parseFromString(html, "text/html");

@@ -8,6 +8,7 @@ const STRUCTURED_DOM_LIMIT = Symbol("structured DOM limit");
 
 const STRUCTURED_ATTRIBUTES = [
   "id",
+  "class",
   "itemscope",
   "itemtype",
   "itemprop",
@@ -122,6 +123,21 @@ export function captureProductHtml(doc: Document): string | undefined {
   }
   if (!append(scopes)) return undefined;
 
+  // Preserve only public main-product fields; omit scripts, forms and private meta.
+  try {
+    const budget = { nodes: 0 };
+    for (const field of Array.from(
+      doc.querySelectorAll(
+        "#productTitle, #ebooksProductTitle, #bylineInfo, #landingImage, #imgBlkFront, #priceBlock-outsideOfForm_feature_div, #corePrice_feature_div, #corePriceDisplay_desktop_feature_div",
+      ),
+    )) {
+      if (!append(cloneStructuredElement(field, budget, true)?.outerHTML ?? "")) return undefined;
+    }
+  } catch (error) {
+    if (error === STRUCTURED_DOM_LIMIT) return undefined;
+    throw error;
+  }
+
   // Raw provider evidence only: the core validates its host, route and identity.
   // Keep text and author links inside the main product header, never the page body.
   try {
@@ -150,7 +166,13 @@ function cloneStructuredElement(
   if (++budget.nodes > MAX_STRUCTURED_DOM_NODES || depth > MAX_STRUCTURED_DOM_DEPTH) {
     throw STRUCTURED_DOM_LIMIT;
   }
-  if (["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "IFRAME", "CANVAS"].includes(element.tagName)) {
+  if (
+    ["SCRIPT", "STYLE", "NOSCRIPT", "SVG", "IFRAME", "CANVAS", "INPUT"].includes(element.tagName) ||
+    (parentText &&
+      element.tagName === "META" &&
+      !element.hasAttribute("itemprop") &&
+      !element.hasAttribute("property"))
+  ) {
     return undefined;
   }
   const scoped = element.hasAttribute("itemscope") || element.hasAttribute("typeof");
@@ -174,5 +196,5 @@ function cloneStructuredElement(
       if (nested) clone.appendChild(nested);
     }
   }
-  return annotated || clone.childNodes.length ? clone : undefined;
+  return annotated || element.hasAttribute("id") || clone.childNodes.length ? clone : undefined;
 }

@@ -124,6 +124,41 @@ mod tests {
     use oia_core::SaveUrlError;
 
     #[test]
+    fn amazon_book_capture_persists_book_category_and_local_cover() {
+        let temporary = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(temporary.path()).unwrap();
+        let mut request =
+            product_request(include_str!("../../core/tests/fixtures/amazon-book.html"));
+        request.metadata.url = "https://www.amazon.co.uk/Principles-Life-Work-Ray-Dalio-ebook/dp/B071RBPKGR/ref=tmm_kin_swatch_0".into();
+        request.metadata.canonical_url = request.metadata.url.clone();
+        request.images = serde_json::from_value(serde_json::json!([
+            {"url":"https://m.media-amazon.com/images/I/61suprU8a5L._SY522_.jpg","content_type":"image/jpeg","data_base64":"Y292ZXI="}
+        ])).unwrap();
+        let response =
+            handle_in_library_with_source_resolver(request, &library, |_, _| Ok(None)).unwrap();
+        assert!(response.ok);
+        let id = response.id.unwrap();
+        let reading =
+            oia_core::parse_reading(&std::fs::read_to_string(library.article_path(&id)).unwrap())
+                .unwrap();
+        assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
+        assert_eq!(reading.metadata.author.as_deref(), Some("Ray Dalio"));
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("23.76")
+        );
+        assert_eq!(
+            std::fs::read(
+                library
+                    .reading_dir(&id)
+                    .join(reading.metadata.preview_asset.unwrap())
+            )
+            .unwrap(),
+            b"cover"
+        );
+    }
+
+    #[test]
     fn product_link_saves_captured_main_product_artwork_with_its_price() {
         let temporary = tempfile::tempdir().unwrap();
         let library = LibraryRoot::new(temporary.path()).unwrap();
