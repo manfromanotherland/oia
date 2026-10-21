@@ -1282,14 +1282,11 @@ fn import_article_capture(
         mut images,
     } = content;
     if let Some(article) = &article {
-        let detected = crate::parse_link_metadata(&article.structured_html, &article.page_url);
+        let detected = crate::parse_page_metadata(&article.structured_html, &article.page_url);
         ensure!(
             images.iter().all(|image| {
                 article.markdown.contains(&image.url)
-                    || detected
-                        .as_ref()
-                        .and_then(|metadata| metadata.image_url.as_deref())
-                        == Some(image.url.as_str())
+                    || detected.image_url.as_deref() == Some(image.url.as_str())
             }),
             "An article contains an unrelated image attachment."
         );
@@ -1307,7 +1304,9 @@ fn import_article_capture(
             if !metadata.lightweight || metadata.source_profile.is_some() {
                 return Ok(outcome);
             }
-            if article.is_none() && (metadata.link_category.is_some() || metadata.product.is_some())
+            if article.is_none()
+                && (metadata.link_category.is_some() || metadata.product.is_some())
+                && metadata.preview_asset.is_some()
             {
                 return Ok(outcome);
             }
@@ -1350,8 +1349,9 @@ fn import_article_capture(
         && stored
             .as_ref()
             .is_none_or(|metadata| metadata.link_category.is_none() && metadata.product.is_none());
-    let detected = crate::parse_link_metadata(&article.structured_html, &article.page_url);
+    let detected = crate::parse_page_metadata(&article.structured_html, &article.page_url);
     let category = detected
+        .link
         .as_ref()
         .map(|metadata| metadata.category)
         .or_else(|| {
@@ -1360,15 +1360,24 @@ fn import_article_capture(
                 .and_then(|metadata| metadata.link_category.as_deref())
                 .and_then(crate::LinkCategory::parse)
         });
-    let product = crate::parse_product_metadata(&article.structured_html, &article.page_url)
-        .or_else(|| {
-            stored
-                .as_ref()
-                .and_then(|metadata| metadata.product.clone())
-        });
-    let title = detected
+    let stored_product = stored
         .as_ref()
-        .and_then(|metadata| metadata.title.clone())
+        .and_then(|metadata| metadata.product.as_ref());
+    // A partial shared page can identify a Product without carrying its price.
+    // Preserve the complete price snapshot and its timestamp from the resolver;
+    // a complete supplied price still owns the live sharing context.
+    let product = detected
+        .product
+        .as_ref()
+        .filter(|product| product.price.is_some() && product.currency.is_some())
+        .or_else(|| {
+            stored_product.filter(|product| product.price.is_some() && product.currency.is_some())
+        })
+        .or(detected.product.as_ref())
+        .or(stored_product)
+        .cloned();
+    let title = detected
+        .title
         .or_else(|| origin.title.clone())
         .or(article.title)
         .unwrap_or_else(|| target_url.clone());
@@ -1384,8 +1393,7 @@ fn import_article_capture(
         .or(article.site)
         .or_else(|| origin.site(&target_url));
     let preview_url = detected
-        .as_ref()
-        .and_then(|metadata| metadata.image_url.clone())
+        .image_url
         .filter(|url| images.iter().any(|image| &image.url == url))
         .or_else(|| images.first().map(|image| image.url.clone()));
     let markdown = if full {
@@ -2143,6 +2151,196 @@ mod tests {
             assert!(!readings(&library)[0].metadata.lightweight);
             assert!(readings(&library)[0].body.contains("Useful article prose."));
         }
+    }
+
+    #[test]
+    fn partial_shared_product_html_preserves_the_resolved_price_and_preview() {
+        for supplied_price in [None, Some("25")] {
+            let (_temp, library) = library();
+            let price_html = supplied_price.map(|price| format!("<meta property='product:price:amount' content='{price}'><meta property='product:price:currency' content='EUR'>")).unwrap_or_default();
+            let html = format!("<meta property='og:type' content='product'>{price_html}<main><h1>Shared product</h1><p>Product details supplied by Safari.</p></main>");
+            let manifest = article_manifest(&html);
+            archive(&library, &manifest, &[("article.html", html.as_bytes())]);
+            let preview_url = "https://example.com/product.png";
+            let saver = |library: &LibraryRoot, request: UrlSaveRequest| {
+                let mut product = crate::parse_product_metadata(
+                "<meta property='og:type' content='product'><meta property='product:price:amount' content='20'><meta property='product:price:currency' content='EUR'>",
+                &request.url,
+            );
+                product.as_mut().unwrap().captured_at = Some("2026-10-20T12:00:00.000Z".into());
+                Ok(crate::save_link_capture(
+                    library,
+                    crate::SaveLinkInput {
+                        canonical_url: request.url.clone(),
+                        title: request.title_hint.unwrap_or_else(|| request.url.clone()),
+                        author: None,
+                        site: request.site_hint,
+                        saved_at: request.saved_at.unwrap(),
+                        url: request.url,
+                        images: vec![crate::ImageBytes {
+                            url: preview_url.into(),
+                            content_type: "image/png".into(),
+                            bytes: png(),
+                        }],
+                        preview_url: Some(preview_url.into()),
+                        favicon_url: None,
+                        theme_color: None,
+                        product,
+                        link_category: None,
+                        excerpt: None,
+                        lang: None,
+                    },
+                )?)
+            };
+            let report = process_inbox_with_fetchers_at(
+                &library,
+                &[],
+                SystemTime::now() + Duration::from_secs(60),
+                None,
+                &saver,
+                &unavailable_article,
+            )
+            .unwrap();
+            assert_eq!(report.saved, 1, "{report:?}");
+            let reading = readings(&library).pop().unwrap();
+            assert!(reading.metadata.preview_asset.is_some());
+            let product = reading.metadata.product.unwrap();
+            assert_eq!(product.price.as_deref(), supplied_price.or(Some("20")));
+            if supplied_price.is_none() {
+                assert_eq!(
+                    product.captured_at.as_deref(),
+                    Some("2026-10-20T12:00:00.000Z")
+                );
+            } else {
+                assert_ne!(
+                    product.captured_at.as_deref(),
+                    Some("2026-10-20T12:00:00.000Z")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn shared_product_html_accepts_its_declared_artwork_attachment() {
+        let (_temp, library) = library();
+        let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Shared product","image":"https://example.com/product.png","offers":{"price":"20","priceCurrency":"EUR"}}</script><main><p>Shared product details.</p></main>"#;
+        let bytes = png();
+        let mut manifest = article_manifest(html);
+        manifest["attachments"] = json!([{
+            "path":"product.png", "source_url":"https://example.com/product.png",
+            "content_type":"image/png", "byte_count":bytes.len(),
+            "sha256":crate::sha256_hex(&bytes),
+        }]);
+        archive(
+            &library,
+            &manifest,
+            &[("article.html", html.as_bytes()), ("product.png", &bytes)],
+        );
+        let report = process_articles(&library, &unavailable_article);
+        assert_eq!(report.saved, 1, "{report:?}");
+        let reading = readings(&library).pop().unwrap();
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("20")
+        );
+        let preview = reading
+            .metadata
+            .preview_asset
+            .expect("The declared product artwork must be local");
+        assert_eq!(
+            fs::read(library.reading_dir(&reading.metadata.id).join(preview)).unwrap(),
+            bytes
+        );
+    }
+
+    #[test]
+    fn shared_catalog_html_rejects_unrelated_product_artwork_attachments() {
+        for html in [
+            r#"<script type="application/ld+json">{"@type":"Product","name":"Main product","image":"/main.png"}</script><main><p>Product details.</p></main>"#,
+            r##"<script type="application/ld+json">{"@graph":[{"@type":"WebPage","url":"https://example.com/article","mainEntity":{"@id":"#film"}},{"@id":"#film","@type":"Movie","name":"The film"},{"@type":"Product","image":"/advertisement.png"}]}</script><main><p>Film details.</p></main>"##,
+        ] {
+            let (_temp, library) = library();
+            let bytes = png();
+            let mut manifest = article_manifest(html);
+            manifest["attachments"] = json!([{
+                "path":"advertisement.png", "source_url":"https://example.com/advertisement.png",
+                "content_type":"image/png", "sha256":crate::sha256_hex(&bytes),
+            }]);
+            let path = archive(
+                &library,
+                &manifest,
+                &[
+                    ("article.html", html.as_bytes()),
+                    ("advertisement.png", &bytes),
+                ],
+            );
+            let report = process_articles(&library, &unavailable_article);
+            assert_eq!(report.saved, 0, "{report:?}");
+            assert!(path.exists());
+            assert_eq!(report.issues.len(), 1);
+            assert!(report.issues[0]
+                .message
+                .contains("unrelated image attachment"));
+            assert!(readings(&library).is_empty());
+        }
+    }
+
+    #[test]
+    fn product_article_intent_without_preview_allows_one_bounded_recovery() {
+        use base64::Engine as _;
+        let (_temp, library) = library();
+        let mut manifest = article_manifest("");
+        manifest.as_object_mut().unwrap().remove("article");
+        archive(&library, &manifest, &[]);
+        let saver_calls = std::cell::Cell::new(0);
+        let fetch_calls = std::cell::Cell::new(0);
+        let saver = |library: &LibraryRoot, request: UrlSaveRequest| {
+            saver_calls.set(saver_calls.get() + 1);
+            let outcome = save_offline_url(library, request)?;
+            let snapshot = fs::read(library.article_path(&outcome.id))?;
+            let product = crate::parse_product_metadata(
+                "<meta property='og:type' content='product'>",
+                "https://example.com/article",
+            )
+            .unwrap();
+            crate::update_product_metadata_if_unchanged(
+                library,
+                &outcome.id,
+                product,
+                &crate::sha256_hex(&snapshot),
+            )?;
+            Ok(outcome)
+        };
+        let bytes = png();
+        let fetcher = |url: &str| {
+            fetch_calls.set(fetch_calls.get() + 1);
+            Ok(FetchedArticle {
+                url: url.into(),
+                html: format!("<meta property='og:type' content='product'><main><h1>Product</h1><p>Useful product details.</p><img src='data:image/png;base64,{}' alt='Product artwork'></main>", base64::engine::general_purpose::STANDARD.encode(&bytes)),
+            })
+        };
+        let report = process_inbox_with_fetchers_at(
+            &library,
+            &[],
+            SystemTime::now() + Duration::from_secs(60),
+            None,
+            &saver,
+            &fetcher,
+        )
+        .unwrap();
+        assert_eq!(report.saved, 1, "{report:?}");
+        assert_eq!(saver_calls.get(), 1);
+        assert_eq!(fetch_calls.get(), 1);
+        let reading = readings(&library).pop().unwrap();
+        assert!(reading.metadata.product.is_some());
+        let preview = reading
+            .metadata
+            .preview_asset
+            .expect("Missing product artwork must allow recovery");
+        assert_eq!(
+            fs::read(library.reading_dir(&reading.metadata.id).join(preview)).unwrap(),
+            bytes
+        );
     }
 
     #[test]

@@ -25,12 +25,18 @@ Rust owns recognition and validation. This also supports metadata inserted by cl
 without making the native host fetch the page again. Ordinary URL-only saves, including the
 Shortcut, can attempt a bounded public HTML fetch and remain normal lightweight links if offline,
 blocked, or missing reliable metadata.
+Failed optional page and artwork requests are retried once before retaining that fallback.
 
 Recognized products also supply their main product title and image from the same page snapshot.
 Structured product images take precedence over the page's Open Graph image. The extension captures
 the selected image in the browser; URL-only saves retrieve it through the bounded public artwork
 fetcher. Both paths store image bytes in the reading's local assets and persist only a relative
 `preview_asset`. An unavailable image does not prevent saving the product or its price.
+
+The iOS Inbox importer uses the same product artwork selection when processing supplied HTML and
+validating image attachments. A partial shared page cannot erase a complete price snapshot already
+resolved from the public page, including its capture time. A complete supplied price still takes
+precedence. Recognized products missing a preview remain eligible for the bounded article fallback.
 
 The card fits its local preview inside a square or gently portrait canvas. The saved price appears
 in a theme-aware top-right badge, with a larger title over a dark gradient at the bottom of the

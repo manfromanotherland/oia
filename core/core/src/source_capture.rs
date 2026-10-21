@@ -463,8 +463,8 @@ pub fn save_url(
 fn save_ordinary_url_with(
     library: &LibraryRoot,
     request: UrlSaveRequest,
-    fetch: impl FnOnce(&str) -> anyhow::Result<crate::DetectedPageMetadata>,
-    fetch_artwork: impl FnOnce(&str) -> anyhow::Result<crate::ImageBytes>,
+    mut fetch: impl FnMut(&str) -> anyhow::Result<crate::DetectedPageMetadata>,
+    mut fetch_artwork: impl FnMut(&str) -> anyhow::Result<crate::ImageBytes>,
 ) -> Result<SaveOutcome, SaveUrlError> {
     if let Some(id) = find_by_url(library, &request.url)? {
         if crate::scanner::read_reading_for_id(library, &id)?.is_some_and(|reading| {
@@ -478,14 +478,16 @@ fn save_ordinary_url_with(
             return Ok(duplicate_outcome(library, id));
         }
     }
-    // One optional HTML retrieval feeds both classifiers. Narrow provider
-    // routes retain their category even when HTTP is unavailable.
-    let detected =
-        fetch(&request.url).unwrap_or_else(|_| crate::parse_page_metadata("", &request.url));
+    // One page snapshot feeds both classifiers. Retry an optional retrieval
+    // failure once so a transient error does not immediately discard artwork
+    // or metadata. Repeated failures still retain the offline link fallback.
+    let detected = fetch(&request.url)
+        .or_else(|_| fetch(&request.url))
+        .unwrap_or_else(|_| crate::parse_page_metadata("", &request.url));
     let artwork = detected
         .image_url
         .as_deref()
-        .and_then(|url| fetch_artwork(url).ok());
+        .and_then(|url| fetch_artwork(url).or_else(|_| fetch_artwork(url)).ok());
     let preview_url = artwork.as_ref().map(|image| image.url.clone());
     Ok(crate::save_link_capture(
         library,
@@ -2439,11 +2441,19 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let library = LibraryRoot::new(directory.path()).unwrap();
         let url = "https://www.waterstones.com/book/title/author/9781840919356";
+        let metadata_attempts = std::cell::Cell::new(0);
+        let artwork_attempts = std::cell::Cell::new(0);
         let saved = save_ordinary_url_with(
             &library,
             UrlSaveRequest::new(url),
-            |_| anyhow::bail!("offline"),
-            |_| anyhow::bail!("cover unavailable"),
+            |_| {
+                metadata_attempts.set(metadata_attempts.get() + 1);
+                anyhow::bail!("offline")
+            },
+            |_| {
+                artwork_attempts.set(artwork_attempts.get() + 1);
+                anyhow::bail!("cover unavailable")
+            },
         )
         .unwrap();
         let reading =
@@ -2452,6 +2462,8 @@ mod tests {
         assert_eq!(reading.metadata.link_category.as_deref(), Some("book"));
         assert!(reading.metadata.preview_asset.is_none());
         assert!(reading.body.contains("Open link"));
+        assert_eq!(metadata_attempts.get(), 2);
+        assert_eq!(artwork_attempts.get(), 2);
     }
 
     #[test]
@@ -2615,11 +2627,15 @@ mod tests {
         let library = LibraryRoot::new(directory.path()).unwrap();
         let url = "https://shop.example/lamp";
         let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Shore Table Lamp","image":"/lamp.png","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#;
+        let attempts = std::cell::Cell::new(0);
         let saved = save_ordinary_url_with(
             &library,
             UrlSaveRequest::new(url),
             |_| Ok(crate::parse_page_metadata(html, url)),
-            |_| anyhow::bail!("image unavailable"),
+            |_| {
+                attempts.set(attempts.get() + 1);
+                anyhow::bail!("image unavailable")
+            },
         )
         .unwrap();
         let reading =
@@ -2630,6 +2646,111 @@ mod tests {
             Some("140")
         );
         assert!(reading.metadata.preview_asset.is_none());
+        assert!(reading.metadata.lightweight);
+        assert_eq!(attempts.get(), 2);
+    }
+
+    #[test]
+    fn product_url_save_retries_one_transient_artwork_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://shop.example/lamp";
+        let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Shore Table Lamp","image":"/lamp.png","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#;
+        let attempts = std::cell::Cell::new(0);
+        let png = hex::decode("89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000b49444154789c636000020000050001a5f645400000000049454e44ae426082").unwrap();
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| Ok(crate::parse_page_metadata(html, url)),
+            |image_url| {
+                assert_eq!(image_url, "https://shop.example/lamp.png");
+                attempts.set(attempts.get() + 1);
+                if attempts.get() == 1 {
+                    anyhow::bail!("temporary image failure");
+                }
+                Ok(crate::ImageBytes {
+                    url: image_url.into(),
+                    content_type: "image/png".into(),
+                    bytes: png.clone(),
+                })
+            },
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        let preview = reading
+            .metadata
+            .preview_asset
+            .expect("retry must save the product image");
+        assert_eq!(
+            fs::read(library.reading_dir(&saved.id).join(preview)).unwrap(),
+            png
+        );
+        assert_eq!(reading.metadata.title, "Shore Table Lamp");
+        assert_eq!(
+            reading.metadata.product.unwrap().price.as_deref(),
+            Some("140")
+        );
+        assert_eq!(attempts.get(), 2);
+    }
+
+    #[test]
+    fn product_url_save_retries_one_transient_metadata_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://shop.example/lamp";
+        let html = r#"<script type="application/ld+json">{"@type":"Product","name":"Shore Table Lamp","offers":{"price":140,"priceCurrency":"EUR"}}</script>"#;
+        let attempts = std::cell::Cell::new(0);
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| {
+                attempts.set(attempts.get() + 1);
+                if attempts.get() == 1 {
+                    anyhow::bail!("temporary page failure");
+                }
+                Ok(crate::parse_page_metadata(html, url))
+            },
+            |_| panic!("the selected product has no artwork URL"),
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert_eq!(reading.metadata.title, "Shore Table Lamp");
+        assert_eq!(
+            reading
+                .metadata
+                .product
+                .expect("retry must preserve the product snapshot")
+                .price
+                .as_deref(),
+            Some("140")
+        );
+        assert_eq!(attempts.get(), 2);
+    }
+
+    #[test]
+    fn ordinary_url_save_does_not_retry_successful_empty_metadata() {
+        let directory = tempfile::tempdir().unwrap();
+        let library = LibraryRoot::new(directory.path()).unwrap();
+        let url = "https://example.com/page";
+        let attempts = std::cell::Cell::new(0);
+        let saved = save_ordinary_url_with(
+            &library,
+            UrlSaveRequest::new(url),
+            |_| {
+                attempts.set(attempts.get() + 1);
+                Ok(crate::DetectedPageMetadata::default())
+            },
+            |_| panic!("empty metadata must not request artwork"),
+        )
+        .unwrap();
+        let reading =
+            parse_reading(&fs::read_to_string(library.article_path(&saved.id)).unwrap()).unwrap();
+        assert!(reading.metadata.lightweight);
+        assert!(reading.metadata.product.is_none());
+        assert!(reading.metadata.preview_asset.is_none());
+        assert_eq!(attempts.get(), 1);
     }
 
     #[test]
