@@ -10,8 +10,24 @@ enum ImageTypeAssessment: String, Sendable {
     case unknown
 }
 
+enum ImageClassificationAvailability: Equatable, Sendable {
+    case available
+    case unavailable(Reason)
+
+    enum Reason: Equatable, Sendable {
+        case unsupportedOS
+        case deviceNotEligible
+        case appleIntelligenceNotEnabled
+        case modelNotReady
+    }
+}
+
+enum ImageClassificationError: Error, Equatable, Sendable {
+    case unavailable(ImageClassificationAvailability.Reason)
+}
+
 protocol ImageTypeClassifying: Sendable {
     var analyzerVersion: String { get }
-    var isAvailable: Bool { get }
+    var availability: ImageClassificationAvailability { get }
     func classify(imageAt url: URL) async throws -> ImageTypeAssessment
 }

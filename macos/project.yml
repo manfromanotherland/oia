@@ -114,6 +114,7 @@ targets:
       - path: Sources/Oia/State/BoardSearch.swift
       - path: Sources/Oia/State/ReadingImageType.swift
       - path: Sources/Oia/State/ImageClassificationCoordinator.swift
+      - path: Sources/Oia/State/VisualSearchReconciliationPass.swift
       - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
       - path: Sources/Oia/Platform/TextEditing/TextEditingMonitor.swift
       - path: Sources/Oia/Platform/TextEditing/ItemCopyKeyMonitor.swift

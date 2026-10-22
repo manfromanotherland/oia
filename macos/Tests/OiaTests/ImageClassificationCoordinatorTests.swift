@@ -1,15 +1,27 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 import Foundation
+import Synchronization
 import XCTest
 
 final class ImageClassificationCoordinatorTests: XCTestCase {
     func testUnavailableModelLeavesEveryImagePending() async throws {
-        let core = ClassificationCoreFixture()
-        let coordinator = ImageClassificationCoordinator(classifier: ClassificationFixture(available: false))
-        try await coordinator.reconcile(core: core) { _ in XCTFail("Unavailable model published a result") }
-        let requests = await core.requests
-        XCTAssertEqual(requests, 0)
+        for reason: ImageClassificationAvailability.Reason in [
+            .unsupportedOS, .deviceNotEligible, .appleIntelligenceNotEnabled
+        ] {
+            let core = ClassificationCoreFixture()
+            let delays = ClassificationRetryDelays()
+            let coordinator = ImageClassificationCoordinator(
+                classifier: ClassificationFixture(availability: .unavailable(reason))
+            ) { delay in
+                await delays.record(delay)
+            }
+            try await coordinator.reconcile(core: core) { _ in XCTFail("Unavailable model published a result") }
+            let requests = await core.requests
+            let recordedDelays = await delays.values
+            XCTAssertEqual(requests, 0)
+            XCTAssertTrue(recordedDelays.isEmpty, "Disabled or unsupported models must not poll")
+        }
     }
 
     func testFailedImageDoesNotStarveLaterPagesAndUnknownIsRecorded() async throws {
@@ -41,13 +53,110 @@ final class ImageClassificationCoordinatorTests: XCTestCase {
         let completed = await core.completed
         XCTAssertTrue(completed.isEmpty)
     }
+
+    func testTemporaryModelInterruptionStillClassifiesLaterPages() async throws {
+        let core = ClassificationCoreFixture()
+        let classifier = InterruptedClassificationFixture()
+        let delays = ClassificationRetryDelays()
+        let coordinator = ImageClassificationCoordinator(classifier: classifier) { delay in
+            await delays.record(delay)
+        }
+
+        try await coordinator.reconcile(core: core) { _ in }
+
+        let completed = await core.completed
+        XCTAssertEqual(completed, ["uncertain", "photo"], "A temporary model interruption must not strand later images")
+        let recordedDelays = await delays.values
+        XCTAssertEqual(recordedDelays, [.seconds(10)])
+    }
+
+    func testModelReadinessErrorRetriesTheCurrentImageAfterRecovery() async throws {
+        let core = ClassificationCoreFixture()
+        let coordinator = ImageClassificationCoordinator(classifier: ReadinessErrorClassificationFixture())
+
+        try await coordinator.reconcile(core: core) { _ in }
+
+        let completed = await core.completed
+        XCTAssertEqual(completed, ["uncertain", "photo"], "A readiness change during inference must retry the current image")
+    }
+
+    func testModelNotReadyStopsAfterBoundedRetriesWithoutQueryingImages() async throws {
+        let core = ClassificationCoreFixture()
+        let delays = ClassificationRetryDelays()
+        let coordinator = ImageClassificationCoordinator(
+            classifier: ClassificationFixture(availability: .unavailable(.modelNotReady))
+        ) { delay in
+            await delays.record(delay)
+        }
+
+        try await coordinator.reconcile(core: core) { _ in XCTFail("An unavailable model published a result") }
+
+        let recordedDelays = await delays.values
+        let requests = await core.requests
+        XCTAssertEqual(recordedDelays, Array(repeating: .seconds(10), count: 6))
+        XCTAssertEqual(requests, 0)
+    }
+
+    func testCancellationDuringModelReadinessWaitDoesNotQueryImages() async throws {
+        let core = ClassificationCoreFixture()
+        let coordinator = ImageClassificationCoordinator(
+            classifier: ClassificationFixture(availability: .unavailable(.modelNotReady))
+        ) { _ in throw CancellationError() }
+
+        do {
+            try await coordinator.reconcile(core: core) { _ in XCTFail("Cancelled analysis published a result") }
+            XCTFail("Readiness cancellation must propagate")
+        } catch is CancellationError {}
+
+        let requests = await core.requests
+        XCTAssertEqual(requests, 0)
+    }
+}
+
+private final class ReadinessErrorClassificationFixture: ImageTypeClassifying {
+    let analyzerVersion = "test-medium-v1"
+    let availability: ImageClassificationAvailability = .available
+    private let hasInterrupted = Mutex(false)
+
+    func classify(imageAt url: URL) async throws -> ImageTypeAssessment {
+        switch url.lastPathComponent {
+        case "broken": throw CocoaError(.fileReadCorruptFile)
+        case "uncertain":
+            let shouldInterrupt = hasInterrupted.withLock { interrupted in
+                defer { interrupted = true }
+                return !interrupted
+            }
+            if shouldInterrupt { throw ImageClassificationError.unavailable(.modelNotReady) }
+            return .unknown
+        default: return .photograph
+        }
+    }
+}
+
+private final class InterruptedClassificationFixture: ImageTypeClassifying {
+    let analyzerVersion = "test-medium-v1"
+    private let checks = Mutex(0)
+
+    var availability: ImageClassificationAvailability {
+        checks.withLock { count in
+            count += 1
+            return count == 4 ? .unavailable(.modelNotReady) : .available
+        }
+    }
+
+    func classify(imageAt url: URL) async throws -> ImageTypeAssessment {
+        switch url.lastPathComponent {
+        case "broken": throw CocoaError(.fileReadCorruptFile)
+        case "uncertain": return .unknown
+        default: return .photograph
+        }
+    }
 }
 
 private struct ClassificationFixture: ImageTypeClassifying {
-    var available = true
+    var availability: ImageClassificationAvailability = .available
     var cancels = false
     var analyzerVersion: String { "test-medium-v1" }
-    var isAvailable: Bool { available }
 
     func classify(imageAt url: URL) async throws -> ImageTypeAssessment {
         if cancels { throw CancellationError() }
@@ -95,4 +204,9 @@ private actor ClassificationCoreFixture: ImageClassificationCore {
 private actor ClassificationUpdates {
     var values: [Int] = []
     func record(_ count: Int) { values.append(count) }
+}
+
+private actor ClassificationRetryDelays {
+    var values: [Duration] = []
+    func record(_ duration: Duration) { values.append(duration) }
 }

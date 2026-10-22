@@ -40,23 +40,19 @@ extension AppState {
         repeat {
             guard isCurrentVisualSearchSession(coreID: coreID, session: session) else { break }
             visualSearchRerunPending = false
-            do {
-                async let textTagging: Void = reconcileTextTags(core: core, coreID: coreID, session: session)
-                async let imageTypes: Void = reconcileImageTypes(core: core, coreID: coreID, session: session)
-                let result = try await coordinator.reconcile(core: core)
-                guard !Task.isCancelled else { break }
-                guard isCurrentVisualSearchSession(coreID: coreID, session: session) else { break }
-                await visualSearchDidFinish(result)
-                try await textTagging
-                try await imageTypes
-            } catch is CancellationError {
-                // Replacing a library deliberately supersedes this work.
-                break
-            } catch {
-                // Visual indexing is an optional, rebuildable enhancement. A
-                // corrupt image or unavailable system index must never make the
-                // local library unusable or raise a blocking app alert.
-            }
+            await VisualSearchReconciliationPass.run(
+                visualSearch: {
+                    let result = try await coordinator.reconcile(core: core)
+                    guard self.isCurrentVisualSearchSession(coreID: coreID, session: session) else { return }
+                    await self.visualSearchDidFinish(result)
+                },
+                textTagging: {
+                    try await self.reconcileTextTags(core: core, coreID: coreID, session: session)
+                },
+                imageClassification: {
+                    try await self.reconcileImageTypes(core: core, coreID: coreID, session: session)
+                }
+            )
         } while visualSearchRerunPending && !Task.isCancelled
 
         visualSearchTask = nil
