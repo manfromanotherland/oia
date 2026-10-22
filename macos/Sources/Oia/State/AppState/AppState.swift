@@ -43,7 +43,13 @@ final class AppState {
         scope: .all,
         search: BoardSearchInput(text: "", tokens: [])
     )
-    var boardSelection = BoardSelection<String>()
+    /// A scope preview can paint the board without pruning detail navigation
+    /// against a temporary first-screen subset.
+    var isReadingSnapshotComplete = true
+    var completedReadingSnapshotGeneration: UInt64 = 0
+    var boardSelection = BoardSelection<String>() {
+        didSet { pendingSelectAll = false }
+    }
 
     /// The focused card remains the compatibility-facing selection for Gallery
     /// and the existing single-item reader actions.
@@ -67,7 +73,30 @@ final class AppState {
     }
 
     var selectedRows: [ReadingRow] {
-        readings.filter { selectedIDs.contains($0.id) }
+        let rows = readings.filter { selectedIDs.contains($0.id) }
+        if !isReadingSnapshotComplete {
+            let currentContext = BoardQueryContext(
+                scope: activeScope,
+                search: activeSearchInput,
+                imageTypeFilter: effectiveImageTypeFilter
+            )
+            guard publishedBoardContext == currentContext,
+                  rows.count == selectedIDs.count else { return [] }
+        }
+        return rows
+    }
+
+    func selectAllReadings() {
+        if isReadingSnapshotComplete {
+            boardSelection.selectAll(in: readings.map(\.id))
+        } else {
+            // An All intent must not leave an older selection actionable while
+            // the complete scope is still arriving. New gestures cancel it.
+            boardSelection.clear()
+            guard core != nil else { return }
+            pendingSelectAll = true
+            if filterReloadTask == nil { reloadForFilterChange() }
+        }
     }
 
     /// The reading-list search text, persisted across launches so a search the
@@ -107,6 +136,8 @@ final class AppState {
     /// so the core is queried once typing settles, not per character. Plumbing
     /// only — not part of the observable UI state.
     @ObservationIgnored var searchTask: Task<Void, Never>?
+    @ObservationIgnored var filterReloadTask: Task<Void, Never>?
+    @ObservationIgnored var pendingSelectAll = false
     @ObservationIgnored var saveNoticeTask: Task<Void, Never>?
     @ObservationIgnored var visualSearchTask: Task<Void, Never>?
     @ObservationIgnored var visualSearchRerunPending = false

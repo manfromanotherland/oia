@@ -28,4 +28,25 @@ final class GallerySnapshotTests: XCTestCase {
         XCTAssertEqual(snapshot.rows.map(\.id), [1])
         XCTAssertNil(snapshot.neighbor(of: 1, direction: 1))
     }
+
+    func testOpeningPreviewGainsRemainingNeighborsWhenItsSnapshotCompletes() {
+        var snapshot = GallerySnapshot([Row(id: 0), Row(id: 1)])
+        snapshot.completeOpeningSnapshot((0 ..< 5).map { Row(id: $0) })
+
+        XCTAssertEqual(snapshot.rows.map(\.id), [0, 1, 2, 3, 4])
+        XCTAssertEqual(snapshot.neighbor(of: 1, direction: 1)?.id, 2)
+        XCTAssertEqual(snapshot.neighbor(of: 4, direction: -1)?.id, 3)
+
+        snapshot.reconcile((0 ..< 6).reversed().map { Row(id: $0) })
+        XCTAssertEqual(snapshot.rows.map(\.id), [0, 1, 2, 3, 4])
+    }
+
+    func testCompletingPreviewPreservesRemovedOpeningRowsAsNavigationAnchors() {
+        var snapshot = GallerySnapshot([Row(id: 0), Row(id: 1)])
+        snapshot.completeOpeningSnapshot([Row(id: 0), Row(id: 2), Row(id: 3)])
+
+        XCTAssertEqual(snapshot.rows.map(\.id), [0, 2, 3])
+        XCTAssertEqual(snapshot.neighbor(of: 1, direction: 1)?.id, 2)
+        XCTAssertEqual(snapshot.neighbor(of: 1, direction: -1)?.id, 0)
+    }
 }

@@ -5,7 +5,7 @@ import Foundation
 /// Freezes the opening board order and indexes surviving neighbors once per
 /// collection change. Gallery rendering and arrow navigation only read it.
 struct GallerySnapshot<Row: Identifiable & Equatable> {
-    private let order: [Row.ID]
+    private var order: [Row.ID]
     private var positions: [Row.ID: Int] = [:]
     private var previous: [Row.ID: Row.ID] = [:]
     private var next: [Row.ID: Row.ID] = [:]
@@ -14,6 +14,14 @@ struct GallerySnapshot<Row: Identifiable & Equatable> {
     init(_ rows: [Row] = []) {
         order = rows.map(\.id)
         reconcile(rows)
+    }
+
+    /// A gallery opened from a board preview keeps that opening order, then
+    /// includes the remaining rows once the same board snapshot finishes.
+    mutating func completeOpeningSnapshot(_ current: [Row]) {
+        var seen = Set(order)
+        order.append(contentsOf: current.map(\.id).filter { seen.insert($0).inserted })
+        reconcile(current)
     }
 
     mutating func reconcile(_ current: [Row]) {

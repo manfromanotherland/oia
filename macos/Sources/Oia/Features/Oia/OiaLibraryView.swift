@@ -16,6 +16,7 @@ struct OiaLibraryView: View {
 
     @State var presentedReading: ReadingRow?
     @State private var gallerySnapshot = GallerySnapshot<ReadingRow>()
+    @State private var galleryOpeningPreviewContext: BoardQueryContext?
     @State private var tagInputFocusRequest: TagInputFocusRequest?
     @State private var tagInputFocusGeneration: UInt64 = 0
     @State private var boardTagRequest: BoardTagRequest?
@@ -171,15 +172,29 @@ extension OiaLibraryView {
     private var reactiveSurface: some View {
         ingestibleSurface
             .modifier(SearchQueryChangeModifier())
-            .onChange(of: appState.readings) { _, rows in
-                guard let id = presentedReading?.id else { return }
-                gallerySnapshot.reconcile(rows)
-                if let refreshed = gallerySnapshot.row(id: id) {
-                    updatePresentedRow(refreshed)
-                } else {
-                    advanceOverlayPastCurrent()
-                }
+            .onChange(of: appState.readings) { _, _ in
+                reconcilePresentedReading()
             }
+            .onChange(of: appState.completedReadingSnapshotGeneration) { _, _ in
+                reconcilePresentedReading()
+            }
+    }
+
+    private func reconcilePresentedReading() {
+        guard appState.isReadingSnapshotComplete, let id = presentedReading?.id else { return }
+        if galleryOpeningPreviewContext == appState.publishedBoardContext {
+            gallerySnapshot.completeOpeningSnapshot(
+                appState.readings.filter { !($0.isLink && $0.lightweight) }
+            )
+        } else {
+            gallerySnapshot.reconcile(appState.readings)
+        }
+        galleryOpeningPreviewContext = nil
+        if let refreshed = gallerySnapshot.row(id: id) {
+            updatePresentedRow(refreshed)
+        } else {
+            advanceOverlayPastCurrent()
+        }
     }
 }
 
@@ -406,7 +421,9 @@ extension OiaLibraryView {
                     EscapeKeyMonitor {
                         guard presentedReading == nil,
                               !appState.isEditingText,
-                              !appState.boardSelection.isEmpty else { return false }
+                              !appState.boardSelection.isEmpty || appState.pendingSelectAll else {
+                            return false
+                        }
                         appState.boardSelection.clear()
                         return true
                     }
@@ -532,6 +549,8 @@ extension OiaLibraryView {
 
         if presentedReading == nil {
             gallerySnapshot = GallerySnapshot(appState.readings.filter { !($0.isLink && $0.lightweight) })
+            galleryOpeningPreviewContext = appState.isReadingSnapshotComplete
+                ? nil : appState.publishedBoardContext
         }
         tagInputFocusRequest = nil
         boardFocused = false
@@ -583,6 +602,7 @@ extension OiaLibraryView {
         presentedReading = nil
         tagInputFocusRequest = nil
         gallerySnapshot = GallerySnapshot()
+        galleryOpeningPreviewContext = nil
         appState.showHighlights = false
         if let id = appState.selectedId {
             boardPosition.scrollTo(id: id, anchor: .nearest)

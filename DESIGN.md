@@ -110,6 +110,7 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   *"Search Óia"*. Native token suggestions can narrow the board to exact tags or an item type;
   completed terms remain value-only pills in that one field. Do not create a
   bespoke `NSSearchField`, duplicate search control, or oversized page header.
+  Disable the toolbar's Icon and Text / Icon Only display-mode menu.
 - The empty suggestion menu offers Image, Video, Article, Link, Quote, Book, Music, Movie, and
   Product. Selecting a completion
   creates a type token and replaces any earlier type token. Typing a type word or `#RRGGBB` also
@@ -124,9 +125,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Within **Images**, a second native segmented picker floats at the bottom center of the board:
+- Within **Images**, a second native picker floats at the bottom center of the board:
   **All**, **Graphics**, **Photos**, and **Unsure (N)**. It uses Liquid Glass and the same 8-point
   bottom inset, scale-and-opacity transition, and spring animation as the scroll-to-top button.
+  Use the native tab appearance where available, with no segment dividers. The surrounding glass
+  stays passive; the picker owns its selection interaction so the entire group does not bounce.
   Keep this animation inside the floating overlay so it does not animate scope changes or board
   loading. The group remains available during loading and when a filter has no results. The main
   scope picker keeps its original SwiftUI implementation without menu integration or event hooks.
@@ -331,6 +334,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
 - **Empty state:** quiet browser-extension guidance for saving a page, media item, or selection.
 - **Board:** the complete masonry result for the active board scope and search query. Card views are
   materialized only around the visible viewport; the board has no pagination control or loading row.
+  Scope changes paint a first-screen metadata snapshot promptly, then finish loading the complete
+  result from the same Rust-filtered query. Saved background colors and card dimensions appear
+  before image previews, which decode independently. A temporary preview must not prune detail
+  navigation or be treated as the complete selection set. New scope requests supersede stale work.
 - **No results:** identifies the active search/filter and offers to clear that axis.
 
 ### Settings / appearance

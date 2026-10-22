@@ -97,6 +97,43 @@ enum ReadingSnapshotDelivery {
         }
     }
 
+    /// Scope changes paint one screen before lifting the complete library over
+    /// FFI. Both snapshots use the same core predicates, ordering, and semantic
+    /// candidates; only the temporary result bound differs. Completion still
+    /// means the full immutable result arrived, never a trailing page.
+    @MainActor
+    static func loadScopeSnapshot<Row>(
+        previewLimit: UInt32 = 96,
+        fetch: @MainActor (Candidates, UInt32) async throws -> [Row],
+        semanticCandidates: (@MainActor () async throws -> Candidates)?,
+        isCurrent: @MainActor () -> Bool,
+        publish: @MainActor ([Row], Bool, Bool) -> Void
+    ) async throws -> Bool {
+        guard !Task.isCancelled, isCurrent() else { return false }
+        let candidates: Candidates
+        if let semanticCandidates {
+            guard let loaded = await optionalCandidates(semanticCandidates),
+                  !Task.isCancelled, isCurrent() else { return false }
+            candidates = loaded
+        } else {
+            candidates = .empty
+        }
+
+        let preview = try await fetch(candidates, previewLimit)
+        guard !Task.isCancelled, isCurrent() else { return false }
+        let isComplete = preview.count < Int(previewLimit)
+        publish(preview, !candidates.isEmpty, isComplete)
+        guard !isComplete else { return true }
+
+        // Let the preview's board update start before the larger FFI transfer.
+        await Task.yield()
+        guard !Task.isCancelled, isCurrent() else { return false }
+        let complete = try await fetch(candidates, .max)
+        guard !Task.isCancelled, isCurrent() else { return false }
+        publish(complete, !candidates.isEmpty, true)
+        return true
+    }
+
     @MainActor
     static func load<Rows>(
         textFirst: Bool = true,

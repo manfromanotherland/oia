@@ -119,6 +119,9 @@ extension AppState {
         inboxError = nil
         searchTask?.cancel()
         searchTask = nil
+        filterReloadTask?.cancel()
+        filterReloadTask = nil
+        pendingSelectAll = false
         readingLoadGeneration &+= 1
         libraryContentRefreshPending = false
         let previousSyncTask = watcherSyncTask
@@ -129,6 +132,8 @@ extension AppState {
         if libraryURL?.standardizedFileURL.path != url.standardizedFileURL.path {
             core = nil
             readings = []
+            isReadingSnapshotComplete = true
+            completedReadingSnapshotGeneration &+= 1
             boardSelection.clear()
             filters = LibraryFilters()
             unsureImageCount = 0
@@ -308,6 +313,8 @@ extension AppState {
         activeCoreID = nil
         core = nil
         readings = []
+        isReadingSnapshotComplete = true
+        completedReadingSnapshotGeneration &+= 1
         boardSelection.clear()
         filters = LibraryFilters()
         unsureImageCount = 0

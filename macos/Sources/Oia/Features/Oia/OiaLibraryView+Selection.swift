@@ -51,7 +51,7 @@ extension OiaLibraryView {
         }
 
         if ShortcutCatalog.selectAll.matches(key: press.key, modifiers: press.modifiers) {
-            appState.boardSelection.selectAll(in: appState.readings.map(\.id))
+            appState.selectAllReadings()
             return .handled
         }
 

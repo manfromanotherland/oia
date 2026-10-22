@@ -36,7 +36,9 @@ extension AppState {
     func refresh() async {
         // Invalidate an older in-flight query before child tasks can yield; it
         // must not consume this content publication with pre-mutation rows.
-        readingLoadGeneration &+= 1
+        let selectAllWasPending = pendingSelectAll
+        invalidatePendingReadingLoads()
+        pendingSelectAll = selectAllWasPending
         libraryContentRefreshPending = true
         await withTaskGroup(of: Void.self) { group in
             // A refresh follows a local mutation (or a watcher sync), so never
@@ -91,9 +93,10 @@ extension AppState {
     private func fetchReadings(
         _ core: any CoreBridging,
         context: ReadingSnapshotContext,
-        candidates: ReadingSnapshotDelivery.Candidates
+        candidates: ReadingSnapshotDelivery.Candidates,
+        limit: UInt32 = .max
     ) async throws -> [ReadingRow] {
-        let query = ReadingQuery.boardSnapshot(
+        var query = ReadingQuery.boardSnapshot(
             scope: context.scope,
             search: context.search.text,
             tagTerms: context.search.criteria.tagTerms,
@@ -104,6 +107,7 @@ extension AppState {
             semanticCandidateIDs: candidates.text,
             visualSemanticCandidateIDs: candidates.visual
         )
+        query.limit = limit
         return try await core.listReadings(query)
     }
 
@@ -195,6 +199,11 @@ extension AppState {
 
     private func invalidatePendingReadingLoads() {
         readingLoadGeneration &+= 1
+        filterReloadTask?.cancel()
+        filterReloadTask = nil
+        pendingSelectAll = false
+        searchTask?.cancel()
+        searchTask = nil
     }
 
     /// `resetSelectionIfMissing` controls what happens when the focused card is
@@ -205,26 +214,54 @@ extension AppState {
     func loadReadings(
         resetSelectionIfMissing: Bool = true,
         includeSemanticSearch: Bool = true,
-        preferImmediateTextResults: Bool = false
+        preferImmediateTextResults: Bool = false,
+        preferImmediateScopeResults: Bool = false
     ) async -> ReadingLoadResult {
         guard !Task.isCancelled else { return .superseded }
-        guard let core else { return .failed }
+        guard let core else {
+            pendingSelectAll = false
+            return .failed
+        }
         let context = makeSnapshotContext()
         let semanticCandidates = makeSemanticCandidateLoader(
             for: context,
             includeSemanticSearch: includeSemanticSearch
         )
         do {
-            let completed = try await ReadingSnapshotDelivery.load(
-                textFirst: preferImmediateTextResults,
-                fetch: { candidates in
-                    try await self.fetchReadings(core, context: context, candidates: candidates)
-                },
-                semanticCandidates: semanticCandidates,
-                isCurrent: { self.isCurrent(context) },
-                publish: { rows, _ in self.publishReadings(rows, context: context) }
-            )
-            guard completed, isCurrent(context) else { return .superseded }
+            let completed: Bool
+            if preferImmediateScopeResults {
+                completed = try await ReadingSnapshotDelivery.loadScopeSnapshot(
+                    fetch: { candidates, limit in
+                        try await self.fetchReadings(
+                            core, context: context, candidates: candidates, limit: limit
+                        )
+                    },
+                    semanticCandidates: semanticCandidates,
+                    isCurrent: { self.isCurrent(context) },
+                    publish: { rows, _, isComplete in
+                        self.publishReadings(rows, context: context, isComplete: isComplete)
+                    }
+                )
+            } else {
+                completed = try await ReadingSnapshotDelivery.load(
+                    textFirst: preferImmediateTextResults,
+                    fetch: { candidates in
+                        try await self.fetchReadings(core, context: context, candidates: candidates)
+                    },
+                    semanticCandidates: semanticCandidates,
+                    isCurrent: { self.isCurrent(context) },
+                    publish: { rows, _ in self.publishReadings(rows, context: context) }
+                )
+            }
+            guard completed, isCurrent(context) else {
+                if isCurrent(context) { pendingSelectAll = false }
+                return .superseded
+            }
+
+            if pendingSelectAll {
+                pendingSelectAll = false
+                boardSelection.selectAll(in: readings.map(\.id))
+            }
 
             // A text-only first result must not discard a selected semantic hit
             // that is still awaiting optional enrichment. Reconcile once the
@@ -242,6 +279,7 @@ extension AppState {
             return .published
         } catch {
             if isCurrent(context) {
+                pendingSelectAll = false
                 self.error = error.localizedDescription
                 return .failed
             }
@@ -249,8 +287,11 @@ extension AppState {
         }
     }
 
-    private func publishReadings(_ rows: [ReadingRow], context: ReadingSnapshotContext) {
+    private func publishReadings(
+        _ rows: [ReadingRow], context: ReadingSnapshotContext, isComplete: Bool = true
+    ) {
         let rows = rowsWithPendingEdits(rows, context: context)
+        isReadingSnapshotComplete = isComplete
         let boardContext = context.boardContext
         if publishedBoardContext != boardContext {
             publishedBoardContext = boardContext
@@ -260,6 +301,9 @@ extension AppState {
         // board and detail hierarchy with an equal whole-array assignment.
         if readings != rows {
             readings = rows
+        }
+        if isComplete {
+            completedReadingSnapshotGeneration &+= 1
         }
         // Body or same-path asset bytes can change while every row field stays
         // equal. Content invalidation remains independent of row publication.
@@ -326,7 +370,7 @@ extension AppState {
             // A remembered Unsure selection becomes usable after the global
             // count arrives, replacing the initial unfiltered snapshot.
             invalidatePendingReadingLoads()
-            Task { await reloadForFilterChange() }
+            reloadForFilterChange()
         }
     }
 
@@ -348,8 +392,14 @@ extension AppState {
 
     /// Reload the board after its scope changes. The global tag vocabulary only
     /// changes when library files change.
-    func reloadForFilterChange() async {
-        _ = await loadReadings()
+    func reloadForFilterChange() {
+        filterReloadTask?.cancel()
+        filterReloadTask = Task { [weak self] in
+            guard let self else { return }
+            _ = await loadReadings(preferImmediateScopeResults: true)
+            guard !Task.isCancelled else { return }
+            filterReloadTask = nil
+        }
     }
 
     // ── Filter selection ──────────────────────────────────────────────────
@@ -359,7 +409,8 @@ extension AppState {
         guard activeScope != scope else { return }
         activeScope = scope
         invalidatePendingReadingLoads()
-        Task { await reloadForFilterChange() }
+        isReadingSnapshotComplete = false
+        reloadForFilterChange()
     }
 
     func selectImageTypeFilter(_ filter: ImageTypeFilter) {
@@ -367,6 +418,7 @@ extension AppState {
         guard activeImageTypeFilter != filter else { return }
         activeImageTypeFilter = filter
         invalidatePendingReadingLoads()
-        Task { await reloadForFilterChange() }
+        isReadingSnapshotComplete = false
+        reloadForFilterChange()
     }
 }

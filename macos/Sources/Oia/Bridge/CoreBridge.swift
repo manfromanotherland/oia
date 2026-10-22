@@ -177,7 +177,8 @@ actor CoreBridge {
     /// Readings for the composed scope/tag filter, the board order,
     /// and an optional full-text query. Dormant rating support remains nil at the
     /// FFI boundary for library-format compatibility.
-    func listReadings(_ query: ReadingQuery) throws -> [ReadingRow] {
+    func listReadings(_ query: ReadingQuery) async throws -> [ReadingRow] {
+        try Task.checkCancellation()
         let opts = FfiListOptions(
             view: query.scope.ffiView,
             sort: query.sort.ffiSort,
@@ -196,7 +197,22 @@ actor CoreBridge {
             visualSemanticCandidateIds: query.visualSemanticCandidateIDs,
             limit: query.limit, offset: query.offset
         )
-        return try database.listReadings(opts: opts).map(ReadingRow.init)
+        // Swift lifting a large FFI buffer can outlast the SQLite query itself.
+        // Release this actor so a newer scope's first screen need not queue
+        // behind a superseded library-sized transfer.
+        let work = Task.detached(priority: .userInitiated) { [database] in
+            try Task.checkCancellation()
+            let rows = try database.listReadings(opts: opts)
+            try Task.checkCancellation()
+            let mapped = rows.map(ReadingRow.init)
+            try Task.checkCancellation()
+            return mapped
+        }
+        return try await withTaskCancellationHandler {
+            try await work.value
+        } onCancel: {
+            work.cancel()
+        }
     }
 
     func readingCount() throws -> UInt64 {
