@@ -6,6 +6,18 @@ import XCTest
 
 @MainActor
 final class FloatingImageTypePickerTests: XCTestCase {
+    func testUsesNativeTabAppearanceWithoutGrowingTheFloatingControl() throws {
+        guard #available(macOS 27.0, *) else {
+            throw XCTSkip("Native tab picker appearance requires macOS 27")
+        }
+        let host = hostingView(selection: .graphics, count: 12)
+        let control = try XCTUnwrap(segmentedControl(in: host))
+
+        XCTAssertEqual(control.role, .tabs)
+        XCTAssertEqual(control.intrinsicContentSize.height, 36, accuracy: 0.5)
+        XCTAssertEqual(host.fittingSize.height, 36, accuracy: 0.5)
+    }
+
     func testZeroCountKeepsUnsureVisibleAndDisablesItsNativeSegment() throws {
         let host = hostingView(selection: .photos, count: 0)
         let control = try XCTUnwrap(segmentedControl(in: host))

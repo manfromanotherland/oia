@@ -8,6 +8,26 @@ struct FloatingImageTypePicker: View {
     let unsureImageCount: Int
 
     var body: some View {
+        styledPicker
+            .labelsHidden()
+            .controlSize(.extraLarge)
+            .fixedSize()
+            .modifier(FloatingImageTypeGlass())
+            .accessibilityLabel("Image type")
+            .accessibilityValue(selection.label)
+            .accessibilityIdentifier(A11y.Filter.imageType)
+    }
+
+    @ViewBuilder
+    private var styledPicker: some View {
+        if #available(macOS 27.0, *) {
+            picker.pickerStyle(.tabs)
+        } else {
+            picker.pickerStyle(.segmented)
+        }
+    }
+
+    private var picker: some View {
         Picker("Image type", selection: $selection) {
             ForEach(ImageTypeFilter.allCases) { filter in
                 Text(filter == .unsure ? "Unsure (\(count))" : filter.label)
@@ -17,14 +37,6 @@ struct FloatingImageTypePicker: View {
                     .accessibilityIdentifier(A11y.Filter.imageType + "." + filter.rawValue)
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
-        .controlSize(.extraLarge)
-        .fixedSize()
-        .modifier(FloatingImageTypeGlass())
-        .accessibilityLabel("Image type")
-        .accessibilityValue(selection.label)
-        .accessibilityIdentifier(A11y.Filter.imageType)
     }
 
     private var count: Int { max(0, unsureImageCount) }
@@ -44,7 +56,7 @@ private struct FloatingImageTypeGlass: ViewModifier {
             content.background(Color(nsColor: .controlBackgroundColor), in: shape)
                 .overlay(shape.strokeBorder(.primary.opacity(0.08)))
         } else if #available(macOS 26.0, *) {
-            content.glassEffect(.regular.interactive(), in: shape)
+            content.glassEffect(.regular, in: shape)
         } else {
             content.background(.regularMaterial, in: shape)
                 .overlay(shape.strokeBorder(.primary.opacity(0.08)))
