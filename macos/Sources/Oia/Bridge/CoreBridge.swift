@@ -203,10 +203,11 @@ actor CoreBridge {
         try filterCounts(kind: nil, scope: .all, tag: nil, query: nil).views.all
     }
 
-    /// Reuse the compatible count payload to enumerate tags for the app's filter
-    /// menu. Legacy view and rating counts remain dormant at the FFI boundary.
+    /// Reuse the compatible count payload for tag vocabulary and image facets.
+    /// Rust applies structured terms before counting, without loading readings.
     func filterCounts(
-        kind: ReadingKind?, scope: LibraryScope, tag: String?, query: String?
+        kind: ReadingKind?, scope: LibraryScope, tag: String?, query: String?,
+        itemTypeTerms: [String] = []
     ) throws -> FfiSidebarCounts {
         let ffiScope = FfiCountScope(
             view: scope.ffiView,
@@ -216,7 +217,7 @@ actor CoreBridge {
             query: query,
             tagTerms: [],
             visualTerms: [],
-            itemTypeTerms: [],
+            itemTypeTerms: itemTypeTerms,
             predominantColor: nil,
             semanticCandidateIds: [],
             visualSemanticCandidateIds: []

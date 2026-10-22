@@ -111,7 +111,7 @@ final class AppState {
     @ObservationIgnored var visualSearchTask: Task<Void, Never>?
     @ObservationIgnored var visualSearchRerunPending = false
     @ObservationIgnored var readingLoadGeneration: UInt64 = 0
-    @ObservationIgnored var imageTypeAvailabilityLoadGeneration: UInt64 = 0
+    @ObservationIgnored var imageTypeCountLoadGeneration: UInt64 = 0
     /// One ordered tag-write queue shared by board dialogs and the Inspector.
     /// Reserve writes synchronously so dismissing a dialog cannot let a later
     /// editing session overtake the edits it already submitted.
@@ -136,11 +136,10 @@ final class AppState {
         }
     }
 
-    var hasUnsureImages = false
+    /// Global file-backed classification work, independent of board filters.
+    var unsureImageCount = 0
 
-    var availableImageTypeFilters: [ImageTypeFilter] {
-        ImageTypeFilter.availableCases(hasUnsureImages: hasUnsureImages)
-    }
+    var hasUnsureImages: Bool { unsureImageCount > 0 }
 
     var effectiveImageTypeFilter: ImageTypeFilter {
         activeScope == .images

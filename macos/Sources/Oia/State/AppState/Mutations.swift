@@ -241,12 +241,15 @@ extension AppState {
             ids: ids, imageType: imageType, core: core, librarySession: session, reservation: reservation
         )
         beginLibraryWrite()
-        if imageType == nil { hasUnsureImages = true }
+        var unsureCountChange = 0
         for index in readings.indices where seen.contains(readings[index].id)
             && readings[index].kind == .image {
+            unsureCountChange += (imageType == nil ? 1 : 0)
+                - (readings[index].imageType == nil ? 1 : 0)
             readings[index].imageType = imageType
         }
         advancePastFilteredRows(ids: seen)
+        unsureImageCount = max(0, unsureImageCount + unsureCountChange)
 
         let previous = imageTypePersistenceTask
         imageTypePersistenceGeneration &+= 1

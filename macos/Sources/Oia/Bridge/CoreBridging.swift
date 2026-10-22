@@ -17,7 +17,8 @@ protocol CoreBridging: VisualSearchCore, TextTaggingCore, ImageClassificationCor
 
     func listReadings(_ query: ReadingQuery) async throws -> [ReadingRow]
     func filterCounts(
-        kind: ReadingKind?, scope: LibraryScope, tag: String?, query: String?
+        kind: ReadingKind?, scope: LibraryScope, tag: String?, query: String?,
+        itemTypeTerms: [String]
     ) async throws -> FfiSidebarCounts
     func getReadingRow(id: String) async throws -> FfiReadingRow?
     func getBody(id: String) async throws -> String?
@@ -41,6 +42,14 @@ protocol CoreBridging: VisualSearchCore, TextTaggingCore, ImageClassificationCor
     @discardableResult func addHighlight(readingId: String, text: String) async throws -> FfiHighlight
     @discardableResult func toggleHighlight(readingId: String, text: String) async throws -> Bool
     func deleteHighlight(readingId: String, highlightId: String) async throws
+}
+
+extension CoreBridging {
+    func filterCounts(
+        kind: ReadingKind?, scope: LibraryScope, tag: String?, query: String?
+    ) async throws -> FfiSidebarCounts {
+        try await filterCounts(kind: kind, scope: scope, tag: tag, query: query, itemTypeTerms: [])
+    }
 }
 
 /// CoreBridge already implements every requirement; this just records the

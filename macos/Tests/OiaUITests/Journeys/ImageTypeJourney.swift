@@ -25,9 +25,10 @@ final class ImageTypeJourney: UITestCase {
         XCTAssertFalse(app.byId(A11y.Filter.imageType).exists)
         list.selectScope("Images")
         XCTAssertTrue(list.waitForRowCount(3))
-        XCTAssertTrue(wait { self.imageTypeExists("Unsure") })
+        assertUnsureMenu(count: 1, enabled: true)
         list.selectImageType("Photos")
         XCTAssertTrue(wait { list.orderedRowIds == [photo] })
+        assertUnsureMenu(count: 1, enabled: true)
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] })
 
@@ -44,8 +45,9 @@ final class ImageTypeJourney: UITestCase {
         XCTAssertEqual(library.frontmatter(id: unknown)?.tags, ["Gardens"], "Type corrections preserve subject Tags")
         app.byId(A11y.Detail.close).clickWhenReady()
         XCTAssertTrue(wait {
-            Set(list.orderedRowIds) == [photo, graphic, unknown] && !self.imageTypeExists("Unsure")
-        }, "Classifying the last unsure image removes the segment and returns to All")
+            Set(list.orderedRowIds) == [photo, graphic, unknown]
+        }, "Classifying the last unsure image returns to All Images")
+        assertUnsureMenu(count: 0, enabled: false)
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] }, "Graphics contains only confirmed graphics")
         list.selectImageType("Photos")
@@ -66,16 +68,16 @@ final class ImageTypeJourney: UITestCase {
         }, "Automatic reset clears the stored correction")
         app.byId(A11y.Detail.close).clickWhenReady()
         XCTAssertTrue(wait { list.orderedRowIds == [photo] }, "Reset leaves Photos immediately")
-        XCTAssertTrue(wait { self.imageTypeExists("Unsure") }, "Automatic reset makes Unsure available again")
+        assertUnsureMenu(count: 1, enabled: true)
         list.selectImageType("Unsure")
         XCTAssertTrue(wait { list.orderedRowIds == [unknown] })
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] })
-        list.selectImageType("All")
+        list.selectImageType("All Images")
         XCTAssertTrue(wait { Set(list.orderedRowIds) == [photo, graphic, unknown] })
     }
 
-    func testClassifiedLibraryHidesUnsureAndRestoresAllFromRememberedUnsure() throws {
+    func testClassifiedLibraryDisablesUnsureAndRestoresAllFromRememberedUnsure() throws {
         let photo = TestULID.make(705)
         let graphic = TestULID.make(706)
         let savedAt = Date(timeIntervalSince1970: 1_700_000_000)
@@ -88,12 +90,18 @@ final class ImageTypeJourney: UITestCase {
 
         list.selectScope("Images")
         XCTAssertTrue(wait {
-            Set(list.orderedRowIds) == [photo, graphic] && !self.imageTypeExists("Unsure")
-        }, "A completed library shows All and omits Unsure, including after restoring its old preference")
+            Set(list.orderedRowIds) == [photo, graphic]
+        }, "A completed library shows All Images, including after restoring its old Unsure preference")
+        assertUnsureMenu(count: 0, enabled: false)
     }
 
-    private func imageTypeExists(_ label: String) -> Bool {
-        let group = app.byId(A11y.Filter.imageType)
-        return group.radioButtons[label].exists || group.buttons[label].exists
+    private func assertUnsureMenu(count: Int, enabled: Bool, file: StaticString = #filePath, line: UInt = #line) {
+        list.openImageTypeMenu()
+        let unsure = list.imageTypeMenuItem("Unsure")
+        XCTAssertTrue(unsure.waitExists(), file: file, line: line)
+        XCTAssertEqual(unsure.isEnabled, enabled, file: file, line: line)
+        let noun = count == 1 ? "image" : "images"
+        XCTAssertEqual(unsure.label, "Unsure, \(count) \(noun) to classify", file: file, line: line)
+        list.dismissImageTypeMenu()
     }
 }

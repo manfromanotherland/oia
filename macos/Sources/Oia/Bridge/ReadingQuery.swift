@@ -50,16 +50,6 @@ enum VisualSemanticCandidateIntersection {
 }
 
 extension ReadingQuery {
-    /// Global existence check, independent of the board's current search and Tags.
-    static func unsureAvailability() -> Self {
-        var query = boardSnapshot(
-            scope: .images, search: nil, tagTerms: [], visualTerms: [],
-            imageTypeFilter: .unsure, semanticCandidateIDs: [], visualSemanticCandidateIDs: []
-        )
-        query.limit = 1
-        return query
-    }
-
     /// The board always composes its selected scope and optional search into
     /// one core query. Search changes ordering, never the active board scope.
     static func boardSnapshot(

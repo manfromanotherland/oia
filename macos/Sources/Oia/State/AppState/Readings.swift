@@ -292,36 +292,39 @@ extension AppState {
     // ── Filter metadata ───────────────────────────────────────────────────
 
     func loadFilters() async {
-        async let imageTypes: Void = loadImageTypeFilterAvailability()
+        async let imageTypes: Void = loadUnsureImageCount()
         await loadTagFilters()
         await imageTypes
     }
 
-    private func loadImageTypeFilterAvailability() async {
+    private func loadUnsureImageCount() async {
         guard let core else { return }
         let session = librarySessionGeneration
         let coreID = activeCoreID
-        imageTypeAvailabilityLoadGeneration &+= 1
-        let generation = imageTypeAvailabilityLoadGeneration
+        imageTypeCountLoadGeneration &+= 1
+        let generation = imageTypeCountLoadGeneration
         let revision = pendingImageTypeEdits.revision
         // Queued corrections already affect the board. Wait for their final
         // refresh rather than reviving Unsure from an older index snapshot.
         guard !pendingImageTypeEdits.hasEdits(librarySession: session) else { return }
-        guard let rows = try? await core.listReadings(.unsureAvailability()),
+        guard let counts = try? await core.filterCounts(
+            kind: .image, scope: .all, tag: nil, query: nil,
+            itemTypeTerms: [ImageTypeFilter.unsure.itemTypeTerm].compactMap { $0 }
+        ),
               !Task.isCancelled,
               session == librarySessionGeneration,
               coreID == activeCoreID,
-              generation == imageTypeAvailabilityLoadGeneration,
+              generation == imageTypeCountLoadGeneration,
               revision == pendingImageTypeEdits.revision,
               !pendingImageTypeEdits.hasEdits(librarySession: session) else { return }
 
         let previousFilter = effectiveImageTypeFilter
-        hasUnsureImages = !rows.isEmpty
+        unsureImageCount = Int(clamping: counts.views.all)
         if !hasUnsureImages, activeImageTypeFilter == .unsure {
             selectImageTypeFilter(.all)
         } else if previousFilter != effectiveImageTypeFilter {
             // A remembered Unsure selection becomes usable after the global
-            // existence check, replacing the initial unfiltered snapshot.
+            // count arrives, replacing the initial unfiltered snapshot.
             invalidatePendingReadingLoads()
             Task { await reloadForFilterChange() }
         }

@@ -19,19 +19,49 @@ struct ReadingListPage {
         app.byId(A11y.Filter.menu)
     }
 
+    var imageTypeMenu: XCUIElement {
+        app.menus[A11y.Filter.imageType]
+    }
+
     func showAll() {
         selectScope("All")
     }
 
     func selectScope(_ label: String) {
-        let radio = filterGroup.radioButtons[label]
-        (radio.exists ? radio : filterGroup.buttons[label]).clickWhenReady()
+        scopeSegment(label).clickWhenReady()
+        if label == "Images" {
+            XCTAssertTrue(imageTypeMenu.waitExists())
+            dismissImageTypeMenu()
+        }
     }
 
     func selectImageType(_ label: String) {
-        let group = app.byId(A11y.Filter.imageType)
-        let radio = group.radioButtons[label]
-        (radio.exists ? radio : group.buttons[label]).clickWhenReady()
+        openImageTypeMenu()
+        imageTypeMenuItem(label).clickWhenReady()
+    }
+
+    func openImageTypeMenu() {
+        scopeSegment("Images").clickWhenReady()
+        XCTAssertTrue(imageTypeMenu.waitExists())
+    }
+
+    func dismissImageTypeMenu() {
+        app.typeKey(.escape, modifierFlags: [])
+    }
+
+    func imageTypeMenuItem(_ label: String) -> XCUIElement {
+        let identifiers = [
+            "All Images": "all", "Graphics": "graphics", "Photos": "photos", "Unsure": "unsure"
+        ]
+        guard let value = identifiers[label] else {
+            return imageTypeMenu.menuItems[label]
+        }
+        return imageTypeMenu.menuItems.matching(identifier: A11y.Filter.imageType + "." + value).firstMatch
+    }
+
+    private func scopeSegment(_ label: String) -> XCUIElement {
+        let radio = filterGroup.radioButtons[label]
+        return radio.exists ? radio : filterGroup.buttons[label]
     }
 
     func selectTagFilter(_ tag: String) {

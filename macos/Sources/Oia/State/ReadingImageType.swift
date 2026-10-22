@@ -27,10 +27,6 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    static func availableCases(hasUnsureImages: Bool) -> [Self] {
-        allCases.filter { $0 != .unsure || hasUnsureImages }
-    }
-
     func availableSelection(hasUnsureImages: Bool) -> Self {
         self == .unsure && !hasUnsureImages ? .all : self
     }
