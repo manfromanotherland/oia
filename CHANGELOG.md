@@ -91,6 +91,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
+- The board scope control keeps SwiftUI's original Liquid Glass renderer and selection handling
+  when adding the Images menu, including scope changes through keyboard shortcuts.
+
 - Graphics excludes pending images, which could previously let photos appear farther down the
   board. Independent background indexing failures no longer interrupt image classification, and
   temporary model readiness changes are retried during a pass.

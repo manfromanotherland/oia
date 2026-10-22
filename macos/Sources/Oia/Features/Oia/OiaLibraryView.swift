@@ -258,7 +258,6 @@ extension OiaLibraryView {
             imageType: imageTypeSelection,
             unsureImageCount: appState.unsureImageCount
         )
-        .fixedSize()
     }
 
     private var cardSizeControl: some View {

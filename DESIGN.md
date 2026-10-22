@@ -126,7 +126,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   comes from native suggestions in the toolbar search field.
 - The **Images** segment has a native menu indicator. Activating it selects Images with its
   remembered facet and opens a native pop-up menu: **All Images**, **Graphics**, **Photos**, and
-  **Unsure**. The main control retains its native height. The menu checkmark identifies the active
+  **Unsure**. Keep the original SwiftUI segmented picker and its Liquid Glass rendering and
+  selection handling. A transparent background bridge adds the menu; it must not replace the
+  control, change its tracking behavior, or synchronize its selected segment during view updates.
+  The main control retains its native height. The menu checkmark identifies the active
   image choice; choosing another board scope remembers that choice. Photos depict real-world
   scenes and objects. Graphics includes confirmed screenshots, illustrations, and graphic design.
   Images awaiting a confident assessment appear in All Images and Unsure, so unresolved photos
