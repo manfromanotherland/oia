@@ -125,11 +125,12 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
 - Within **Images**, a secondary native segmented button group selects **All**, **Graphics**,
-  or **Photos**. Photos depict real-world scenes and objects. Graphics includes confirmed
+  **Photos**, or **Unsure**. Photos depict real-world scenes and objects. Graphics includes confirmed
   screenshots, illustrations, and graphic design. Images awaiting a confident assessment appear
-  only in All, so unresolved photos cannot leak into Graphics. The choice composes with search
+  in All and Unsure, so unresolved photos cannot leak into Graphics. The choice composes with search
   and subject Tags such as interiors or gardens, is remembered when switching board scopes,
-  and only applies in Images. Uncertainty stays internal rather than becoming a browsing category.
+  and only applies in Images. Unsure lets the user select images awaiting a confident assessment
+  and classify them in batches. Classified images leave Unsure immediately.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
   or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
   (⇧⌘G) set every selected image to that type; repeating either action keeps that type. Corrections live in the

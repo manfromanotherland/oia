@@ -9,9 +9,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- Images now has an **All / Graphics / Photos** button group that works alongside search and
+- Images now has an **All / Graphics / Photos / Unsure** button group that works alongside search and
   Tags. Apple Intelligence identifies photos locally on supported Macs with macOS 27 or later.
-  Images awaiting a confident assessment appear only in All. The Inspector's Photo switch and
+  Images awaiting a confident assessment appear in All and Unsure. The Inspector's Photo switch and
   card actions let you correct the type or return to automatic classification. Select several
   images and press **⇧⌘P** to mark them all as photos or **⇧⌘G** to mark them as graphics.
   Repeating either action keeps that type. Results and corrections are saved in the reading's file.

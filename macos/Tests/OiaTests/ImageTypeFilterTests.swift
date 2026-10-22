@@ -15,15 +15,21 @@ final class ImageTypeFilterTests: XCTestCase {
         XCTAssertTrue(ImageTypeFilter.graphics.contains(graphic))
         XCTAssertFalse(ImageTypeFilter.graphics.contains(unknown))
         XCTAssertFalse(ImageTypeFilter.graphics.contains(photo))
+        XCTAssertTrue(ImageTypeFilter.unsure.contains(unknown))
+        XCTAssertFalse(ImageTypeFilter.unsure.contains(photo))
+        XCTAssertFalse(ImageTypeFilter.unsure.contains(graphic))
+        XCTAssertFalse(ImageTypeFilter.unsure.contains(makeReadingRow(kind: .video)))
         XCTAssertFalse(ImageTypeFilter.all.contains(makeReadingRow(kind: .video)))
-        XCTAssertEqual(ImageTypeFilter.allCases.map(\.label), ["All", "Graphics", "Photos"])
+        XCTAssertEqual(ImageTypeFilter.allCases.map(\.label), ["All", "Graphics", "Photos", "Unsure"])
         XCTAssertEqual(ImageTypeFilter.graphics.itemTypeTerm, "other_image")
+        XCTAssertEqual(ImageTypeFilter.unsure.itemTypeTerm, "unclassified_image")
     }
 
     func testExistingFilterPreferencesRestoreToTheNewModes() {
         XCTAssertEqual(ImageTypeFilter(savedValue: "photographs"), .photos)
         XCTAssertEqual(ImageTypeFilter(savedValue: "other"), .graphics)
-        XCTAssertEqual(ImageTypeFilter(savedValue: "unclassified"), .all)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "unclassified"), .unsure)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "unsure"), .unsure)
         XCTAssertEqual(ImageTypeFilter(savedValue: "hidePhotography"), .graphics)
         XCTAssertEqual(ImageTypeFilter(savedValue: "photography"), .photos)
         XCTAssertEqual(ImageTypeFilter(savedValue: "graphics"), .graphics)
@@ -91,6 +97,7 @@ final class ImageTypeFilterTests: XCTestCase {
         XCTAssertNil(resetRow.imageType)
         XCTAssertFalse(ImageTypeFilter.photos.contains(resetRow))
         XCTAssertFalse(ImageTypeFilter.graphics.contains(resetRow))
+        XCTAssertTrue(ImageTypeFilter.unsure.contains(resetRow))
         pending.complete(reset)
         var resolved = photo
         resolved.imageType = nil

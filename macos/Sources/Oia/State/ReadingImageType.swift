@@ -14,11 +14,13 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
     case all
     case graphics
     case photos
+    case unsure
 
     init(savedValue: String?) {
         switch savedValue {
         case "photographs", "photography", "photos": self = .photos
         case "other", "hidePhotography", "graphics": self = .graphics
+        case "unclassified", "unsure": self = .unsure
         default: self = .all
         }
     }
@@ -30,6 +32,7 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
         case .all: "All"
         case .graphics: "Graphics"
         case .photos: "Photos"
+        case .unsure: "Unsure"
         }
     }
 
@@ -38,6 +41,7 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
         case .all: nil
         case .graphics: "other_image"
         case .photos: "photograph"
+        case .unsure: "unclassified_image"
         }
     }
 
@@ -48,6 +52,7 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
         case .all: return true
         case .graphics: return row.imageType == .other
         case .photos: return row.imageType == .photograph
+        case .unsure: return row.imageType == nil
         }
     }
 }

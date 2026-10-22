@@ -261,7 +261,7 @@ extension OiaLibraryView {
                     .accessibilityLabel("Image type")
                     .accessibilityValue(appState.activeImageTypeFilter.label)
                     .accessibilityIdentifier(A11y.Filter.imageType)
-                    .help("Show all images, graphics, or photos")
+                    .help("Show all images, graphics, photos, or images you’re unsure about")
                 }
             }
         }
