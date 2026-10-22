@@ -137,11 +137,12 @@ struct OiaReadingOverlay: View {
             canMovePrevious: canMovePrevious,
             canMoveNext: canMoveNext,
             showsInspector: showsInspector,
-            canMarkAsPhoto: row.kind == .image,
+            canClassifyImages: row.kind == .image,
             movePrevious: { onMove(-1) },
             moveNext: { onMove(1) },
             toggleInspector: toggleInspector,
-            markAsPhoto: { updateImageType(.photograph) }
+            markAsPhoto: { updateImageType(.photograph) },
+            markAsGraphic: { updateImageType(.other) }
         )
     }
 

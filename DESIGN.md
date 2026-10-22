@@ -131,8 +131,8 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and subject Tags such as interiors or gardens, is remembered when switching board scopes,
   and only applies in Images. Uncertainty stays internal rather than becoming a browsing category.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
-  or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) applies to every
-  selected image and leaves existing photos classified as photos. Corrections live in the
+  or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
+  (⇧⌘G) set every selected image to that type; repeating either action keeps that type. Corrections live in the
   reading's file and take precedence over later model results. Classification does not create
   a Tag or a card kind.
   Automatic classification uses the on-device Apple Intelligence image model on macOS 27 or

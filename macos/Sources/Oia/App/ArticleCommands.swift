@@ -18,7 +18,17 @@ struct ArticleCommands: Commands {
                 }
             }
             .keyboardShortcut(ShortcutCatalog.markAsPhoto)
-            .disabled(!canMarkAsPhoto)
+            .disabled(!canClassifyImages)
+
+            Button("Mark as Graphic") {
+                if let detailNavigationActions {
+                    detailNavigationActions.markAsGraphic()
+                } else {
+                    boardActions?.markAsGraphic()
+                }
+            }
+            .keyboardShortcut(ShortcutCatalog.markAsGraphic)
+            .disabled(!canClassifyImages)
 
             Divider()
 
@@ -112,9 +122,9 @@ struct ArticleCommands: Commands {
         return ReadingClipboard.fileURL(for: selectedRow, libraryURL: appState.libraryURL) != nil
     }
 
-    private var canMarkAsPhoto: Bool {
+    private var canClassifyImages: Bool {
         guard !appState.isEditingText, !appState.isBrowsingWebContent,
               !appState.isDeleting else { return false }
-        return detailNavigationActions?.canMarkAsPhoto ?? boardActions?.canMarkAsPhoto ?? false
+        return detailNavigationActions?.canClassifyImages ?? boardActions?.canClassifyImages ?? false
     }
 }

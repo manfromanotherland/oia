@@ -82,11 +82,15 @@ extension OiaLibraryView {
     }
 
     private func performBoardItemShortcut(_ press: KeyPress) -> KeyPress.Result? {
-        if ShortcutCatalog.markAsPhoto.matches(key: press.key, modifiers: press.modifiers),
-           !appState.isDeleting, appState.selectedRows.contains(where: { $0.kind == .image })
-        {
-            markSelectedImagesAsPhoto()
-            return .handled
+        if !appState.isDeleting, appState.selectedRows.contains(where: { $0.kind == .image }) {
+            if ShortcutCatalog.markAsPhoto.matches(key: press.key, modifiers: press.modifiers) {
+                markSelectedImages(as: .photograph)
+                return .handled
+            }
+            if ShortcutCatalog.markAsGraphic.matches(key: press.key, modifiers: press.modifiers) {
+                markSelectedImages(as: .other)
+                return .handled
+            }
         }
 
         if ShortcutCatalog.copy.matches(key: press.key, modifiers: press.modifiers),

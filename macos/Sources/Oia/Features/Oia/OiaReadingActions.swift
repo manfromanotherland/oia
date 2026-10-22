@@ -37,6 +37,7 @@ struct OiaReadingActions: View {
                 Button("Mark as Graphic") {
                     appState.enqueueImageTypeEdit(.other, ids: imageTypeTargetIDs)
                 }
+                .keyboardShortcut(ShortcutCatalog.markAsGraphic)
                 Divider()
                 Button("Use Automatic Classification") {
                     appState.enqueueImageTypeEdit(nil, ids: imageTypeTargetIDs)

@@ -400,6 +400,7 @@ extension OiaLibraryView {
                     keys: [
                         ShortcutCatalog.copy.primary.key,
                         ShortcutCatalog.markAsPhoto.primary.key,
+                        ShortcutCatalog.markAsGraphic.primary.key,
                         ShortcutCatalog.openSource.primary.key,
                         ShortcutCatalog.decreaseCardSize.primary.key,
                         ShortcutCatalog.increaseCardSize.primary.key,

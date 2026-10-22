@@ -25,11 +25,12 @@ extension OiaLibraryView {
                 && appState.libraryURL != nil,
             canFocusSearch: presentedReading == nil && !appState.isFocusMode,
             canScrollToTop: presentedReading == nil && !appState.readings.isEmpty,
-            canMarkAsPhoto: presentedReading == nil
+            canClassifyImages: presentedReading == nil
                 && appState.selectedRows.contains(where: { $0.kind == .image }),
             openSelection: openSelection,
             editTags: requestEditSelectedTags,
-            markAsPhoto: markSelectedImagesAsPhoto,
+            markAsPhoto: { markSelectedImages(as: .photograph) },
+            markAsGraphic: { markSelectedImages(as: .other) },
             toggleQuickLook: toggleQuickLook,
             focusSearch: focusSearch,
             scrollToTop: scrollBoardToTop
@@ -63,11 +64,11 @@ extension OiaLibraryView {
         boardPosition.scrollToStart(animated: !accessibilityReduceMotion)
     }
 
-    func markSelectedImagesAsPhoto() {
+    func markSelectedImages(as imageType: ReadingImageType) {
         guard presentedReading == nil, !appState.isDeleting,
               !appState.isEditingText else { return }
         let ids = appState.selectedRows.filter { $0.kind == .image }.map(\.id)
-        appState.enqueueImageTypeEdit(.photograph, ids: ids)
+        appState.enqueueImageTypeEdit(imageType, ids: ids)
     }
 
     static let boardSpacing: CGFloat = 18

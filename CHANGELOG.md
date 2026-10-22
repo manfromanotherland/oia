@@ -13,8 +13,8 @@ and versions track the app's `CFBundleShortVersionString`. See
   Tags. Apple Intelligence identifies photos locally on supported Macs with macOS 27 or later.
   Images awaiting a confident assessment appear only in All. The Inspector's Photo switch and
   card actions let you correct the type or return to automatic classification. Select several
-  images and press **⇧⌘P** to mark them all as photos; existing photos stay photos. Results and
-  corrections are saved in the reading's file.
+  images and press **⇧⌘P** to mark them all as photos or **⇧⌘G** to mark them as graphics.
+  Repeating either action keeps that type. Results and corrections are saved in the reading's file.
 
 - Tags can now be generated locally from saved text and image content. Text tagging uses
   Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share
