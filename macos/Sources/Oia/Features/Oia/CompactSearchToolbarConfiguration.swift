@@ -185,6 +185,7 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
         func configureCurrentToolbar() {
             window?.titlebarAppearsTransparent = true
             window?.titlebarSeparatorStyle = .none
+            window?.toolbar?.allowsDisplayModeCustomization = false
             window?.toolbar?.items
                 .compactMap { $0 as? NSSearchToolbarItem }
                 .forEach { configure($0) }
@@ -200,6 +201,7 @@ struct CompactSearchToolbarConfiguration: NSViewRepresentable {
                 return
             }
 
+            toolbar.allowsDisplayModeCustomization = false
             configure(item)
         }
 
