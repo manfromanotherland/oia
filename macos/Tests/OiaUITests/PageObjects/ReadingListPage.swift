@@ -19,8 +19,8 @@ struct ReadingListPage {
         app.byId(A11y.Filter.menu)
     }
 
-    var imageTypeMenu: XCUIElement {
-        app.menus[A11y.Filter.imageType]
+    var imageTypeGroup: XCUIElement {
+        app.byId(A11y.Filter.imageType)
     }
 
     func showAll() {
@@ -29,34 +29,28 @@ struct ReadingListPage {
 
     func selectScope(_ label: String) {
         scopeSegment(label).clickWhenReady()
-        if label == "Images" {
-            XCTAssertTrue(imageTypeMenu.waitExists())
-            dismissImageTypeMenu()
-        }
     }
 
     func selectImageType(_ label: String) {
-        openImageTypeMenu()
-        imageTypeMenuItem(label).clickWhenReady()
+        imageTypeSegment(label).clickWhenReady()
     }
 
-    func openImageTypeMenu() {
-        scopeSegment("Images").clickWhenReady()
-        XCTAssertTrue(imageTypeMenu.waitExists())
-    }
-
-    func dismissImageTypeMenu() {
-        app.typeKey(.escape, modifierFlags: [])
-    }
-
-    func imageTypeMenuItem(_ label: String) -> XCUIElement {
+    func imageTypeSegment(_ label: String) -> XCUIElement {
         let identifiers = [
-            "All Images": "all", "Graphics": "graphics", "Photos": "photos", "Unsure": "unsure"
+            "All": "all", "Graphics": "graphics", "Photos": "photos", "Unsure": "unsure"
         ]
-        guard let value = identifiers[label] else {
-            return imageTypeMenu.menuItems[label]
+        if let value = identifiers[label] {
+            let identifier = A11y.Filter.imageType + "." + value
+            let radio = imageTypeGroup.radioButtons.matching(identifier: identifier).firstMatch
+            if radio.exists { return radio }
+            let button = imageTypeGroup.buttons.matching(identifier: identifier).firstMatch
+            if button.exists { return button }
         }
-        return imageTypeMenu.menuItems.matching(identifier: A11y.Filter.imageType + "." + value).firstMatch
+        let predicate = label == "Unsure"
+            ? NSPredicate(format: "label BEGINSWITH %@", "Unsure")
+            : NSPredicate(format: "label == %@", label)
+        let radio = imageTypeGroup.radioButtons.matching(predicate).firstMatch
+        return radio.exists ? radio : imageTypeGroup.buttons.matching(predicate).firstMatch
     }
 
     private func scopeSegment(_ label: String) -> XCUIElement {

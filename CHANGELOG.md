@@ -9,12 +9,13 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- The main view control's **Images** segment opens a native **All Images / Graphics / Photos / Unsure**
-  menu at the existing control height. Image filters work alongside search and Tags. Apple
+- In Images, an **All / Graphics / Photos / Unsure (N)** Liquid Glass button group floats at the
+  bottom center, aligned with the scroll-to-top button and using the same appearance transition.
+  Image filters work alongside search and Tags. Apple
   Intelligence identifies photos locally on supported Macs with macOS 27 or later.
-  Images awaiting a confident assessment appear in All Images and Unsure. Unsure always appears
-  with a count badge for the whole library and is disabled at zero; finishing the last one returns
-  that selection to All Images. The Inspector's Photo switch and card actions let you correct
+  Images awaiting a confident assessment appear in All and Unsure. Unsure always appears
+  with a count for the whole library and is disabled at zero; finishing the last one returns
+  that selection to All. The Inspector's Photo switch and card actions let you correct
   the type or return to automatic
   classification. Select several images and press **⇧⌘P** to mark them all as photos or **⇧⌘G**
   to mark them as graphics.
@@ -91,8 +92,8 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
-- The board scope control keeps SwiftUI's original Liquid Glass renderer and selection handling
-  when adding the Images menu, including scope changes through keyboard shortcuts.
+- Removed the Images pop-up integration and restored the original main scope picker and its
+  keyboard selection handling. Image filters no longer modify or intercept that control.
 
 - Graphics excludes pending images, which could previously let photos appear farther down the
   board. Independent background indexing failures no longer interrupt image classification, and

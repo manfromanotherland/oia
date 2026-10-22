@@ -124,22 +124,22 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- The **Images** segment has a native menu indicator. Activating it selects Images with its
-  remembered facet and opens a native pop-up menu: **All Images**, **Graphics**, **Photos**, and
-  **Unsure**. Keep the original SwiftUI segmented picker and its Liquid Glass rendering and
-  selection handling. A transparent background bridge adds the menu; it must not replace the
-  control, change its tracking behavior, or synchronize its selected segment during view updates.
-  The main control retains its native height. The menu checkmark identifies the active
-  image choice; choosing another board scope remembers that choice. Photos depict real-world
+- Within **Images**, a second native segmented picker floats at the bottom center of the board:
+  **All**, **Graphics**, **Photos**, and **Unsure (N)**. It uses Liquid Glass and the same 8-point
+  bottom inset, scale-and-opacity transition, and spring animation as the scroll-to-top button.
+  Keep this animation inside the floating overlay so it does not animate scope changes or board
+  loading. The group remains available during loading and when a filter has no results. The main
+  scope picker keeps its original SwiftUI implementation without menu integration or event hooks.
+  Choosing another board scope hides the floating group and remembers the image choice. Photos depict real-world
   scenes and objects. Graphics includes confirmed screenshots, illustrations, and graphic design.
-  Images awaiting a confident assessment appear in All Images and Unsure, so unresolved photos
+  Images awaiting a confident assessment appear in All and Unsure, so unresolved photos
   cannot leak into Graphics. The choice composes with search and subject Tags such as interiors
   or gardens, is remembered when switching board scopes,
   and only applies in Images. Unsure lets the user select images awaiting a confident assessment
   and classify them in batches. Classified images leave Unsure immediately. Unsure always remains
-  in the menu with a native numeric badge counting unclassified images across the whole library,
+  in the group with its label counting unclassified images across the whole library,
   regardless of the active search or Tags. At zero it is disabled. Classifying the last one returns
-  an active Unsure selection to All Images; new unclassified images enable Unsure again.
+  an active Unsure selection to All; new unclassified images enable Unsure again.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
   or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
   (⇧⌘G) set every selected image to that type; repeating either action keeps that type. Corrections live in the

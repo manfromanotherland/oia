@@ -253,11 +253,19 @@ extension OiaLibraryView {
     }
 
     private var boardFilterPicker: some View {
-        BoardScopePicker(
-            scope: scopeSelection,
-            imageType: imageTypeSelection,
-            unsureImageCount: appState.unsureImageCount
-        )
+        Picker("Filter", selection: scopeSelection) {
+            ForEach(LibraryScope.allCases) { scope in
+                Text(scope.label)
+                    .help(scope.label)
+                    .accessibilityLabel(scope.label)
+                    .tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Filter")
+        .accessibilityValue(appState.activeScope.label)
+        .accessibilityIdentifier(A11y.Filter.group)
     }
 
     private var cardSizeControl: some View {
@@ -297,8 +305,38 @@ extension OiaLibraryView {
         searchFocused = true
     }
 
-    @ViewBuilder
     private var board: some View {
+        ZStack {
+            boardContent
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .overlay(alignment: .bottom) {
+            ZStack {
+                if appState.activeScope == .images {
+                    FloatingImageTypePicker(
+                        selection: imageTypeSelection,
+                        unsureImageCount: appState.unsureImageCount
+                    )
+                    .padding(Self.floatingControlInset)
+                    .transition(Self.floatingControlTransition)
+                }
+            }
+            .animation(floatingControlAnimation, value: appState.activeScope == .images)
+        }
+    }
+
+    private static let floatingControlInset: CGFloat = 8
+
+    private static var floatingControlTransition: AnyTransition {
+        .scale(scale: 0.7).combined(with: .opacity)
+    }
+
+    private var floatingControlAnimation: Animation? {
+        accessibilityReduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7)
+    }
+
+    @ViewBuilder
+    private var boardContent: some View {
         if appState.isLoading || appState.isRestoringLibrary {
             Color.clear
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -396,25 +434,24 @@ extension OiaLibraryView {
                 .simultaneousGesture(boardMagnifyGesture)
                 .accessibilityIdentifier(A11y.List.table)
                 .overlay(alignment: .bottomTrailing) {
-                    if showsScrollToTop {
-                        Button(action: scrollBoardToTop) {
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 17, weight: .semibold))
-                                .frame(width: 36, height: 36)
+                    ZStack {
+                        if showsScrollToTop {
+                            Button(action: scrollBoardToTop) {
+                                Image(systemName: "arrow.up")
+                                    .font(.system(size: 17, weight: .semibold))
+                                    .frame(width: 36, height: 36)
+                            }
+                            .buttonStyle(.plain)
+                            .modifier(ScrollToTopGlass())
+                            .help("Scroll to Top (\(ShortcutCatalog.scrollToTop.display))")
+                            .accessibilityLabel("Scroll to Top")
+                            .accessibilityIdentifier(A11y.List.scrollToTop)
+                            .padding(Self.floatingControlInset)
+                            .transition(Self.floatingControlTransition)
                         }
-                        .buttonStyle(.plain)
-                        .modifier(ScrollToTopGlass())
-                        .help("Scroll to Top (\(ShortcutCatalog.scrollToTop.display))")
-                        .accessibilityLabel("Scroll to Top")
-                        .accessibilityIdentifier(A11y.List.scrollToTop)
-                        .padding(8)
-                        .transition(.scale(scale: 0.7).combined(with: .opacity))
                     }
+                    .animation(floatingControlAnimation, value: showsScrollToTop)
                 }
-                .animation(
-                    accessibilityReduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7),
-                    value: showsScrollToTop
-                )
             }
         }
     }

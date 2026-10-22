@@ -55,7 +55,7 @@ extension OiaLibraryView {
             .background(.regularMaterial, in: Capsule())
             .overlay { Capsule().stroke(OiaTheme.border, lineWidth: 1) }
             .shadow(color: .black.opacity(0.12), radius: 12, y: 5)
-            .padding(.bottom, 24)
+            .padding(.bottom, appState.activeScope == .images && presentedReading == nil ? 64 : 24)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
             .allowsHitTesting(false)
             .accessibilityIdentifier(A11y.Save.notice)
