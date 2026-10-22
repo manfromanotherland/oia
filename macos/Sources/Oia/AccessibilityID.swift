@@ -115,6 +115,7 @@ enum A11y {
         static let tagInputError = "detail.inspector.tagInputError"
         static let details = "detail.inspector.details"
         static let imageType = "detail.inspector.imageType"
+        static let automaticImageType = "detail.inspector.automaticImageType"
         static let colorPrefix = "detail.inspector.colour."
         static func attribute(_ label: String) -> String {
             "detail.inspector.attribute.\(label)"

@@ -305,11 +305,13 @@ mod tests {
     }
 
     #[test]
-    fn photo_other_unknown_filters_match_search_and_counts_after_rebuild() {
+    fn image_type_filters_match_search_tags_and_counts_after_rebuild() {
         let (_files, _cache, library, conn) = setup();
         let (photo, photo_hash) = save(&library, 430);
         let (other, other_hash) = save(&library, 440);
         let (unknown, unknown_hash) = save(&library, 450);
+        let (pending, _) = save(&library, 455);
+        let quote = crate::import_text(&library, "Garden design", Some("Garden design")).unwrap();
         rebuild(&conn, &library).unwrap();
         for (id, hash, value) in [
             (&photo, &photo_hash, "photograph"),
@@ -318,40 +320,55 @@ mod tests {
         ] {
             complete_image_classification(&library, &conn, id, hash, "model-v1", value).unwrap();
         }
+        for id in [&photo, &other, &unknown, &quote.id] {
+            crate::add_tag(&library, &conn, id, "Projects").unwrap();
+        }
         rebuild(&conn, &library).unwrap();
         for (term, expected) in [
-            ("photograph", &photo),
-            ("other_image", &other),
-            ("unclassified_image", &unknown),
+            ("photograph", vec![&photo]),
+            ("other_image", vec![&other]),
+            ("unclassified_image", vec![&unknown, &pending]),
+            ("non_photographic_image", vec![&other, &unknown, &pending]),
         ] {
             for query in [
                 None,
                 Some("Garden design".into()),
                 Some("design Garden".into()),
             ] {
-                let rows = list_readings(
-                    &conn,
-                    &ListOptions {
-                        query: query.clone(),
-                        item_type_terms: vec!["image".into(), term.into()],
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-                assert_eq!(
-                    rows.iter().map(|row| &row.id).collect::<Vec<_>>(),
-                    vec![expected]
-                );
-                let counts = crate::view_counts(
-                    &conn,
-                    &CountScope {
-                        query,
-                        item_type_terms: vec!["image".into(), term.into()],
-                        ..Default::default()
-                    },
-                )
-                .unwrap();
-                assert_eq!(counts.all, 1);
+                for tag in [None, Some("projects".to_string())] {
+                    let mut expected_ids: Vec<_> = expected
+                        .iter()
+                        .copied()
+                        .filter(|id| tag.is_none() || *id != &pending)
+                        .collect();
+                    expected_ids.sort();
+                    for item_type_terms in [vec![term.into()], vec!["image".into(), term.into()]] {
+                        let rows = list_readings(
+                            &conn,
+                            &ListOptions {
+                                query: query.clone(),
+                                tag: tag.clone(),
+                                item_type_terms: item_type_terms.clone(),
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                        let mut row_ids: Vec<_> = rows.iter().map(|row| &row.id).collect();
+                        row_ids.sort();
+                        assert_eq!(row_ids, expected_ids);
+                        let counts = crate::view_counts(
+                            &conn,
+                            &CountScope {
+                                query: query.clone(),
+                                tag: tag.clone(),
+                                item_type_terms,
+                                ..Default::default()
+                            },
+                        )
+                        .unwrap();
+                        assert_eq!(counts.all, expected_ids.len() as u64);
+                    }
+                }
             }
         }
         assert_eq!(

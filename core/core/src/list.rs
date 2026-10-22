@@ -405,6 +405,7 @@ fn item_type_clause(table: &str, parameter: usize) -> String {
                WHERE NOT (
                    (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
                    OR (readings.kind = 'image' AND readings.image_type IS 'photograph' AND requested_type.value = 'photograph')
+                   OR (readings.kind = 'image' AND readings.image_type IS NOT 'photograph' AND requested_type.value = 'non_photographic_image')
                    OR (readings.kind = 'image' AND readings.image_type IS 'other' AND requested_type.value = 'other_image')
                    OR (readings.kind = 'image' AND readings.image_type IS NULL AND requested_type.value = 'unclassified_image')
                    OR (readings.kind = 'article' AND readings.link_category IS requested_type.value

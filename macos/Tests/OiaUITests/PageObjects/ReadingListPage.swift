@@ -29,8 +29,9 @@ struct ReadingListPage {
     }
 
     func selectImageType(_ label: String) {
-        app.byId(A11y.Filter.imageType).clickWhenReady()
-        app.menuItems[label].clickWhenReady()
+        let group = app.byId(A11y.Filter.imageType)
+        let radio = group.radioButtons[label]
+        (radio.exists ? radio : group.buttons[label]).clickWhenReady()
     }
 
     func selectTagFilter(_ tag: String) {

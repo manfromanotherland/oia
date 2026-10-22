@@ -251,17 +251,17 @@ extension OiaLibraryView {
 
             if appState.activeScope == .images {
                 ToolbarItem(placement: .primaryAction) {
-                    Picker("Image type", selection: imageTypeSelection) {
+                    Picker("Photography filter", selection: imageTypeSelection) {
                         ForEach(ImageTypeFilter.allCases) { filter in
                             Text(filter.label).tag(filter)
                         }
                     }
-                    .pickerStyle(.menu)
+                    .pickerStyle(.segmented)
                     .labelsHidden()
-                    .accessibilityLabel("Image type")
+                    .accessibilityLabel("Photography filter")
                     .accessibilityValue(appState.activeImageTypeFilter.label)
                     .accessibilityIdentifier(A11y.Filter.imageType)
-                    .help("Filter photographs and other images")
+                    .help("Show all images, hide photography, or show only photography")
                 }
             }
         }

@@ -22,19 +22,19 @@ struct AppleImageTypeClassifier: ImageTypeClassifying {
 
     var unavailableMessage: String? {
         guard #available(macOS 27.0, *) else {
-            return "Automatic classification requires macOS 27 or later. You can choose an image type manually."
+            return "Automatic classification requires macOS 27 or later. You can set Photography manually."
         }
         switch SystemLanguageModel(useCase: .general).availability {
         case .available:
             return nil
         case .unavailable(.deviceNotEligible):
-            return "Automatic classification isn’t available on this Mac. You can choose an image type manually."
+            return "Automatic classification isn’t available on this Mac. You can set Photography manually."
         case .unavailable(.appleIntelligenceNotEnabled):
-            return "Enable Apple Intelligence to classify images automatically, or choose an image type manually."
+            return "Enable Apple Intelligence to classify images automatically, or set Photography manually."
         case .unavailable(.modelNotReady):
             return "Automatic classification will start when Apple Intelligence is ready."
         @unknown default:
-            return "Automatic classification is currently unavailable. You can choose an image type manually."
+            return "Automatic classification is currently unavailable. You can set Photography manually."
         }
     }
 

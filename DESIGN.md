@@ -124,14 +124,16 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Within **Images**, a secondary native menu selects **All images**, **Photographs**,
-  **Other images**, or **Unclassified**. Photographs depict real-world scenes and objects;
-  Other images includes graphic design, screenshots, illustrations, diagrams, and collages.
-  The choice composes with search and subject Tags such as interiors or gardens, is remembered
-  when switching board scopes, and only applies in Images. Uncertain or unavailable analysis
-  leaves a card Unclassified. The Inspector and image card actions let the user correct its
-  Image type or return it to automatic classification. Corrections live in the reading's file
-  and take precedence over later model results. Image type does not create a Tag or a card kind.
+- Within **Images**, a secondary native segmented button group selects **All images**,
+  **Hide photography**, or **Photography**. Photography depicts real-world scenes and objects;
+  Hide photography excludes cards identified as photography while retaining graphics,
+  screenshots, illustrations, and images without a confident assessment. The choice composes
+  with search and subject Tags such as interiors or gardens, is remembered when switching
+  board scopes, and only applies in Images. Uncertainty stays internal rather than becoming a
+  browsing category. The Inspector's **Photography** switch and image card actions let the user
+  correct inclusion in Photography or return to automatic classification. Corrections live in
+  the reading's file and take precedence over later model results. Classification does not create
+  a Tag or a card kind.
   Automatic classification uses the on-device Apple Intelligence image model on macOS 27 or
   later. When that model is unavailable, images remain pending and manual classification works;
   returning to the app retries after the model becomes available.

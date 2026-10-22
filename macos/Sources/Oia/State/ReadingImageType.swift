@@ -4,44 +4,40 @@ import Foundation
 
 /// The visual presentation of an image, separate from subject Tags such as interiors.
 /// Missing and newer values remain unclassified on this client.
-enum ReadingImageType: String, CaseIterable, Hashable, Identifiable, Sendable {
+enum ReadingImageType: String, Hashable, Sendable {
     case photograph
     case other
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .photograph: "Photograph"
-        case .other: "Other image"
-        }
-    }
 }
 
 /// A remembered facet of Images. Other board scopes do not inherit it.
 enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
     case all
-    case photographs
-    case other
-    case unclassified
+    case hidePhotography
+    case photography
+
+    init(savedValue: String?) {
+        switch savedValue {
+        case "photographs", "photography": self = .photography
+        case "other", "hidePhotography": self = .hidePhotography
+        default: self = .all
+        }
+    }
 
     var id: String { rawValue }
 
     var label: String {
         switch self {
         case .all: "All images"
-        case .photographs: "Photographs"
-        case .other: "Other images"
-        case .unclassified: "Unclassified"
+        case .hidePhotography: "Hide photography"
+        case .photography: "Photography"
         }
     }
 
     var itemTypeTerm: String? {
         switch self {
         case .all: nil
-        case .photographs: "photograph"
-        case .other: "other_image"
-        case .unclassified: "unclassified_image"
+        case .hidePhotography: "non_photographic_image"
+        case .photography: "photograph"
         }
     }
 
@@ -50,9 +46,8 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
         guard row.kind == .image else { return false }
         switch self {
         case .all: return true
-        case .photographs: return row.imageType == .photograph
-        case .other: return row.imageType == .other
-        case .unclassified: return row.imageType == nil
+        case .hidePhotography: return row.imageType != .photograph
+        case .photography: return row.imageType == .photograph
         }
     }
 }

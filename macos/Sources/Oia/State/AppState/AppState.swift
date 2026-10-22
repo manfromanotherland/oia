@@ -259,8 +259,7 @@ final class AppState {
             .flatMap(LibraryScope.init(rawValue:))
         activeScope = persistedScope ?? .all
         defaults.set(activeScope.rawValue, forKey: FilterDefaultsKey.scope)
-        activeImageTypeFilter = defaults.string(forKey: FilterDefaultsKey.imageType)
-            .flatMap(ImageTypeFilter.init(rawValue:)) ?? .all
+        activeImageTypeFilter = ImageTypeFilter(savedValue: defaults.string(forKey: FilterDefaultsKey.imageType))
         defaults.removeObject(forKey: FilterDefaultsKey.legacyView)
         defaults.removeObject(forKey: FilterDefaultsKey.legacyRating)
         searchQuery = defaults.string(forKey: FilterDefaultsKey.search) ?? ""

@@ -9,11 +9,11 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- Images can now be narrowed to Photographs, Other images, or Unclassified alongside search
-  and Tags. Apple Intelligence classifies saved images locally on supported Macs with macOS 27
-  or later; uncertain results stay Unclassified. The Image type menu works on older systems too.
-  Correct an image's type in the Inspector or its context menu, or return it to automatic
-  classification. Both inferred results and corrections are saved in the reading's file.
+- Images now has an **All images / Hide photography / Photography** button group that works
+  alongside search and Tags. Apple Intelligence identifies photography locally on supported Macs
+  with macOS 27 or later. Images without a confident assessment remain visible when photography
+  is hidden. The Inspector's Photography switch and card actions let you correct inclusion or
+  return to automatic classification. Results and corrections are saved in the reading's file.
 
 - Tags can now be generated locally from saved text and image content. Text tagging uses
   Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share

@@ -47,25 +47,25 @@ struct InspectorDetails: View {
 
             if row.kind == .image, let onSetImageType {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    fieldLabel("Image type")
+                    fieldLabel("Photography")
                     Spacer(minLength: 0)
-                    Menu {
-                        ForEach(ReadingImageType.allCases) { imageType in
-                            Button(imageType.label) { onSetImageType(imageType) }
-                        }
-                        Divider()
-                        Button("Use Automatic Classification") { onSetImageType(nil) }
-                    } label: {
-                        Text(row.imageType?.label ?? "Unclassified")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                    .font(.system(size: 12))
-                    .accessibilityLabel("Image type")
-                    .accessibilityValue(row.imageType?.label ?? "Unclassified")
+                    Toggle("Photography", isOn: Binding(
+                        get: { row.imageType == .photograph },
+                        set: { onSetImageType($0 ? .photograph : .other) }
+                    ))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .controlSize(.mini)
+                    .help("Include this image in Photography")
                     .accessibilityIdentifier(A11y.Inspector.imageType)
                 }
                 .padding(.vertical, 7)
+                Button("Use automatic classification") { onSetImageType(nil) }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, 7)
+                    .accessibilityIdentifier(A11y.Inspector.automaticImageType)
                 if let automaticClassificationMessage {
                     Text(automaticClassificationMessage)
                         .font(.system(size: 12))

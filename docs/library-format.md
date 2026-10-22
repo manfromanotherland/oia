@@ -151,7 +151,8 @@ See [link categories](link-categories.md) for detection, artwork capture, and re
 for `kind: image`. `photograph` means a photograph of a real-world scene or object; `other`
 includes screenshots, graphic design, illustrations, and collages. `unknown` records a completed
 but uncertain machine assessment, so an ambiguous image is not repeatedly analyzed for the same
-source and analyzer version. Missing, unknown, or unsupported records are presented as Unclassified;
+source and analyzer version. Missing, unknown, or unsupported records remain visible in All images
+and Hide photography, but are excluded from Photography;
 unknown discriminator strings and versions are preserved on file round trips.
 
 A `user` classification stores the explicit choice without requiring a source fingerprint or

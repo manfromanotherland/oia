@@ -29,17 +29,12 @@ struct OiaReadingActions: View {
             .disabled(appState.isDeleting)
 
         if row.kind == .image {
-            Menu("Image Type") {
-                ForEach(ReadingImageType.allCases) { imageType in
-                    Button {
-                        appState.enqueueImageTypeEdit(imageType, ids: imageTypeTargetIDs)
-                    } label: {
-                        if imageTypeTargetIDs.count == 1, row.imageType == imageType {
-                            Label(imageType.label, systemImage: "checkmark")
-                        } else {
-                            Text(imageType.label)
-                        }
-                    }
+            Menu("Photography") {
+                Button("Include in Photography") {
+                    appState.enqueueImageTypeEdit(.photograph, ids: imageTypeTargetIDs)
+                }
+                Button("Hide from Photography") {
+                    appState.enqueueImageTypeEdit(.other, ids: imageTypeTargetIDs)
                 }
                 Divider()
                 Button("Use Automatic Classification") {
