@@ -86,6 +86,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
+- Opening a library no longer freezes the window when macOS takes time to start folder
+  monitoring. File changes made while monitoring starts are reconciled afterward.
+
 - The article header now shares the reader's measure instead of a fixed 680 pt,
   so the title stays flush with the body copy at every width.
 

@@ -141,11 +141,8 @@ extension AppState {
 
     func startWatcher(libraryPath: String, session: UInt64) {
         guard session == librarySessionGeneration else { return }
-        // Tear down the previous watcher before replacing it. Reassigning alone
-        // would leak it — the FSEvents stream keeps it alive, still watching the
-        // old folder and firing sync() against the new library. invalidate()
-        // runs while we still hold the strong reference, so the release it
-        // triggers can't deallocate the watcher mid-teardown.
+        // Cancel previous monitoring before replacement. Session guards also
+        // prevent late callbacks from reconciling a different library.
         watcher?.invalidate()
         watcher = FolderWatcher(libraryPath: libraryPath) { [weak self] change in
             Task { @MainActor [weak self] in
@@ -161,7 +158,9 @@ extension AppState {
     ) {
         guard session == librarySessionGeneration else { return }
         watcher?.invalidate()
-        watcher = FolderWatcher(libraryPath: libraryURL.path) { [weak self] _ in
+        // Recovery waits for a real file event; startup reconciliation would
+        // turn a persistent scan failure into an immediate retry loop.
+        watcher = FolderWatcher(libraryPath: libraryURL.path, reconcileOnStart: false) { [weak self] _ in
             Task { @MainActor [weak self] in
                 await self?.retryFullRebuildWhenReady(
                     libraryURL: libraryURL,
