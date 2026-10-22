@@ -292,6 +292,42 @@ extension AppState {
     // ── Filter metadata ───────────────────────────────────────────────────
 
     func loadFilters() async {
+        async let imageTypes: Void = loadImageTypeFilterAvailability()
+        await loadTagFilters()
+        await imageTypes
+    }
+
+    private func loadImageTypeFilterAvailability() async {
+        guard let core else { return }
+        let session = librarySessionGeneration
+        let coreID = activeCoreID
+        imageTypeAvailabilityLoadGeneration &+= 1
+        let generation = imageTypeAvailabilityLoadGeneration
+        let revision = pendingImageTypeEdits.revision
+        // Queued corrections already affect the board. Wait for their final
+        // refresh rather than reviving Unsure from an older index snapshot.
+        guard !pendingImageTypeEdits.hasEdits(librarySession: session) else { return }
+        guard let rows = try? await core.listReadings(.unsureAvailability()),
+              !Task.isCancelled,
+              session == librarySessionGeneration,
+              coreID == activeCoreID,
+              generation == imageTypeAvailabilityLoadGeneration,
+              revision == pendingImageTypeEdits.revision,
+              !pendingImageTypeEdits.hasEdits(librarySession: session) else { return }
+
+        let previousFilter = effectiveImageTypeFilter
+        hasUnsureImages = !rows.isEmpty
+        if !hasUnsureImages, activeImageTypeFilter == .unsure {
+            selectImageTypeFilter(.all)
+        } else if previousFilter != effectiveImageTypeFilter {
+            // A remembered Unsure selection becomes usable after the global
+            // existence check, replacing the initial unfiltered snapshot.
+            invalidatePendingReadingLoads()
+            Task { await reloadForFilterChange() }
+        }
+    }
+
+    private func loadTagFilters() async {
         guard let core else { return }
         let session = librarySessionGeneration
         // The compatible FFI count payload still bundles legacy view/rating
@@ -324,6 +360,7 @@ extension AppState {
     }
 
     func selectImageTypeFilter(_ filter: ImageTypeFilter) {
+        let filter = filter.availableSelection(hasUnsureImages: hasUnsureImages)
         guard activeImageTypeFilter != filter else { return }
         activeImageTypeFilter = filter
         invalidatePendingReadingLoads()

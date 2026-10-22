@@ -12,7 +12,7 @@ extension OiaLibraryView {
 
     var imageTypeSelection: Binding<ImageTypeFilter> {
         Binding(
-            get: { appState.activeImageTypeFilter },
+            get: { appState.effectiveImageTypeFilter },
             set: { appState.selectImageTypeFilter($0) }
         )
     }

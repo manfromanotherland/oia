@@ -252,14 +252,14 @@ extension OiaLibraryView {
             if appState.activeScope == .images {
                 ToolbarItem(placement: .primaryAction) {
                     Picker("Image type", selection: imageTypeSelection) {
-                        ForEach(ImageTypeFilter.allCases) { filter in
+                        ForEach(appState.availableImageTypeFilters) { filter in
                             Text(filter.label).tag(filter)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
                     .accessibilityLabel("Image type")
-                    .accessibilityValue(appState.activeImageTypeFilter.label)
+                    .accessibilityValue(appState.effectiveImageTypeFilter.label)
                     .accessibilityIdentifier(A11y.Filter.imageType)
                     .help("Show all images, graphics, photos, or images you’re unsure about")
                 }

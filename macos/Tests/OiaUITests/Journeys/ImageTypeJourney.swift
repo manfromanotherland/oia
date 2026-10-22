@@ -25,6 +25,7 @@ final class ImageTypeJourney: UITestCase {
         XCTAssertFalse(app.byId(A11y.Filter.imageType).exists)
         list.selectScope("Images")
         XCTAssertTrue(list.waitForRowCount(3))
+        XCTAssertTrue(wait { self.imageTypeExists("Unsure") })
         list.selectImageType("Photos")
         XCTAssertTrue(wait { list.orderedRowIds == [photo] })
         list.selectImageType("Graphics")
@@ -42,7 +43,9 @@ final class ImageTypeJourney: UITestCase {
         }, "Correction is stored in the reading file")
         XCTAssertEqual(library.frontmatter(id: unknown)?.tags, ["Gardens"], "Type corrections preserve subject Tags")
         app.byId(A11y.Detail.close).clickWhenReady()
-        XCTAssertTrue(wait { list.orderedRowIds.isEmpty }, "Classifying an image removes it from Unsure")
+        XCTAssertTrue(wait {
+            Set(list.orderedRowIds) == [photo, graphic, unknown] && !self.imageTypeExists("Unsure")
+        }, "Classifying the last unsure image removes the segment and returns to All")
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] }, "Graphics contains only confirmed graphics")
         list.selectImageType("Photos")
@@ -63,11 +66,34 @@ final class ImageTypeJourney: UITestCase {
         }, "Automatic reset clears the stored correction")
         app.byId(A11y.Detail.close).clickWhenReady()
         XCTAssertTrue(wait { list.orderedRowIds == [photo] }, "Reset leaves Photos immediately")
+        XCTAssertTrue(wait { self.imageTypeExists("Unsure") }, "Automatic reset makes Unsure available again")
         list.selectImageType("Unsure")
         XCTAssertTrue(wait { list.orderedRowIds == [unknown] })
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] })
         list.selectImageType("All")
         XCTAssertTrue(wait { Set(list.orderedRowIds) == [photo, graphic, unknown] })
+    }
+
+    func testClassifiedLibraryHidesUnsureAndRestoresAllFromRememberedUnsure() throws {
+        let photo = TestULID.make(705)
+        let graphic = TestULID.make(706)
+        let savedAt = Date(timeIntervalSince1970: 1_700_000_000)
+        try launchApp(articles: [
+            ArticleFixture(id: photo, url: "https://example.com/classified-photo", title: "Classified photo",
+                           savedAt: savedAt, kind: "image", imageType: "photograph"),
+            ArticleFixture(id: graphic, url: "https://example.com/classified-graphic", title: "Classified graphic",
+                           savedAt: savedAt, kind: "image", imageType: "other")
+        ]) { $0.pinnedDefaults = ["activeImageTypeFilter": "unsure"] }
+
+        list.selectScope("Images")
+        XCTAssertTrue(wait {
+            Set(list.orderedRowIds) == [photo, graphic] && !self.imageTypeExists("Unsure")
+        }, "A completed library shows All and omits Unsure, including after restoring its old preference")
+    }
+
+    private func imageTypeExists(_ label: String) -> Bool {
+        let group = app.byId(A11y.Filter.imageType)
+        return group.radioButtons[label].exists || group.buttons[label].exists
     }
 }

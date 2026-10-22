@@ -111,6 +111,7 @@ final class AppState {
     @ObservationIgnored var visualSearchTask: Task<Void, Never>?
     @ObservationIgnored var visualSearchRerunPending = false
     @ObservationIgnored var readingLoadGeneration: UInt64 = 0
+    @ObservationIgnored var imageTypeAvailabilityLoadGeneration: UInt64 = 0
     /// One ordered tag-write queue shared by board dialogs and the Inspector.
     /// Reserve writes synchronously so dismissing a dialog cannot let a later
     /// editing session overtake the edits it already submitted.
@@ -135,8 +136,16 @@ final class AppState {
         }
     }
 
+    var hasUnsureImages = false
+
+    var availableImageTypeFilters: [ImageTypeFilter] {
+        ImageTypeFilter.availableCases(hasUnsureImages: hasUnsureImages)
+    }
+
     var effectiveImageTypeFilter: ImageTypeFilter {
-        activeScope == .images ? activeImageTypeFilter : .all
+        activeScope == .images
+            ? activeImageTypeFilter.availableSelection(hasUnsureImages: hasUnsureImages)
+            : .all
     }
 
     var imageClassificationAvailabilityMessage: String? {

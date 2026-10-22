@@ -130,7 +130,10 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   in All and Unsure, so unresolved photos cannot leak into Graphics. The choice composes with search
   and subject Tags such as interiors or gardens, is remembered when switching board scopes,
   and only applies in Images. Unsure lets the user select images awaiting a confident assessment
-  and classify them in batches. Classified images leave Unsure immediately.
+  and classify them in batches. Classified images leave Unsure immediately. The Unsure segment
+  appears only while the library contains unclassified images, regardless of the active search
+  or Tags. Classifying the last one removes Unsure and returns its selection to All; new
+  unclassified images make the segment available again.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
   or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
   (⇧⌘G) set every selected image to that type; repeating either action keeps that type. Corrections live in the

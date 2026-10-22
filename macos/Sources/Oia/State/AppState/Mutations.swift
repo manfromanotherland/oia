@@ -241,6 +241,7 @@ extension AppState {
             ids: ids, imageType: imageType, core: core, librarySession: session, reservation: reservation
         )
         beginLibraryWrite()
+        if imageType == nil { hasUnsureImages = true }
         for index in readings.indices where seen.contains(readings[index].id)
             && readings[index].kind == .image {
             readings[index].imageType = imageType

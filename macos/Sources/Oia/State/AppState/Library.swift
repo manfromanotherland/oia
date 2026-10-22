@@ -131,6 +131,7 @@ extension AppState {
             readings = []
             boardSelection.clear()
             filters = LibraryFilters()
+            hasUnsureImages = false
         }
         libraryURL = url
         return previousSyncTask
@@ -309,6 +310,7 @@ extension AppState {
         readings = []
         boardSelection.clear()
         filters = LibraryFilters()
+        hasUnsureImages = false
         libraryURL = nil
         return false
     }

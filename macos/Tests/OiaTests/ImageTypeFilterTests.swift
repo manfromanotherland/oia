@@ -37,6 +37,44 @@ final class ImageTypeFilterTests: XCTestCase {
         XCTAssertEqual(ImageTypeFilter(savedValue: nil), .all)
     }
 
+    func testUnsureIsAvailableOnlyWhileImagesNeedClassification() {
+        XCTAssertEqual(
+            ImageTypeFilter.availableCases(hasUnsureImages: false),
+            [.all, .graphics, .photos]
+        )
+        XCTAssertEqual(
+            ImageTypeFilter.availableCases(hasUnsureImages: true),
+            [.all, .graphics, .photos, .unsure]
+        )
+    }
+
+    func testOnlyAnUnavailableUnsureSelectionFallsBackToAll() {
+        for filter in ImageTypeFilter.allCases {
+            XCTAssertEqual(filter.availableSelection(hasUnsureImages: true), filter)
+            XCTAssertEqual(
+                filter.availableSelection(hasUnsureImages: false),
+                filter == .unsure ? .all : filter
+            )
+        }
+    }
+
+    func testUnsureAvailabilityQueriesTheWholeLibraryWithOneResult() {
+        let query = ReadingQuery.unsureAvailability()
+
+        XCTAssertEqual(query.scope, .images)
+        XCTAssertEqual(query.kind, .image)
+        XCTAssertEqual(query.itemTypeTerms, ["unclassified_image"])
+        XCTAssertNil(query.tag)
+        XCTAssertNil(query.search)
+        XCTAssertTrue(query.tagTerms.isEmpty)
+        XCTAssertTrue(query.visualTerms.isEmpty)
+        XCTAssertTrue(query.colorTerms.isEmpty)
+        XCTAssertTrue(query.semanticCandidateIDs.isEmpty)
+        XCTAssertTrue(query.visualSemanticCandidateIDs.isEmpty)
+        XCTAssertEqual(query.limit, 1)
+        XCTAssertEqual(query.offset, 0)
+    }
+
     func testImageFacetComposesWithSearchAndPreservesBrowsingOrder() {
         for filter in ImageTypeFilter.allCases {
             let query = ReadingQuery.boardSnapshot(
