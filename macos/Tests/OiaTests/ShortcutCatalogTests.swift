@@ -23,6 +23,21 @@ final class ShortcutCatalogTests: XCTestCase {
         XCTAssertEqual(ShortcutCatalog.open.title, "Open Detail")
     }
 
+    func testMarkAsPhotoHasAnUnambiguousShortcutInBothContexts() throws {
+        XCTAssertTrue(ShortcutCatalog.markAsPhoto.matches(key: "p", modifiers: [.command, .shift]))
+        XCTAssertFalse(ShortcutCatalog.markAsPhoto.matches(key: "p", modifiers: .command))
+        XCTAssertFalse(ShortcutCatalog.markAsPhoto.matches(key: "p", modifiers: []))
+        XCTAssertEqual(ShortcutCatalog.markAsPhoto.display, "⇧⌘P")
+        XCTAssertEqual(ShortcutCatalog.markAsPhoto.title, "Mark as Photo")
+
+        let shared = try XCTUnwrap(ShortcutCatalog.groups.first { $0.name == "Grid & Detail" })
+        XCTAssertTrue(shared.shortcuts.contains { $0.id == ShortcutCatalog.markAsPhoto.id })
+        let matchingActions = ShortcutCatalog.groups.flatMap(\.shortcuts).filter {
+            $0.matches(key: "p", modifiers: [.command, .shift])
+        }
+        XCTAssertEqual(matchingActions.map(\.id), [ShortcutCatalog.markAsPhoto.id])
+    }
+
     func testDeleteRequiresCommandWithoutOtherModifiers() {
         XCTAssertTrue(ShortcutCatalog.delete.matches(key: .delete, modifiers: .command))
         XCTAssertFalse(

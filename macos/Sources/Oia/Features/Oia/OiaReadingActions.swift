@@ -29,11 +29,12 @@ struct OiaReadingActions: View {
             .disabled(appState.isDeleting)
 
         if row.kind == .image {
-            Menu("Photography") {
-                Button("Include in Photography") {
+            Menu("Image Type") {
+                Button("Mark as Photo") {
                     appState.enqueueImageTypeEdit(.photograph, ids: imageTypeTargetIDs)
                 }
-                Button("Hide from Photography") {
+                .keyboardShortcut(ShortcutCatalog.markAsPhoto)
+                Button("Mark as Graphic") {
                     appState.enqueueImageTypeEdit(.other, ids: imageTypeTargetIDs)
                 }
                 Divider()

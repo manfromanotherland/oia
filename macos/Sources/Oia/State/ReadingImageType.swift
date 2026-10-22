@@ -12,13 +12,13 @@ enum ReadingImageType: String, Hashable, Sendable {
 /// A remembered facet of Images. Other board scopes do not inherit it.
 enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
     case all
-    case hidePhotography
-    case photography
+    case graphics
+    case photos
 
     init(savedValue: String?) {
         switch savedValue {
-        case "photographs", "photography": self = .photography
-        case "other", "hidePhotography": self = .hidePhotography
+        case "photographs", "photography", "photos": self = .photos
+        case "other", "hidePhotography", "graphics": self = .graphics
         default: self = .all
         }
     }
@@ -27,17 +27,17 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
 
     var label: String {
         switch self {
-        case .all: "All images"
-        case .hidePhotography: "Hide photography"
-        case .photography: "Photography"
+        case .all: "All"
+        case .graphics: "Graphics"
+        case .photos: "Photos"
         }
     }
 
     var itemTypeTerm: String? {
         switch self {
         case .all: nil
-        case .hidePhotography: "non_photographic_image"
-        case .photography: "photograph"
+        case .graphics: "other_image"
+        case .photos: "photograph"
         }
     }
 
@@ -46,8 +46,8 @@ enum ImageTypeFilter: String, CaseIterable, Hashable, Identifiable, Sendable {
         guard row.kind == .image else { return false }
         switch self {
         case .all: return true
-        case .hidePhotography: return row.imageType != .photograph
-        case .photography: return row.imageType == .photograph
+        case .graphics: return row.imageType == .other
+        case .photos: return row.imageType == .photograph
         }
     }
 }

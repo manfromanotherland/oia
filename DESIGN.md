@@ -124,15 +124,16 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Within **Images**, a secondary native segmented button group selects **All images**,
-  **Hide photography**, or **Photography**. Photography depicts real-world scenes and objects;
-  Hide photography excludes cards identified as photography while retaining graphics,
-  screenshots, illustrations, and images without a confident assessment. The choice composes
-  with search and subject Tags such as interiors or gardens, is remembered when switching
-  board scopes, and only applies in Images. Uncertainty stays internal rather than becoming a
-  browsing category. The Inspector's **Photography** switch and image card actions let the user
-  correct inclusion in Photography or return to automatic classification. Corrections live in
-  the reading's file and take precedence over later model results. Classification does not create
+- Within **Images**, a secondary native segmented button group selects **All**, **Graphics**,
+  or **Photos**. Photos depict real-world scenes and objects. Graphics includes confirmed
+  screenshots, illustrations, and graphic design. Images awaiting a confident assessment appear
+  only in All, so unresolved photos cannot leak into Graphics. The choice composes with search
+  and subject Tags such as interiors or gardens, is remembered when switching board scopes,
+  and only applies in Images. Uncertainty stays internal rather than becoming a browsing category.
+  The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
+  or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) applies to every
+  selected image and leaves existing photos classified as photos. Corrections live in the
+  reading's file and take precedence over later model results. Classification does not create
   a Tag or a card kind.
   Automatic classification uses the on-device Apple Intelligence image model on macOS 27 or
   later. When that model is unavailable, images remain pending and manual classification works;

@@ -10,6 +10,18 @@ struct ArticleCommands: Commands {
 
     var body: some Commands {
         CommandMenu("Item") {
+            Button("Mark as Photo") {
+                if let detailNavigationActions {
+                    detailNavigationActions.markAsPhoto()
+                } else {
+                    boardActions?.markAsPhoto()
+                }
+            }
+            .keyboardShortcut(ShortcutCatalog.markAsPhoto)
+            .disabled(!canMarkAsPhoto)
+
+            Divider()
+
             if !selectedRows.isEmpty {
                 Button("Open Detail") {
                     boardActions?.openSelection()
@@ -98,5 +110,11 @@ struct ArticleCommands: Commands {
         guard let selectedRow, !appState.isEditingText,
               boardActions != nil else { return false }
         return ReadingClipboard.fileURL(for: selectedRow, libraryURL: appState.libraryURL) != nil
+    }
+
+    private var canMarkAsPhoto: Bool {
+        guard !appState.isEditingText, !appState.isBrowsingWebContent,
+              !appState.isDeleting else { return false }
+        return detailNavigationActions?.canMarkAsPhoto ?? boardActions?.canMarkAsPhoto ?? false
     }
 }

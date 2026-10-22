@@ -3,28 +3,31 @@
 import XCTest
 
 final class ImageTypeFilterTests: XCTestCase {
-    func testHidePhotographyKeepsImagesWithoutAPhotographyClassification() {
+    func testGraphicsRequiresAConfirmedGraphicClassification() {
         let photo = makeReadingRow(kind: .image, imageType: .photograph)
         let graphic = makeReadingRow(kind: .image, imageType: .other)
         let unknown = makeReadingRow(kind: .image)
 
         XCTAssertTrue(ImageTypeFilter.all.contains(unknown))
-        XCTAssertTrue(ImageTypeFilter.photography.contains(photo))
-        XCTAssertFalse(ImageTypeFilter.photography.contains(graphic))
-        XCTAssertFalse(ImageTypeFilter.photography.contains(unknown))
-        XCTAssertTrue(ImageTypeFilter.hidePhotography.contains(graphic))
-        XCTAssertTrue(ImageTypeFilter.hidePhotography.contains(unknown))
-        XCTAssertFalse(ImageTypeFilter.hidePhotography.contains(photo))
+        XCTAssertTrue(ImageTypeFilter.photos.contains(photo))
+        XCTAssertFalse(ImageTypeFilter.photos.contains(graphic))
+        XCTAssertFalse(ImageTypeFilter.photos.contains(unknown))
+        XCTAssertTrue(ImageTypeFilter.graphics.contains(graphic))
+        XCTAssertFalse(ImageTypeFilter.graphics.contains(unknown))
+        XCTAssertFalse(ImageTypeFilter.graphics.contains(photo))
         XCTAssertFalse(ImageTypeFilter.all.contains(makeReadingRow(kind: .video)))
-        XCTAssertEqual(ImageTypeFilter.allCases.map(\.label), ["All images", "Hide photography", "Photography"])
+        XCTAssertEqual(ImageTypeFilter.allCases.map(\.label), ["All", "Graphics", "Photos"])
+        XCTAssertEqual(ImageTypeFilter.graphics.itemTypeTerm, "other_image")
     }
 
     func testExistingFilterPreferencesRestoreToTheNewModes() {
-        XCTAssertEqual(ImageTypeFilter(savedValue: "photographs"), .photography)
-        XCTAssertEqual(ImageTypeFilter(savedValue: "other"), .hidePhotography)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "photographs"), .photos)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "other"), .graphics)
         XCTAssertEqual(ImageTypeFilter(savedValue: "unclassified"), .all)
-        XCTAssertEqual(ImageTypeFilter(savedValue: "hidePhotography"), .hidePhotography)
-        XCTAssertEqual(ImageTypeFilter(savedValue: "photography"), .photography)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "hidePhotography"), .graphics)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "photography"), .photos)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "graphics"), .graphics)
+        XCTAssertEqual(ImageTypeFilter(savedValue: "photos"), .photos)
         XCTAssertEqual(ImageTypeFilter(savedValue: nil), .all)
     }
 
@@ -47,7 +50,7 @@ final class ImageTypeFilterTests: XCTestCase {
         }
 
         let browsing = ReadingQuery.boardSnapshot(
-            scope: .images, search: nil, tagTerms: [], visualTerms: [], imageTypeFilter: .photography,
+            scope: .images, search: nil, tagTerms: [], visualTerms: [], imageTypeFilter: .photos,
             semanticCandidateIDs: [], visualSemanticCandidateIDs: []
         )
         guard case .savedAt = browsing.sort else {
@@ -59,7 +62,7 @@ final class ImageTypeFilterTests: XCTestCase {
         for scope in LibraryScope.allCases where scope != .images {
             let query = ReadingQuery.boardSnapshot(
                 scope: scope, search: nil, tagTerms: [], visualTerms: [],
-                imageTypeFilter: .photography, semanticCandidateIDs: [], visualSemanticCandidateIDs: []
+                imageTypeFilter: .photos, semanticCandidateIDs: [], visualSemanticCandidateIDs: []
             )
             XCTAssertTrue(query.itemTypeTerms.isEmpty, "\(scope) must ignore the remembered image facet")
         }
@@ -86,8 +89,8 @@ final class ImageTypeFilterTests: XCTestCase {
         let reset = pending.reserve(ids: [photo.id], imageType: nil, librarySession: 1)
         let resetRow = pending.apply(to: photo, librarySession: 1)
         XCTAssertNil(resetRow.imageType)
-        XCTAssertFalse(ImageTypeFilter.photography.contains(resetRow))
-        XCTAssertTrue(ImageTypeFilter.hidePhotography.contains(resetRow))
+        XCTAssertFalse(ImageTypeFilter.photos.contains(resetRow))
+        XCTAssertFalse(ImageTypeFilter.graphics.contains(resetRow))
         pending.complete(reset)
         var resolved = photo
         resolved.imageType = nil

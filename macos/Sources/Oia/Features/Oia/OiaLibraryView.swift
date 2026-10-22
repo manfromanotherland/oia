@@ -251,17 +251,17 @@ extension OiaLibraryView {
 
             if appState.activeScope == .images {
                 ToolbarItem(placement: .primaryAction) {
-                    Picker("Photography filter", selection: imageTypeSelection) {
+                    Picker("Image type", selection: imageTypeSelection) {
                         ForEach(ImageTypeFilter.allCases) { filter in
                             Text(filter.label).tag(filter)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .accessibilityLabel("Photography filter")
+                    .accessibilityLabel("Image type")
                     .accessibilityValue(appState.activeImageTypeFilter.label)
                     .accessibilityIdentifier(A11y.Filter.imageType)
-                    .help("Show all images, hide photography, or show only photography")
+                    .help("Show all images, graphics, or photos")
                 }
             }
         }
@@ -399,6 +399,7 @@ extension OiaLibraryView {
                 .onKeyPress(
                     keys: [
                         ShortcutCatalog.copy.primary.key,
+                        ShortcutCatalog.markAsPhoto.primary.key,
                         ShortcutCatalog.openSource.primary.key,
                         ShortcutCatalog.decreaseCardSize.primary.key,
                         ShortcutCatalog.increaseCardSize.primary.key,

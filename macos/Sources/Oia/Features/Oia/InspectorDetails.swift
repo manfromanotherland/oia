@@ -47,16 +47,16 @@ struct InspectorDetails: View {
 
             if row.kind == .image, let onSetImageType {
                 HStack(alignment: .firstTextBaseline, spacing: 12) {
-                    fieldLabel("Photography")
+                    fieldLabel("Photo")
                     Spacer(minLength: 0)
-                    Toggle("Photography", isOn: Binding(
+                    Toggle("Photo", isOn: Binding(
                         get: { row.imageType == .photograph },
                         set: { onSetImageType($0 ? .photograph : .other) }
                     ))
                     .labelsHidden()
                     .toggleStyle(.switch)
                     .controlSize(.mini)
-                    .help("Include this image in Photography")
+                    .help("Mark this image as a photo")
                     .accessibilityIdentifier(A11y.Inspector.imageType)
                 }
                 .padding(.vertical, 7)

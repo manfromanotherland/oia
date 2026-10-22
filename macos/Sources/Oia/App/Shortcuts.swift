@@ -106,6 +106,7 @@ enum ShortcutCatalog {
     static let copySourceURL = AppShortcut(title: "Copy Source URL", key: "c", modifiers: [.command, .shift], keyGlyph: "C")
     static let quickLook = AppShortcut(title: "Quick Look", key: .space, modifiers: [], keyGlyph: "Space")
     static let editTags = AppShortcut(title: "Edit Tags", key: "t", modifiers: .command, keyGlyph: "T")
+    static let markAsPhoto = AppShortcut(title: "Mark as Photo", key: "p", modifiers: [.command, .shift], keyGlyph: "P")
     static let selectAll = AppShortcut(title: "Select All Cards", key: "a", modifiers: .command, keyGlyph: "A")
     static let toggleHighlights = AppShortcut(title: "Show / Hide Highlights", key: "h", modifiers: [.command, .shift], keyGlyph: "H")
     static let delete = AppShortcut(title: "Delete", key: .delete, modifiers: .command, keyGlyph: "⌫")
@@ -148,7 +149,7 @@ enum ShortcutCatalog {
 
     /// Groups in cheat-sheet display order.
     static let groups: [Group] = [
-        Group(name: "Grid & Detail", shortcuts: [openSource, editTags, copy, copySourceURL, delete]),
+        Group(name: "Grid & Detail", shortcuts: [openSource, editTags, markAsPhoto, copy, copySourceURL, delete]),
         Group(
             name: "Grid",
             shortcuts: [

@@ -6,9 +6,11 @@ struct DetailNavigationActions {
     let canMovePrevious: Bool
     let canMoveNext: Bool
     let showsInspector: Bool
+    let canMarkAsPhoto: Bool
     let movePrevious: () -> Void
     let moveNext: () -> Void
     let toggleInspector: () -> Void
+    let markAsPhoto: () -> Void
 }
 
 struct DetailViewActions {
@@ -28,8 +30,10 @@ struct BoardActions {
     let canQuickLookSelection: Bool
     let canFocusSearch: Bool
     let canScrollToTop: Bool
+    let canMarkAsPhoto: Bool
     let openSelection: () -> Void
     let editTags: () -> Void
+    let markAsPhoto: () -> Void
     let toggleQuickLook: () -> Void
     let focusSearch: () -> Void
     let scrollToTop: () -> Void

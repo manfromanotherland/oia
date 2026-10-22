@@ -9,11 +9,12 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- Images now has an **All images / Hide photography / Photography** button group that works
-  alongside search and Tags. Apple Intelligence identifies photography locally on supported Macs
-  with macOS 27 or later. Images without a confident assessment remain visible when photography
-  is hidden. The Inspector's Photography switch and card actions let you correct inclusion or
-  return to automatic classification. Results and corrections are saved in the reading's file.
+- Images now has an **All / Graphics / Photos** button group that works alongside search and
+  Tags. Apple Intelligence identifies photos locally on supported Macs with macOS 27 or later.
+  Images awaiting a confident assessment appear only in All. The Inspector's Photo switch and
+  card actions let you correct the type or return to automatic classification. Select several
+  images and press **⇧⌘P** to mark them all as photos; existing photos stay photos. Results and
+  corrections are saved in the reading's file.
 
 - Tags can now be generated locally from saved text and image content. Text tagging uses
   Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share
@@ -85,6 +86,10 @@ and versions track the app's `CFBundleShortVersionString`. See
   metadata and `note.md` sidecars remain untouched for compatibility with older libraries.
 
 ### Fixed
+
+- Graphics excludes pending images, which could previously let photos appear farther down the
+  board. Independent background indexing failures no longer interrupt image classification, and
+  temporary model readiness changes are retried during a pass.
 
 - Opening a library no longer freezes the window when macOS takes time to start folder
   monitoring. File changes made while monitoring starts are reconciled afterward.
