@@ -245,25 +245,42 @@ extension OiaLibraryView {
                 cardSizeControl
             }
 
-            if #available(macOS 26.0, *) {
-                ToolbarItem(placement: .principal) {
-                    boardFilterPicker
-                }
-                .sharedBackgroundVisibility(.visible)
-            } else {
-                ToolbarItem(placement: .principal) {
-                    boardFilterPicker
+            ToolbarItem(placement: .principal) {
+                boardFilterPicker
+            }
+
+            if appState.activeScope == .images {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker("Image type", selection: imageTypeSelection) {
+                        ForEach(appState.availableImageTypeFilters) { filter in
+                            Text(filter.label).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .accessibilityLabel("Image type")
+                    .accessibilityValue(appState.effectiveImageTypeFilter.label)
+                    .accessibilityIdentifier(A11y.Filter.imageType)
+                    .help("Show all images, graphics, photos, or images you’re unsure about")
                 }
             }
         }
     }
 
     private var boardFilterPicker: some View {
-        BoardScopeControl(
-            scope: scopeSelection,
-            imageType: imageTypeSelection,
-            imageTypes: appState.availableImageTypeFilters
-        )
+        Picker("Filter", selection: scopeSelection) {
+            ForEach(LibraryScope.allCases) { scope in
+                Text(scope.label)
+                    .help(scope.label)
+                    .accessibilityLabel(scope.label)
+                    .tag(scope)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Filter")
+        .accessibilityValue(appState.activeScope.label)
+        .accessibilityIdentifier(A11y.Filter.group)
     }
 
     private var cardSizeControl: some View {

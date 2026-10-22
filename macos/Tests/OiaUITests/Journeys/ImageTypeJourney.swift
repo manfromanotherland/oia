@@ -71,7 +71,7 @@ final class ImageTypeJourney: UITestCase {
         XCTAssertTrue(wait { list.orderedRowIds == [unknown] })
         list.selectImageType("Graphics")
         XCTAssertTrue(wait { list.orderedRowIds == [graphic] })
-        list.selectImageType("Images")
+        list.selectImageType("All")
         XCTAssertTrue(wait { Set(list.orderedRowIds) == [photo, graphic, unknown] })
     }
 

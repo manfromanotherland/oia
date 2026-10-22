@@ -9,12 +9,10 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- Selecting Images expands **Images / Graphics / Photos / Unsure** inside the main view control,
-  with a shared inner capsule at the same control height. The inner Images option shows all images,
-  and leaving Images collapses the group. Image filters compose with search and Tags. Apple
-  Intelligence identifies photos locally on supported Macs with macOS 27 or later.
-  Images awaiting a confident assessment appear in Images and Unsure. Unsure appears only while
-  images need classification; finishing the last one returns that selection to Images. The
+- Images now has an **All / Graphics / Photos / Unsure** button group that works alongside search and
+  Tags. Apple Intelligence identifies photos locally on supported Macs with macOS 27 or later.
+  Images awaiting a confident assessment appear in All and Unsure. Unsure appears only while
+  images need classification; finishing the last one returns that selection to All. The
   Inspector's Photo switch and card actions let you correct the type or return to automatic
   classification. Select several images and press **⇧⌘P** to mark them all as photos or **⇧⌘G**
   to mark them as graphics.

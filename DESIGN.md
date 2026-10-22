@@ -118,25 +118,21 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   an exact tag merely because a tag has the same spelling. Article excludes lightweight links,
   captured social posts, and categorized links; Link selects all three. Book, Music, Movie, and
   Product select their corresponding link categories without creating subject Tags.
-- Use one compact segmented control for the board scope, in this order: **All, Images,
+- Use one native labeled segmented picker for the board scope, in this order: **All, Images,
   Videos, Articles, Links, Quotes**. Images and Videos each show only their matching card kind;
   Articles includes longform X Articles but excludes lightweight link placeholders and captured
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Selecting **Images** expands an inline group inside that same control: **Images**, **Graphics**,
-  **Photos**, and **Unsure** when needed. The inner Images option shows all images. A shared
-  capsule and its own selected pill distinguish this group from the other board scopes. Leaving
-  Images collapses the group; returning preserves the remembered image choice. Expansion changes
-  width only: the control retains the native segmented picker height, with no added vertical
-  padding around the inner group or selected option. Photos depict real-world scenes and objects.
-  Graphics includes confirmed screenshots, illustrations, and graphic design. Images awaiting a
-  confident assessment appear in Images and Unsure, so unresolved photos cannot leak into Graphics.
-  The choice composes with search and subject Tags such as interiors or gardens, is remembered when
-  switching board scopes, and only applies in Images. Unsure lets the user select images awaiting a confident assessment
+- Within **Images**, a secondary native segmented button group selects **All**, **Graphics**,
+  **Photos**, or **Unsure**. Photos depict real-world scenes and objects. Graphics includes confirmed
+  screenshots, illustrations, and graphic design. Images awaiting a confident assessment appear
+  in All and Unsure, so unresolved photos cannot leak into Graphics. The choice composes with search
+  and subject Tags such as interiors or gardens, is remembered when switching board scopes,
+  and only applies in Images. Unsure lets the user select images awaiting a confident assessment
   and classify them in batches. Classified images leave Unsure immediately. The Unsure segment
   appears only while the library contains unclassified images, regardless of the active search
-  or Tags. Classifying the last one removes Unsure and returns its selection to Images; new
+  or Tags. Classifying the last one removes Unsure and returns its selection to All; new
   unclassified images make the segment available again.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
   or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
