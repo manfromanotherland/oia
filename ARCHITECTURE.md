@@ -277,6 +277,11 @@ The card metadata is additive and backwards compatible:
   Rust derives the record from bounded structured page metadata; clients only format it. See
   [product metadata](docs/product-metadata.md).
 - `tags`: user-authored or imported labels.
+- `image_classification`: optional versioned image-type assessment with user/machine provenance.
+  It narrows Images into Photographs and Other images without changing `kind` or subject Tags.
+  Machine assessments are effective only for their recorded preview-byte fingerprint; manual
+  choices take precedence. Missing, uncertain, or unsupported assessments remain Unclassified.
+  Rust validates the source and persists the record before projecting it into the local index.
 - `machine_tags`: per-source (`image` or `text`) subject labels in records with `source`,
   `source_fingerprint`, `analyzer_version`, and `tags`; each source is replaced only after its
   current input is verified.

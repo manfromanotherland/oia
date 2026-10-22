@@ -28,6 +28,27 @@ struct OiaReadingActions: View {
             .keyboardShortcut(ShortcutCatalog.editTags)
             .disabled(appState.isDeleting)
 
+        if row.kind == .image {
+            Menu("Image Type") {
+                ForEach(ReadingImageType.allCases) { imageType in
+                    Button {
+                        appState.enqueueImageTypeEdit(imageType, ids: imageTypeTargetIDs)
+                    } label: {
+                        if imageTypeTargetIDs.count == 1, row.imageType == imageType {
+                            Label(imageType.label, systemImage: "checkmark")
+                        } else {
+                            Text(imageType.label)
+                        }
+                    }
+                }
+                Divider()
+                Button("Use Automatic Classification") {
+                    appState.enqueueImageTypeEdit(nil, ids: imageTypeTargetIDs)
+                }
+            }
+            .disabled(appState.isDeleting)
+        }
+
         if let url = row.sourceURL {
             Button("Open Source") {
                 ReadingLink.open(url)
@@ -47,5 +68,13 @@ struct OiaReadingActions: View {
 
     private var disablesSingleReadingActions: Bool {
         appState.selectedIDs.contains(row.id) && appState.selectedIDs.count > 1
+    }
+
+    private var imageTypeTargetIDs: [String] {
+        if appState.selectedIDs.contains(row.id), appState.selectedIDs.count > 1 {
+            appState.selectedRows.filter { $0.kind == .image }.map(\.id)
+        } else {
+            [row.id]
+        }
     }
 }

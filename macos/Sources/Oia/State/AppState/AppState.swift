@@ -17,6 +17,7 @@ final class AppState {
     private enum FilterDefaultsKey {
         static let kind = "selectedKind"
         static let scope = "activeScope"
+        static let imageType = "activeImageTypeFilter"
         static let tag = "selectedTag"
         static let search = "searchQuery"
         static let searchTokens = "searchTokens"
@@ -115,6 +116,9 @@ final class AppState {
     /// editing session overtake the edits it already submitted.
     @ObservationIgnored var tagPersistenceQueue = TagPersistenceQueue()
     @ObservationIgnored var pendingTagEdits = PendingTagEdits()
+    @ObservationIgnored var pendingImageTypeEdits = PendingImageTypeEdits()
+    @ObservationIgnored var imageTypePersistenceTask: Task<Int, Never>?
+    @ObservationIgnored var imageTypePersistenceGeneration: UInt64 = 0
 
     /// The active library scope. Always exactly one; `.all` is the unfiltered
     /// base. Persisted under a new key so legacy unread/read/archive selections
@@ -123,6 +127,20 @@ final class AppState {
         didSet {
             AppDefaults.store.set(activeScope.rawValue, forKey: FilterDefaultsKey.scope)
         }
+    }
+
+    var activeImageTypeFilter: ImageTypeFilter = .all {
+        didSet {
+            AppDefaults.store.set(activeImageTypeFilter.rawValue, forKey: FilterDefaultsKey.imageType)
+        }
+    }
+
+    var effectiveImageTypeFilter: ImageTypeFilter {
+        activeScope == .images ? activeImageTypeFilter : .all
+    }
+
+    var imageClassificationAvailabilityMessage: String? {
+        TestHooks.isIsolatedRun ? nil : AppleImageTypeClassifier().unavailableMessage
     }
 
     /// Readings awaiting delete confirmation, in their current board order.
@@ -215,12 +233,15 @@ final class AppState {
     var watcher: FolderWatcher?
     let visualSearchCoordinator: VisualSearchCoordinator?
     let textTaggingCoordinator: TextTaggingCoordinator?
+    let imageClassificationCoordinator: ImageClassificationCoordinator?
 
     private var editingMonitor: TextEditingMonitor?
 
     init() {
         visualSearchCoordinator = Self.makeVisualSearchCoordinator()
         textTaggingCoordinator = TestHooks.isIsolatedRun ? nil : TextTaggingCoordinator(tagger: AppleSubjectTagger())
+        imageClassificationCoordinator = TestHooks.isIsolatedRun ? nil
+            : ImageClassificationCoordinator(classifier: AppleImageTypeClassifier())
 
         let defaults = AppDefaults.store
 
@@ -238,6 +259,8 @@ final class AppState {
             .flatMap(LibraryScope.init(rawValue:))
         activeScope = persistedScope ?? .all
         defaults.set(activeScope.rawValue, forKey: FilterDefaultsKey.scope)
+        activeImageTypeFilter = defaults.string(forKey: FilterDefaultsKey.imageType)
+            .flatMap(ImageTypeFilter.init(rawValue:)) ?? .all
         defaults.removeObject(forKey: FilterDefaultsKey.legacyView)
         defaults.removeObject(forKey: FilterDefaultsKey.legacyRating)
         searchQuery = defaults.string(forKey: FilterDefaultsKey.search) ?? ""

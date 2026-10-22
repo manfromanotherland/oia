@@ -28,6 +28,7 @@ final class ReadingRowMapperTests: XCTestCase {
             """,
             productJson: nil,
             linkCategory: nil,
+            imageType: nil,
             featuredHighlightText: "A saved passage from the source.",
             dominantColor: FfiWeightedColor(red: 0.1, green: 0.2, blue: 0.3, weight: 0.6),
             colors: sampleColors,
@@ -150,6 +151,19 @@ final class ReadingRowMapperTests: XCTestCase {
         var ffi = sampleFfiRow()
         ffi.kind = .quote
         XCTAssertEqual(ReadingRow(ffi).kind, .quote)
+    }
+
+    func testImageClassificationMapsKnownTypesAndLeavesUnknownValuesUnclassified() {
+        var ffi = sampleFfiRow()
+        ffi.kind = .image
+        ffi.imageType = "photograph"
+        XCTAssertEqual(ReadingRow(ffi).imageType, .photograph)
+        ffi.imageType = "other"
+        XCTAssertEqual(ReadingRow(ffi).imageType, .other)
+        ffi.imageType = "future-type"
+        XCTAssertNil(ReadingRow(ffi).imageType)
+        ffi.imageType = nil
+        XCTAssertNil(ReadingRow(ffi).imageType)
     }
 
     func testFeaturedPassageUsesArticleIdentityAndIgnoresStaleNonArticleMetadata() {

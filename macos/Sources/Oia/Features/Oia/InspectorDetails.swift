@@ -34,6 +34,8 @@ struct InspectorDetails: View {
     let row: ReadingRow
     let inspector: ReadingInspector?
     let failed: Bool
+    var onSetImageType: ((ReadingImageType?) -> Void)?
+    var automaticClassificationMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -42,6 +44,37 @@ struct InspectorDetails: View {
                 .padding(.bottom, 7)
 
             fact("Saved", ReadingDateTime.localized(row.savedAt))
+
+            if row.kind == .image, let onSetImageType {
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    fieldLabel("Image type")
+                    Spacer(minLength: 0)
+                    Menu {
+                        ForEach(ReadingImageType.allCases) { imageType in
+                            Button(imageType.label) { onSetImageType(imageType) }
+                        }
+                        Divider()
+                        Button("Use Automatic Classification") { onSetImageType(nil) }
+                    } label: {
+                        Text(row.imageType?.label ?? "Unclassified")
+                    }
+                    .menuStyle(.borderlessButton)
+                    .fixedSize()
+                    .font(.system(size: 12))
+                    .accessibilityLabel("Image type")
+                    .accessibilityValue(row.imageType?.label ?? "Unclassified")
+                    .accessibilityIdentifier(A11y.Inspector.imageType)
+                }
+                .padding(.vertical, 7)
+                if let automaticClassificationMessage {
+                    Text(automaticClassificationMessage)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.bottom, 7)
+                }
+                Divider().opacity(0.65)
+            }
 
             if row.isFullArticle, let readingTime = row.readingTimeLabel {
                 fact("Reading time", readingTime)

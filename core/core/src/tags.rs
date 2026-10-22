@@ -739,6 +739,7 @@ mod tests {
             rating: 0,
             tags: vec![],
             machine_tags: vec![],
+            image_classification: None,
             excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,

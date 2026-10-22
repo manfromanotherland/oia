@@ -103,6 +103,19 @@ pub struct MachineTagSource {
     pub tags: Vec<String>,
 }
 
+/// File-backed distinction between photographic and other image readings.
+/// Open strings preserve values written by newer versions of the library.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ImageClassification {
+    pub version: u8,
+    pub image_type: String,
+    pub origin: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_fingerprint: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub analyzer_version: Option<String>,
+}
+
 /// All YAML frontmatter fields for a saved reading.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Metadata {
@@ -164,6 +177,9 @@ pub struct Metadata {
     /// Inferred tags, grouped by source so text and image updates are independent.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub machine_tags: Vec<MachineTagSource>,
+    /// Photograph classification, preserved independently from subject Tags.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub image_classification: Option<ImageClassification>,
     /// Case-folded tombstones for inferred tags the user removed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub excluded_machine_tags: Vec<String>,

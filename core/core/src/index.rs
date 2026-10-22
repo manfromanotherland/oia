@@ -79,6 +79,17 @@ fn migrate(conn: &Connection) -> Result<()> {
     if version < 14 {
         migrate_v14(conn)?;
     }
+    if version < 15 {
+        migrate_v15(conn)?;
+    }
+    Ok(())
+}
+
+/// v15: rebuildable photograph classification from reading frontmatter.
+fn migrate_v15(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "BEGIN; ALTER TABLE readings ADD COLUMN image_type TEXT; PRAGMA user_version = 15; COMMIT;",
+    )?;
     Ok(())
 }
 
@@ -562,7 +573,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .unwrap();
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
 
         // readings table exists
         let count: i64 = conn
@@ -677,7 +688,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
 
         let mut stmt = conn
             .prepare("SELECT id FROM readings ORDER BY saved_at DESC, id DESC")
@@ -842,7 +853,7 @@ mod tests {
             )
             .unwrap();
 
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
         assert_eq!(projected, None);
     }
 
@@ -950,7 +961,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
 
         let values: (String, Option<String>, Option<String>) = conn
             .query_row(
@@ -992,7 +1003,7 @@ mod tests {
         let version: u32 = conn
             .pragma_query_value(None, "user_version", |row| row.get(0))
             .unwrap();
-        assert_eq!(version, 14);
+        assert_eq!(version, 15);
 
         let values: (i64, i64, String) = conn
             .query_row(

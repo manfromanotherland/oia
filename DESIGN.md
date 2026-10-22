@@ -124,6 +124,17 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
+- Within **Images**, a secondary native menu selects **All images**, **Photographs**,
+  **Other images**, or **Unclassified**. Photographs depict real-world scenes and objects;
+  Other images includes graphic design, screenshots, illustrations, diagrams, and collages.
+  The choice composes with search and subject Tags such as interiors or gardens, is remembered
+  when switching board scopes, and only applies in Images. Uncertain or unavailable analysis
+  leaves a card Unclassified. The Inspector and image card actions let the user correct its
+  Image type or return it to automatic classification. Corrections live in the reading's file
+  and take precedence over later model results. Image type does not create a Tag or a card kind.
+  Automatic classification uses the on-device Apple Intelligence image model on macOS 27 or
+  later. When that model is unavailable, images remain pending and manual classification works;
+  returning to the app retries after the model becomes available.
 - The selected board scope, free-text query, and every completed search token compose as an
   intersection. Filtering is performed in the Rust core, not on a Swift-side subset, so the
   complete board snapshot remains correct. Free text searches reading text, user and machine Tags,

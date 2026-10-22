@@ -248,6 +248,22 @@ extension OiaLibraryView {
             ToolbarItem(placement: .principal) {
                 boardFilterPicker
             }
+
+            if appState.activeScope == .images {
+                ToolbarItem(placement: .primaryAction) {
+                    Picker("Image type", selection: imageTypeSelection) {
+                        ForEach(ImageTypeFilter.allCases) { filter in
+                            Text(filter.label).tag(filter)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .labelsHidden()
+                    .accessibilityLabel("Image type")
+                    .accessibilityValue(appState.activeImageTypeFilter.label)
+                    .accessibilityIdentifier(A11y.Filter.imageType)
+                    .help("Filter photographs and other images")
+                }
+            }
         }
     }
 

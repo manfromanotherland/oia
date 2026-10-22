@@ -142,6 +142,7 @@ pub struct ReadingRow {
     /// Disposable projection of the file-backed product presentation snapshot.
     pub product_json: Option<String>,
     pub link_category: Option<String>,
+    pub image_type: Option<String>,
     /// Featured passage derived from article.md and highlights.md.
     pub featured_highlight_text: Option<String>,
     /// Representative exact sRGB cluster from the current derived visual
@@ -248,6 +249,7 @@ pub struct CountScope {
     /// Visual search terms. Every value must occur in the same current,
     /// supported visual analysis.
     pub visual_terms: Vec<String>,
+    pub item_type_terms: Vec<String>,
     pub predominant_color: Option<PredominantColor>,
     pub semantic_candidate_ids: Vec<String>,
     pub visual_semantic_candidate_ids: Vec<String>,
@@ -263,6 +265,7 @@ impl Default for CountScope {
             query: None,
             tag_terms: Vec::new(),
             visual_terms: Vec::new(),
+            item_type_terms: Vec::new(),
             predominant_color: None,
             semantic_candidate_ids: Vec::new(),
             visual_semantic_candidate_ids: Vec::new(),
@@ -333,6 +336,7 @@ fn phrase_exists_in_count_scope(
     phrase: &str,
 ) -> Result<bool> {
     let view_clause = view_clause(scope.view);
+    let item_type_clause = item_type_clause("r", 9);
     let sql = format!(
         "SELECT EXISTS(
              SELECT 1
@@ -368,6 +372,7 @@ fn phrase_exists_in_count_scope(
                         WHERE json_extract(reading_tag.value, '$.key') = requested_tag.value
                     )
                )
+               AND {item_type_clause}
          )"
     );
     conn.query_row(
@@ -386,11 +391,38 @@ fn phrase_exists_in_count_scope(
                     .map(|tag| crate::tags::tag_key(tag))
                     .collect::<Vec<_>>()
             )?,
-            serde_json::to_string(&scope.visual_semantic_candidate_ids)?
+            serde_json::to_string(&scope.visual_semantic_candidate_ids)?,
+            serde_json::to_string(&scope.item_type_terms)?
         ],
         |row| row.get(0),
     )
     .map_err(Into::into)
+}
+
+fn item_type_clause(table: &str, parameter: usize) -> String {
+    r#"NOT EXISTS (
+               SELECT 1 FROM json_each(?13) requested_type
+               WHERE NOT (
+                   (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
+                   OR (readings.kind = 'image' AND readings.image_type IS 'photograph' AND requested_type.value = 'photograph')
+                   OR (readings.kind = 'image' AND readings.image_type IS 'other' AND requested_type.value = 'other_image')
+                   OR (readings.kind = 'image' AND readings.image_type IS NULL AND requested_type.value = 'unclassified_image')
+                   OR (readings.kind = 'article' AND readings.link_category IS requested_type.value
+                       AND requested_type.value IN ('book', 'music', 'movie')
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (readings.kind = 'article' AND requested_type.value = 'product'
+                       AND readings.product_json IS NOT NULL AND readings.link_category IS NULL
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (readings.kind = 'article' AND requested_type.value = 'article'
+                       AND readings.lightweight = 0 AND readings.product_json IS NULL AND readings.link_category IS NULL
+                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
+                   OR (readings.kind = 'article' AND requested_type.value = 'link'
+                       AND (readings.lightweight = 1 OR readings.product_json IS NOT NULL OR readings.link_category IS NOT NULL
+                            OR json_extract(readings.source_profile_json, '$.source_type') IS 'social_post'))
+               )
+           )"#
+        .replace("readings.", &format!("{table}."))
+        .replace("?13", &format!("?{parameter}"))
 }
 
 /// Append the structured search predicates shared by every count surface.
@@ -400,6 +432,13 @@ fn append_structured_count_clauses(
     clauses: &mut Vec<String>,
     vals: &mut Vec<Value>,
 ) -> bool {
+    if !scope.item_type_terms.is_empty() {
+        vals.push(Value::Text(
+            serde_json::to_string(&scope.item_type_terms)
+                .expect("serializing a string vector cannot fail"),
+        ));
+        clauses.push(item_type_clause("readings", vals.len()));
+    }
     if !scope.tag_terms.is_empty() {
         let tags_json = serde_json::to_string(
             &scope
@@ -734,6 +773,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
     }
 
     let view_clause = view_clause(opts.view);
+    let item_type_filter = item_type_clause("readings", 13);
 
     // Direction applies to the chosen field; a final `id DESC` makes the order
     // total so pagination is stable when the primary key ties. For `read_at`,
@@ -761,7 +801,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category, image_type
          FROM readings
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -793,24 +833,7 @@ pub fn list_readings(conn: &Connection, opts: &ListOptions) -> Result<Vec<Readin
                 )
            )
            AND (?12 = '' OR readings.id IN (SELECT value FROM json_each(?12)))
-           AND NOT EXISTS (
-               SELECT 1 FROM json_each(?13) requested_type
-               WHERE NOT (
-                   (readings.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (readings.kind = 'article' AND readings.link_category IS requested_type.value
-                       AND requested_type.value IN ('book', 'music', 'movie')
-                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (readings.kind = 'article' AND requested_type.value = 'product'
-                       AND readings.product_json IS NOT NULL AND readings.link_category IS NULL
-                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (readings.kind = 'article' AND requested_type.value = 'article'
-                       AND readings.lightweight = 0 AND readings.product_json IS NULL AND readings.link_category IS NULL
-                       AND json_extract(readings.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (readings.kind = 'article' AND requested_type.value = 'link'
-                       AND (readings.lightweight = 1 OR readings.product_json IS NOT NULL OR readings.link_category IS NOT NULL
-                            OR json_extract(readings.source_profile_json, '$.source_type') IS 'social_post'))
-               )
-           )
+           AND {item_type_filter}
          ORDER BY {order}
          LIMIT ?1 OFFSET ?2"
     );
@@ -870,6 +893,7 @@ fn phrase_exists_in_list_scope(
     color_ids_json: &str,
 ) -> Result<bool> {
     let view_clause = view_clause(opts.view);
+    let item_type_filter = item_type_clause("r", 12);
     let sql = format!(
         "SELECT EXISTS(
              SELECT 1
@@ -908,24 +932,7 @@ fn phrase_exists_in_list_scope(
                     )
                )
                AND (?11 = '' OR r.id IN (SELECT value FROM json_each(?11)))
-           AND NOT EXISTS (
-               SELECT 1 FROM json_each(?12) requested_type
-               WHERE NOT (
-                   (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (r.kind = 'article' AND r.link_category IS requested_type.value
-                       AND requested_type.value IN ('book', 'music', 'movie')
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'product'
-                       AND r.product_json IS NOT NULL AND r.link_category IS NULL
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0 AND r.product_json IS NULL AND r.link_category IS NULL
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL OR r.link_category IS NOT NULL
-                            OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
-               )
-           )
+           AND {item_type_filter}
          )"
     );
     conn.query_row(
@@ -974,14 +981,14 @@ pub fn get_reading(conn: &Connection, id: &str) -> Result<Option<(ReadingRow, St
                  WHERE a.content_hash=readings.visual_asset_hash
                    AND a.analyzer_version=readings.visual_analyzer_version
                    AND a.supported=1),
-                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category,
+                source_profile_json, card_description, machine_tags_json, product_json, featured_highlight_text, link_category, image_type,
                 body_text
          FROM readings WHERE id = ?1",
     )?;
 
     let mut rows = stmt.query_map(params![id], |row| {
         let row_data = parse_row(row)?;
-        let body: String = row.get(31)?;
+        let body: String = row.get(32)?;
         Ok((row_data, body))
     })?;
 
@@ -1001,6 +1008,7 @@ fn list_readings_search(
     color_ids_json: &str,
 ) -> Result<Vec<ReadingRow>> {
     let view_clause = view_clause(opts.view);
+    let item_type_filter = item_type_clause("r", 15);
     let dir = if opts.ascending { "ASC" } else { "DESC" };
     // bm25() scores better matches lower, so plain ascending order is best-first.
     let order = match opts.sort {
@@ -1047,7 +1055,7 @@ fn list_readings_search(
                  WHERE a.content_hash=r.visual_asset_hash
                    AND a.analyzer_version=r.visual_analyzer_version
                    AND a.supported=1),
-                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json, r.featured_highlight_text, r.link_category
+                r.source_profile_json, r.card_description, r.machine_tags_json, r.product_json, r.featured_highlight_text, r.link_category, r.image_type
          FROM matched m JOIN readings r ON r.rowid=m.rowid
          WHERE {view_clause}
            AND (?3 = '' OR EXISTS (SELECT 1 FROM json_each(r.tag_entries_json) WHERE json_extract(value, '$.key') = ?3))
@@ -1079,24 +1087,7 @@ fn list_readings_search(
                 )
            )
            AND (?14 = '' OR r.id IN (SELECT value FROM json_each(?14)))
-           AND NOT EXISTS (
-               SELECT 1 FROM json_each(?15) requested_type
-               WHERE NOT (
-                   (r.kind = requested_type.value AND requested_type.value IN ('image', 'video', 'quote'))
-                   OR (r.kind = 'article' AND r.link_category IS requested_type.value
-                       AND requested_type.value IN ('book', 'music', 'movie')
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'product'
-                       AND r.product_json IS NOT NULL AND r.link_category IS NULL
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'article'
-                       AND r.lightweight = 0 AND r.product_json IS NULL AND r.link_category IS NULL
-                       AND json_extract(r.source_profile_json, '$.source_type') IS NOT 'social_post')
-                   OR (r.kind = 'article' AND requested_type.value = 'link'
-                       AND (r.lightweight = 1 OR r.product_json IS NOT NULL OR r.link_category IS NOT NULL
-                            OR json_extract(r.source_profile_json, '$.source_type') IS 'social_post'))
-               )
-           )
+           AND {item_type_filter}
          ORDER BY {order}
          LIMIT ?1 OFFSET ?2"
     );
@@ -1181,6 +1172,7 @@ fn parse_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ReadingRow> {
         source_profile_json,
         product_json,
         link_category,
+        image_type: row.get(31)?,
         featured_highlight_text: row.get(29)?,
         dominant_color,
         colors: palette_json
@@ -1278,6 +1270,7 @@ mod tests {
             rating: 0,
             tags: vec![],
             machine_tags: vec![],
+            image_classification: None,
             excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,

@@ -127,6 +127,7 @@ mod tests {
             rating: 0,
             tags: vec!["rust".to_string(), "local-first".to_string()],
             machine_tags: vec![],
+            image_classification: None,
             excluded_machine_tags: vec![],
             excerpt: Some("A short excerpt.".to_string()),
             word_count: Some(1234),

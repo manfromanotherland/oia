@@ -47,7 +47,8 @@ struct OiaReadingOverlay: View {
                 row: row, isVisible: showsInspector,
                 tagInputFocusRequest: tagInputFocusRequest,
                 onSearch: searchFromInspector,
-                onToggleTag: updateTag
+                onToggleTag: updateTag,
+                onSetImageType: updateImageType
             )
             .navigationSplitViewColumnWidth(min: 280, ideal: 320, max: 440)
             .background {
@@ -249,6 +250,21 @@ struct OiaReadingOverlay: View {
         let session = appState.librarySessionGeneration
         row.applyTagEdit(tag, applies: applies)
         let persistence = appState.enqueueTagEdit(tag, ids: [id], applies: applies)
+        Task {
+            _ = await persistence.value
+            guard session == appState.librarySessionGeneration,
+                  let refreshed = await appState.reloadRow(id: id),
+                  session == appState.librarySessionGeneration,
+                  row.id == id else { return }
+            row = refreshed
+        }
+    }
+
+    private func updateImageType(_ imageType: ReadingImageType?) {
+        let id = row.id
+        let session = appState.librarySessionGeneration
+        row.imageType = imageType
+        let persistence = appState.enqueueImageTypeEdit(imageType, ids: [id])
         Task {
             _ = await persistence.value
             guard session == appState.librarySessionGeneration,

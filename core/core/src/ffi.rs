@@ -53,6 +53,7 @@ pub struct FfiReadingRow {
     pub source_profile_json: Option<String>,
     pub product_json: Option<String>,
     pub link_category: Option<String>,
+    pub image_type: Option<String>,
     pub featured_highlight_text: Option<String>,
     pub dominant_color: Option<FfiWeightedColor>,
     pub colors: Vec<crate::inspector::InspectorColor>,
@@ -305,6 +306,7 @@ pub struct FfiCountScope {
     pub query: Option<String>,
     pub tag_terms: Vec<String>,
     pub visual_terms: Vec<String>,
+    pub item_type_terms: Vec<String>,
     pub predominant_color: Option<FfiPredominantColor>,
     pub semantic_candidate_ids: Vec<String>,
     pub visual_semantic_candidate_ids: Vec<String>,
@@ -329,6 +331,7 @@ impl From<crate::list::ReadingRow> for FfiReadingRow {
             source_profile_json: r.source_profile_json,
             product_json: r.product_json,
             link_category: r.link_category,
+            image_type: r.image_type,
             featured_highlight_text: r.featured_highlight_text,
             dominant_color: r.dominant_color.map(|color| FfiWeightedColor {
                 red: color.red,
@@ -562,6 +565,7 @@ impl From<FfiCountScope> for CountScope {
             query: s.query,
             tag_terms: s.tag_terms,
             visual_terms: s.visual_terms,
+            item_type_terms: s.item_type_terms,
             predominant_color: s.predominant_color.map(Into::into),
             semantic_candidate_ids: s.semantic_candidate_ids,
             visual_semantic_candidate_ids: s.visual_semantic_candidate_ids,
@@ -794,6 +798,89 @@ impl Database {
         Ok(Some((diffs.len() as u32).max(u32::from(
             crate::scanner::changed_paths_require_presentation_refresh(&lib, &changed_paths),
         ))))
+    }
+
+    /// Return a bounded window of immutable image snapshots needing classification.
+    /// A processed unknown result is a cache hit for these bytes and analyzer.
+    pub fn pending_image_classification_batch(
+        &self,
+        library_path: String,
+        analyzer_version: String,
+        limit: u32,
+        after_reading_id: Option<String>,
+    ) -> Result<FfiVisualAssetsBatch, CoreError> {
+        let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
+        let limit = limit.clamp(1, 64) as usize;
+        let _io = self.visual_cache_io.lock().unwrap();
+        let candidates = {
+            let conn = self.conn.lock().unwrap();
+            crate::visual_index::visual_asset_candidate_batch(
+                &conn,
+                after_reading_id.as_deref(),
+                limit,
+            )
+            .map_err(e)?
+        };
+        let next_reading_id =
+            (candidates.len() == limit).then(|| candidates.last().unwrap().0.clone());
+        let pending =
+            crate::image_classification::pending_candidates(&lib, &analyzer_version, candidates)
+                .map_err(e)?;
+        let assets =
+            crate::visual_index::stage_visual_assets(pending, &lib, &self.visual_cache_root)
+                .map_err(e)?
+                .into_iter()
+                .map(Into::into)
+                .collect();
+        Ok(FfiVisualAssetsBatch {
+            assets,
+            next_reading_id,
+        })
+    }
+
+    /// Persist a manual correction, or remove it to request fresh automatic analysis.
+    pub fn set_image_type(
+        &self,
+        library_path: String,
+        id: String,
+        image_type: Option<String>,
+    ) -> Result<(), CoreError> {
+        let _update = self.reconciliation.lock().unwrap();
+        self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+        let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
+        let scanned =
+            crate::image_classification::set_image_type_file(&lib, &id, image_type.as_deref())
+                .map_err(e)?;
+        let conn = self.conn.lock().unwrap();
+        crate::apply_diffs(&conn, &[crate::ScanDiff::Changed(scanned)]).map_err(e)
+    }
+
+    /// Revalidate current bytes before persisting an automatic classification.
+    pub fn complete_image_classification(
+        &self,
+        library_path: String,
+        id: String,
+        content_hash: String,
+        analyzer_version: String,
+        image_type: String,
+    ) -> Result<bool, CoreError> {
+        let _update = self.reconciliation.lock().unwrap();
+        self.reconciliation_epoch.fetch_add(1, Ordering::AcqRel);
+        let lib = LibraryRoot::new(Path::new(&library_path)).map_err(e)?;
+        let Some(scanned) = crate::image_classification::complete_image_classification_file(
+            &lib,
+            &id,
+            &content_hash,
+            &analyzer_version,
+            &image_type,
+        )
+        .map_err(e)?
+        else {
+            return Ok(false);
+        };
+        let conn = self.conn.lock().unwrap();
+        crate::apply_diffs(&conn, &[crate::ScanDiff::Changed(scanned)]).map_err(e)?;
+        Ok(true)
     }
 
     /// Safely enumerate current preview assets for Core Spotlight donation.

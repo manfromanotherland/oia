@@ -12,17 +12,28 @@ private struct TagEditRequest {
     let reservation: UInt64
 }
 
+private struct ImageTypeEditRequest {
+    let ids: [String]
+    let imageType: ReadingImageType?
+    let core: any CoreBridging
+    let librarySession: UInt64
+    let reservation: UInt64
+}
+
 // ── Mutations ────────────────────────────────────────────────────────────────
 // Tag edits land optimistically, then the core write + `refresh()` reconcile.
 // Deletion follows the same pattern; the refresh restores any failed rows.
 
 extension AppState {
-    /// Mirror only scope and exact Tag predicates for optimistic removals.
+    /// Mirror scope, image type, and exact Tag predicates for optimistic removals.
     /// Free-text, visual predicates, and missing-row inclusion stay in the core.
     func rowMatchesOptimisticTagFilter(
-        _ row: ReadingRow, scope: LibraryScope, tagTerms: [String]
+        _ row: ReadingRow, scope: LibraryScope, tagTerms: [String],
+        imageTypeFilter: ImageTypeFilter = .all
     ) -> Bool {
-        ComposedFilter.matches(row, scope: scope) && tagTerms.allSatisfy { requiredTag in
+        ComposedFilter.matches(row, scope: scope)
+            && (scope != .images || imageTypeFilter.contains(row))
+            && tagTerms.allSatisfy { requiredTag in
             row.tags.contains { ExactTagIdentity.matches($0, requiredTag) }
         }
     }
@@ -38,7 +49,10 @@ extension AppState {
         let requiredTags = activeSearchInput.criteria.tagTerms
         let removedIDs = Set(readings.compactMap { row -> String? in
             guard ids.contains(row.id) else { return nil }
-            return rowMatchesOptimisticTagFilter(row, scope: activeScope, tagTerms: requiredTags)
+            return rowMatchesOptimisticTagFilter(
+                row, scope: activeScope, tagTerms: requiredTags,
+                imageTypeFilter: effectiveImageTypeFilter
+            )
                 ? nil : row.id
         })
         guard !removedIDs.isEmpty else { return }
@@ -212,6 +226,69 @@ extension AppState {
         return try? await core.getBody(id: id)
     }
 
+    /// Reserve corrections at the action, patch every visible target at once,
+    /// then serialize file writes. Refresh supplies truth after failed writes.
+    @discardableResult
+    func enqueueImageTypeEdit(_ imageType: ReadingImageType?, ids: [String]) -> Task<Int, Never> {
+        guard let core, !ids.isEmpty else { return Task { 0 } }
+        var seen: Set<String> = []
+        let ids = ids.filter { seen.insert($0).inserted }
+        let session = librarySessionGeneration
+        let reservation = pendingImageTypeEdits.reserve(
+            ids: seen, imageType: imageType, librarySession: session
+        )
+        let request = ImageTypeEditRequest(
+            ids: ids, imageType: imageType, core: core, librarySession: session, reservation: reservation
+        )
+        beginLibraryWrite()
+        for index in readings.indices where seen.contains(readings[index].id)
+            && readings[index].kind == .image {
+            readings[index].imageType = imageType
+        }
+        advancePastFilteredRows(ids: seen)
+
+        let previous = imageTypePersistenceTask
+        imageTypePersistenceGeneration &+= 1
+        let generation = imageTypePersistenceGeneration
+        let task = Task { [self] in
+            _ = await previous?.value
+            defer {
+                pendingImageTypeEdits.complete(reservation)
+                endLibraryWrite()
+                if generation == imageTypePersistenceGeneration {
+                    imageTypePersistenceTask = nil
+                }
+            }
+            return await persistImageTypeEdit(request)
+        }
+        imageTypePersistenceTask = task
+        return task
+    }
+
+    private func persistImageTypeEdit(_ request: ImageTypeEditRequest) async -> Int {
+        var successes = 0
+        var firstFailure: Error?
+        for id in request.ids {
+            guard request.librarySession == librarySessionGeneration else { return successes }
+            do {
+                try await request.core.setImageType(id: id, imageType: request.imageType?.rawValue)
+                successes += 1
+            } catch {
+                if firstFailure == nil { firstFailure = error }
+            }
+        }
+        guard request.librarySession == librarySessionGeneration else { return successes }
+        pendingImageTypeEdits.complete(request.reservation)
+        await refresh()
+        guard request.librarySession == librarySessionGeneration else { return successes }
+        if let firstFailure {
+            error = request.ids.count == 1 ? firstFailure.localizedDescription
+                : "Updated \(successes) of \(request.ids.count) images. Unable to update the remaining images; try again."
+        }
+        scheduleVisualSearchReconciliation()
+        return successes
+    }
+
     /// Re-fetch a single reading row from the index (e.g. after a tag edit) so
     /// detail views can refresh their local copy without a full list reload.
     func reloadRow(id: String) async -> ReadingRow? {
@@ -219,14 +296,17 @@ extension AppState {
         let session = librarySessionGeneration
         while session == librarySessionGeneration {
             let revision = pendingTagEdits.revision
+            let imageRevision = pendingImageTypeEdits.revision
             let fetched = try? await core.getReadingRow(id: id)
             guard session == librarySessionGeneration else { return nil }
             // A newer edit may settle while this raw snapshot crosses actors.
             // Re-read instead of replacing it with a now-obsolete snapshot or
             // treating a valid target as unavailable after optimistic replay.
-            guard revision == pendingTagEdits.revision else { continue }
+            guard revision == pendingTagEdits.revision,
+                  imageRevision == pendingImageTypeEdits.revision else { continue }
             guard let fetched else { return nil }
-            return pendingTagEdits.apply(to: ReadingRow(fetched), librarySession: session)
+            let tagged = pendingTagEdits.apply(to: ReadingRow(fetched), librarySession: session)
+            return pendingImageTypeEdits.apply(to: tagged, librarySession: session)
         }
         return nil
     }

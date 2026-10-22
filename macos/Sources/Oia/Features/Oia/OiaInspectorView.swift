@@ -11,6 +11,7 @@ struct OiaInspectorView: View {
     var tagInputFocusRequest: TagInputFocusRequest?
     var onSearch: (BoardSearchToken) -> Void
     var onToggleTag: (String, Bool) -> Void
+    var onSetImageType: (ReadingImageType?) -> Void
 
     @State private var inspector: ReadingInspector?
     @State private var loadedID: String?
@@ -24,7 +25,11 @@ struct OiaInspectorView: View {
                 heading
                 tags
                 visualAnalysis
-                InspectorDetails(row: row, inspector: currentInspector, failed: currentFailure)
+                InspectorDetails(
+                    row: row, inspector: currentInspector, failed: currentFailure,
+                    onSetImageType: onSetImageType,
+                    automaticClassificationMessage: appState.imageClassificationAvailabilityMessage
+                )
                 if currentFailure {
                     InspectorPill("Try again") { retry += 1 }
                 }

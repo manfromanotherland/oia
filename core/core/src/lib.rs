@@ -14,6 +14,7 @@ mod frontmatter;
 mod harvard_book;
 pub mod highlights;
 mod id;
+pub mod image_classification;
 mod images;
 pub mod inbox;
 pub mod index;
@@ -53,6 +54,7 @@ pub use highlights::{
     add_highlight, delete_highlight, list_highlights, toggle_highlight, Highlight,
 };
 pub use id::{media_id, new_id, quote_id, url_id};
+pub use image_classification::{complete_image_classification, set_image_type};
 pub use images::{first_local_image_asset, write_images, ImageBytes};
 pub use inbox::{process_inbox, InboxIssue, InboxReport};
 pub use index::open as open_index;
@@ -95,8 +97,8 @@ pub use source_capture::{
 pub use status::{set_archived, set_favorite, set_read};
 pub use tags::{add_tag, list_tags, remove_tag, MAX_TAG_LEN};
 pub use types::{
-    LibraryRoot, MachineTagSource, Metadata, ProductMetadata, Reading, ReadingKind,
-    SourceAttachment, SourceProfile,
+    ImageClassification, LibraryRoot, MachineTagSource, Metadata, ProductMetadata, Reading,
+    ReadingKind, SourceAttachment, SourceProfile,
 };
 pub use url_norm::normalize_url;
 pub use visual_index::{

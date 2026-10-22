@@ -104,6 +104,7 @@ struct ReadingRow: Identifiable, Equatable, Sendable {
     /// Active machine tags within `tags`; matching user tags have precedence.
     var machineTags: [String] = []
     var kind: ReadingKind = .article
+    var imageType: ReadingImageType? = nil
     var lightweight: Bool
     /// Core-derived board classification. Full social posts can be links while
     /// retaining their locally saved text and media.
@@ -146,6 +147,7 @@ extension ReadingRow {
         tags = row.tags
         machineTags = row.machineTags
         kind = ReadingKind(row.kind)
+        imageType = row.imageType.flatMap(ReadingImageType.init(rawValue:))
         lightweight = row.lightweight
         isLink = row.isLink
         mediaUrl = row.mediaUrl

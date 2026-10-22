@@ -216,6 +216,7 @@ actor CoreBridge {
             query: query,
             tagTerms: [],
             visualTerms: [],
+            itemTypeTerms: [],
             predominantColor: nil,
             semanticCandidateIds: [],
             visualSemanticCandidateIds: []
@@ -344,5 +345,42 @@ actor CoreBridge {
 
     func deleteHighlight(readingId: String, highlightId: String) throws {
         try database.deleteHighlight(libraryPath: libraryPath, readingId: readingId, highlightId: highlightId)
+    }
+}
+
+extension CoreBridge {
+    func pendingImageClassification(
+        analyzerVersion: String, limit: UInt32, afterReadingID: String?
+    ) async throws -> ImageClassificationBatch {
+        try await InteractionIdleGate.shared.waitUntilIdle()
+        return try await Self.background { [database, libraryPath] in
+            let batch = try database.pendingImageClassificationBatch(
+                libraryPath: libraryPath, analyzerVersion: analyzerVersion,
+                limit: limit, afterReadingId: afterReadingID
+            )
+            return ImageClassificationBatch(
+                assets: batch.assets.map(VisualAssetSnapshot.init),
+                nextReadingID: batch.nextReadingId
+            )
+        }
+    }
+
+    @discardableResult
+    func completeImageClassification(
+        asset: VisualAssetSnapshot, analyzerVersion: String, assessment: ImageTypeAssessment
+    ) async throws -> Bool {
+        try await Self.background { [database, libraryPath] in
+            try database.completeImageClassification(
+                libraryPath: libraryPath, id: asset.readingID,
+                contentHash: asset.contentHash, analyzerVersion: analyzerVersion,
+                imageType: assessment.rawValue
+            )
+        }
+    }
+
+    func setImageType(id: String, imageType: String?) async throws {
+        try await Self.background { [database, libraryPath] in
+            try database.setImageType(libraryPath: libraryPath, id: id, imageType: imageType)
+        }
     }
 }

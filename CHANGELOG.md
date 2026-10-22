@@ -9,6 +9,12 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
+- Images can now be narrowed to Photographs, Other images, or Unclassified alongside search
+  and Tags. Apple Intelligence classifies saved images locally on supported Macs with macOS 27
+  or later; uncertain results stay Unclassified. The Image type menu works on older systems too.
+  Correct an image's type in the Inspector or its context menu, or return it to automatic
+  classification. Both inferred results and corrections are saved in the reading's file.
+
 - Tags can now be generated locally from saved text and image content. Text tagging uses
   Apple Intelligence on supported Macs with macOS 26 or later. User and machine Tags share
   neutral Liquid Glass styling, with `tag` and `sparkles` icons respectively. Hovering a Tag

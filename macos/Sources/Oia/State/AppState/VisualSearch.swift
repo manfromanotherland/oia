@@ -42,11 +42,13 @@ extension AppState {
             visualSearchRerunPending = false
             do {
                 async let textTagging: Void = reconcileTextTags(core: core, coreID: coreID, session: session)
+                async let imageTypes: Void = reconcileImageTypes(core: core, coreID: coreID, session: session)
                 let result = try await coordinator.reconcile(core: core)
                 guard !Task.isCancelled else { break }
                 guard isCurrentVisualSearchSession(coreID: coreID, session: session) else { break }
                 await visualSearchDidFinish(result)
                 try await textTagging
+                try await imageTypes
             } catch is CancellationError {
                 // Replacing a library deliberately supersedes this work.
                 break
@@ -96,6 +98,13 @@ extension AppState {
     private func reconcileTextTags(core: any CoreBridging, coreID: ObjectIdentifier, session: UInt64) async throws {
         guard let textTaggingCoordinator else { return }
         try await textTaggingCoordinator.reconcile(core: core) { [weak self] _ in
+            await self?.textTagsDidFinish(coreID: coreID, session: session)
+        }
+    }
+
+    private func reconcileImageTypes(core: any CoreBridging, coreID: ObjectIdentifier, session: UInt64) async throws {
+        guard let imageClassificationCoordinator else { return }
+        try await imageClassificationCoordinator.reconcile(core: core) { [weak self] _ in
             await self?.textTagsDidFinish(coreID: coreID, session: session)
         }
     }

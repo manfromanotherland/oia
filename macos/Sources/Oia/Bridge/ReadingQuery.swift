@@ -59,6 +59,7 @@ extension ReadingQuery {
         visualTerms: [String],
         colorTerms: [String] = [],
         itemTypeTerms: [String] = [],
+        imageTypeFilter: ImageTypeFilter = .all,
         semanticCandidateIDs: [String],
         visualSemanticCandidateIDs: [String]
     ) -> Self {
@@ -73,7 +74,7 @@ extension ReadingQuery {
             tagTerms: tagTerms,
             visualTerms: visualTerms,
             colorTerms: colorTerms,
-            itemTypeTerms: itemTypeTerms,
+            itemTypeTerms: itemTypeTerms + (scope == .images ? [imageTypeFilter.itemTypeTerm].compactMap { $0 } : []),
             semanticCandidateIDs: semanticCandidateIDs,
             visualSemanticCandidateIDs: visualSemanticCandidateIDs,
             limit: .max,

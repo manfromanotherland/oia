@@ -81,6 +81,12 @@ product:                                  # optional structured product classifi
   price_is_from: false                      # true for a minimum aggregate offer price
   captured_at: 2026-10-10T12:00:00Z         # optional snapshot time, not the save date
 link_category: book                       # optional main link entity: book | music | movie
+image_classification:                     # optional; meaningful only for kind: image
+  version: 1
+  image_type: photograph                  # photograph | other | unknown; open string
+  origin: machine                         # machine | user
+  source_fingerprint: 3f4a1b8e...          # machine only: SHA-256 of local preview bytes
+  analyzer_version: image-medium-v1        # machine only: model/prompt revision
 source_profile:                            # optional versioned metadata for a recognized source
   version: 1
   source_type: social_post
@@ -126,7 +132,7 @@ source_hash: sha256:abc123...              # sha256 of the cleaned Markdown body
 
 #### Optional fields
 `kind`, `lightweight`, `media_url`, `preview_asset`, `favicon_asset`, `author`, `site`,
-`theme_color`, `source_profile`, `product`, `link_category`, `read_at`, `machine_tags`, `excluded_machine_tags`,
+`theme_color`, `source_profile`, `product`, `link_category`, `image_classification`, `read_at`, `machine_tags`, `excluded_machine_tags`,
 `excerpt`, `word_count`, `lang`.
 
 `product.version: 1` is an additive format-v1 record. Products retain `kind: article` and the
@@ -140,6 +146,19 @@ categories retain `kind: article`, the URL-derived ID, body, state, and Tags. Th
 even after a full browser capture. A known category takes precedence over Product presentation
 without deleting a stored `product` price snapshot. Category filters do not generate machine Tags.
 See [link categories](link-categories.md) for detection, artwork capture, and recoverable backfill.
+
+`image_classification.version: 1` is additive within format version 1. It is meaningful only
+for `kind: image`. `photograph` means a photograph of a real-world scene or object; `other`
+includes screenshots, graphic design, illustrations, and collages. `unknown` records a completed
+but uncertain machine assessment, so an ambiguous image is not repeatedly analyzed for the same
+source and analyzer version. Missing, unknown, or unsupported records are presented as Unclassified;
+unknown discriminator strings and versions are preserved on file round trips.
+
+A `user` classification stores the explicit choice without requiring a source fingerprint or
+analyzer version. A `machine` classification is effective only while its fingerprint matches
+the current preview bytes. Background completion revalidates those bytes and never overwrites
+a user choice. Returning to automatic classification clears the record and makes the image
+eligible for analysis again. Image type does not change the reading's identity, card kind, or Tags.
 
 `kind` is written for every new card but remains optional in the parser for backwards compatibility;
 an older file without it is an `article`. `lightweight` is omitted/false for ordinary captures and

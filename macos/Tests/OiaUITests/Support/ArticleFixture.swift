@@ -13,6 +13,7 @@ struct ArticleFixture {
     var id: String
     /// Omitted for a legacy article; the core defaults a missing kind to article.
     var kind: String?
+    var imageType: String?
     /// Only emitted for a URL-only link placeholder.
     var lightweight: Bool
     var url: String
@@ -45,6 +46,7 @@ struct ArticleFixture {
         title: String,
         savedAt: Date,
         kind: String? = nil,
+        imageType: String? = nil,
         lightweight: Bool = false,
         canonicalURL: String? = nil,
         archived: Bool = false,
@@ -62,6 +64,7 @@ struct ArticleFixture {
     ) {
         self.id = id
         self.kind = kind
+        self.imageType = imageType
         self.lightweight = lightweight
         self.url = url
         self.canonicalURL = canonicalURL ?? url
@@ -96,6 +99,9 @@ struct ArticleFixture {
             ("format_version", "1"),
             ("id", quoted(id)),
             ("kind", kind.map(quoted)),
+            ("image_classification", imageType.map {
+                "\n  version: 1\n  image_type: \(quoted($0))\n  origin: user"
+            }),
             ("lightweight", lightweight ? "true" : nil),
             ("url", quoted(url)),
             ("canonical_url", quoted(canonicalURL)),

@@ -31,6 +31,7 @@ enum A11y {
     /// ── Board filters ─────────────────────────────────────────────────────
     enum Filter {
         static let group = "filter.group"
+        static let imageType = "filter.imageType"
         static let menu = "filter.menu"
         static let chooseTag = "filter.chooseTag"
         static let tagSheet = "filter.tagSheet"
@@ -113,6 +114,7 @@ enum A11y {
         static let tagInput = "detail.inspector.tagInput"
         static let tagInputError = "detail.inspector.tagInputError"
         static let details = "detail.inspector.details"
+        static let imageType = "detail.inspector.imageType"
         static let colorPrefix = "detail.inspector.colour."
         static func attribute(_ label: String) -> String {
             "detail.inspector.attribute.\(label)"

@@ -5,6 +5,7 @@ import Foundation
 struct BoardQueryContext: Hashable {
     let scope: LibraryScope
     let search: BoardSearchInput
+    var imageTypeFilter: ImageTypeFilter = .all
 }
 
 /// One immutable board snapshot. Scope, free text, structured terms, and
@@ -13,9 +14,10 @@ private struct ReadingSnapshotContext {
     let generation: UInt64
     let scope: LibraryScope
     let search: BoardSearchInput
+    let imageTypeFilter: ImageTypeFilter
 
     var boardContext: BoardQueryContext {
-        BoardQueryContext(scope: scope, search: search)
+        BoardQueryContext(scope: scope, search: search, imageTypeFilter: imageTypeFilter)
     }
 }
 
@@ -56,6 +58,7 @@ extension AppState {
         hasAvailableVisualSearchSuggestion = false
         let input = activeSearchInput
         let scope = activeScope
+        let imageTypeFilter = effectiveImageTypeFilter
         searchTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard let self, !Task.isCancelled else { return }
@@ -71,11 +74,13 @@ extension AppState {
                   !Task.isCancelled,
                   input == activeSearchInput,
                   scope == activeScope,
+                  imageTypeFilter == effectiveImageTypeFilter,
                   let core
             else { return }
             hasAvailableVisualSearchSuggestion = await visualSuggestionExists(
                 for: input,
                 scope: scope,
+                imageTypeFilter: imageTypeFilter,
                 core: core
             )
         }
@@ -95,6 +100,7 @@ extension AppState {
             visualTerms: context.search.criteria.visualTerms,
             colorTerms: context.search.criteria.colorTerms,
             itemTypeTerms: context.search.criteria.itemTypeTerms,
+            imageTypeFilter: context.imageTypeFilter,
             semanticCandidateIDs: candidates.text,
             visualSemanticCandidateIDs: candidates.visual
         )
@@ -106,7 +112,8 @@ extension AppState {
         return ReadingSnapshotContext(
             generation: readingLoadGeneration,
             scope: activeScope,
-            search: activeSearchInput
+            search: activeSearchInput,
+            imageTypeFilter: effectiveImageTypeFilter
         )
     }
 
@@ -144,6 +151,7 @@ extension AppState {
     private func visualSuggestionExists(
         for input: BoardSearchInput,
         scope: LibraryScope,
+        imageTypeFilter: ImageTypeFilter,
         core: any CoreBridging
     ) async -> Bool {
         guard let draft = input.text else { return false }
@@ -159,6 +167,7 @@ extension AppState {
             visualTerms: visualTerms,
             colorTerms: input.criteria.colorTerms,
             itemTypeTerms: input.criteria.itemTypeTerms,
+            imageTypeFilter: imageTypeFilter,
             semanticCandidateIDs: [],
             visualSemanticCandidateIDs: visualCandidates
         )
@@ -180,6 +189,7 @@ extension AppState {
         context.generation == readingLoadGeneration
             && context.scope == activeScope
             && context.search == activeSearchInput
+            && context.imageTypeFilter == effectiveImageTypeFilter
             && !Task.isCancelled
     }
 
@@ -240,7 +250,7 @@ extension AppState {
     }
 
     private func publishReadings(_ rows: [ReadingRow], context: ReadingSnapshotContext) {
-        let rows = rowsWithPendingTagEdits(rows, context: context)
+        let rows = rowsWithPendingEdits(rows, context: context)
         let boardContext = context.boardContext
         if publishedBoardContext != boardContext {
             publishedBoardContext = boardContext
@@ -263,15 +273,18 @@ extension AppState {
     /// Replay pending edits over fetched rows before publication. A queued Tag
     /// removal remains outside exact-tag filters during older refreshes; the
     /// core still supplies the complete candidate set and all other predicates.
-    private func rowsWithPendingTagEdits(
+    private func rowsWithPendingEdits(
         _ rows: [ReadingRow], context: ReadingSnapshotContext
     ) -> [ReadingRow] {
         let session = librarySessionGeneration
-        guard pendingTagEdits.hasEdits(librarySession: session) else { return rows }
+        guard pendingTagEdits.hasEdits(librarySession: session)
+            || pendingImageTypeEdits.hasEdits(librarySession: session) else { return rows }
         return rows.compactMap { row in
-            let updated = pendingTagEdits.apply(to: row, librarySession: session)
+            let tagged = pendingTagEdits.apply(to: row, librarySession: session)
+            let updated = pendingImageTypeEdits.apply(to: tagged, librarySession: session)
             return rowMatchesOptimisticTagFilter(
-                updated, scope: context.scope, tagTerms: context.search.criteria.tagTerms
+                updated, scope: context.scope, tagTerms: context.search.criteria.tagTerms,
+                imageTypeFilter: context.imageTypeFilter
             ) ? updated : nil
         }
     }
@@ -306,6 +319,13 @@ extension AppState {
     func selectScope(_ scope: LibraryScope) {
         guard activeScope != scope else { return }
         activeScope = scope
+        invalidatePendingReadingLoads()
+        Task { await reloadForFilterChange() }
+    }
+
+    func selectImageTypeFilter(_ filter: ImageTypeFilter) {
+        guard activeImageTypeFilter != filter else { return }
+        activeImageTypeFilter = filter
         invalidatePendingReadingLoads()
         Task { await reloadForFilterChange() }
     }

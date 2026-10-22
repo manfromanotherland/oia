@@ -112,6 +112,8 @@ targets:
       - path: Sources/Oia/State/BoardSelection.swift
       - path: Sources/Oia/State/TagPersistenceQueue.swift
       - path: Sources/Oia/State/BoardSearch.swift
+      - path: Sources/Oia/State/ReadingImageType.swift
+      - path: Sources/Oia/State/ImageClassificationCoordinator.swift
       - path: Sources/Oia/Platform/Library/LibraryBookmark.swift
       - path: Sources/Oia/Platform/TextEditing/TextEditingMonitor.swift
       - path: Sources/Oia/Platform/TextEditing/ItemCopyKeyMonitor.swift
@@ -179,6 +181,7 @@ targets:
       - path: Sources/Oia/Platform/VisualAnalysis
       - path: Sources/Oia/Bridge/VisualSearchBridging.swift
       - path: Sources/Oia/Bridge/TextTaggingBridging.swift
+      - path: Sources/Oia/Bridge/ImageClassificationBridging.swift
       - path: Sources/Oia/Platform/ContentTagging
       - path: Sources/Oia/State/TextTaggingCoordinator.swift
       - path: Sources/Oia/State/VisualSearchCoordinator.swift

@@ -689,6 +689,7 @@ fn save_capture_under_lock_with_state(
         rating: 0,
         tags: imported_state.tags,
         machine_tags: vec![],
+        image_classification: None,
         excluded_machine_tags: vec![],
         excerpt: input.excerpt,
         word_count: input.word_count,
@@ -706,6 +707,7 @@ fn save_capture_under_lock_with_state(
         metadata.rating = previous.rating;
         metadata.tags = previous.tags;
         metadata.machine_tags = previous.machine_tags;
+        metadata.image_classification = previous.image_classification;
         metadata.excluded_machine_tags = previous.excluded_machine_tags;
         if metadata.preview_asset.is_none() {
             metadata.preview_asset = previous.preview_asset;
@@ -1529,6 +1531,7 @@ fn save_staged_video(
         rating: 0,
         tags: imported_state.tags,
         machine_tags: vec![],
+        image_classification: None,
         excluded_machine_tags: vec![],
         excerpt,
         word_count,
@@ -2932,6 +2935,7 @@ mod tests {
             rating: 0,
             tags: vec![],
             machine_tags: vec![],
+            image_classification: None,
             excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,

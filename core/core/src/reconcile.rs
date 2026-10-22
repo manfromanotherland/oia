@@ -106,8 +106,8 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
           favorite, rating, source_hash, excerpt, word_count, lang, tags_json, tags_text,
           body_text, visual_asset_path, visual_asset_hash, visual_analyzer_version,
           visual_terms, predominant_color, media_aspect_ratio, source_profile_json,
-          card_description, tag_entries_json, machine_tags_json, product_json, featured_highlight_text, link_category)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38)",
+          card_description, tag_entries_json, machine_tags_json, product_json, featured_highlight_text, link_category, image_type)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24,?25,?26,?27,?28,?29,?30,?31,?32,?33,?34,?35,?36,?37,?38,?39)",
         params![
             r.metadata.id,
             r.metadata.kind.as_str(),
@@ -147,6 +147,7 @@ fn insert(conn: &Connection, r: &ScannedReading) -> Result<()> {
             product_json,
             r.featured_highlight_text,
             r.metadata.link_category.as_deref().filter(|category| r.metadata.kind == crate::ReadingKind::Article && crate::LinkCategory::parse(category).is_some()),
+            crate::image_classification::effective_image_type(&r.metadata, r.visual_asset.as_ref().map(|asset| asset.content_hash.as_str())),
         ],
     )?;
     Ok(())
@@ -208,7 +209,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
          tags_text=?24, body_text=?25, visual_asset_path=?26, visual_asset_hash=?27,
          visual_analyzer_version=?28, visual_terms=?29, predominant_color=?30,
          media_aspect_ratio=?31, source_profile_json=?32, card_description=?33,
-         tag_entries_json=?34, machine_tags_json=?35, product_json=?36, featured_highlight_text=?37, link_category=?38
+         tag_entries_json=?34, machine_tags_json=?35, product_json=?36, featured_highlight_text=?37, link_category=?38, image_type=?39
          WHERE id=?1",
         params![
             r.metadata.id,
@@ -249,6 +250,7 @@ fn update(conn: &Connection, r: &ScannedReading) -> Result<()> {
             product_json,
             r.featured_highlight_text,
             r.metadata.link_category.as_deref().filter(|category| r.metadata.kind == crate::ReadingKind::Article && crate::LinkCategory::parse(category).is_some()),
+            crate::image_classification::effective_image_type(&r.metadata, r.visual_asset.as_ref().map(|asset| asset.content_hash.as_str())),
         ],
     )?;
     Ok(())
@@ -299,6 +301,7 @@ mod tests {
             rating: 0,
             tags: vec![],
             machine_tags: vec![],
+            image_classification: None,
             excluded_machine_tags: vec![],
             excerpt: None,
             word_count: None,

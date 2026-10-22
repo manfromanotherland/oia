@@ -10,6 +10,13 @@ extension OiaLibraryView {
         )
     }
 
+    var imageTypeSelection: Binding<ImageTypeFilter> {
+        Binding(
+            get: { appState.activeImageTypeFilter },
+            set: { appState.selectImageTypeFilter($0) }
+        )
+    }
+
     var focusedBoardActions: BoardActions {
         BoardActions(
             canOpenSelection: presentedReading == nil && singleSelectedRow != nil,
