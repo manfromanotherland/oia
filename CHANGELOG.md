@@ -100,9 +100,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 - All and Images paint the first screen's saved card colors before transferring the complete
   result, while previews decode independently. New scope requests no longer wait behind stale
   Swift FFI decoding. Temporary previews preserve detail navigation until the full result arrives.
-- Floating image filters now use one native segmented control with shared AppKit glass and a
-  neutral glass selection, replacing separate blue glass toggle buttons. The control remains
-  36 pt high without extra surrounding padding or segment dividers.
+- Floating image filters and the main scope control now share the same native SwiftUI segmented
+  picker. The system draws and animates selection; the floating control adds only an outer native
+  glass surface, with no custom selection lens or extra surrounding padding.
 - The toolbar no longer offers the Icon and Text / Icon Only display-mode menu.
 
 - Removed the Images pop-up integration and restored the original main scope picker and its

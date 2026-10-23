@@ -268,7 +268,7 @@ extension OiaLibraryView {
     }
 
     private var boardFilterPicker: some View {
-        Picker("Filter", selection: scopeSelection) {
+        LibraryFilterPicker(title: "Filter", selection: scopeSelection) {
             ForEach(LibraryScope.allCases) { scope in
                 Text(scope.label)
                     .help(scope.label)
@@ -276,8 +276,6 @@ extension OiaLibraryView {
                     .tag(scope)
             }
         }
-        .pickerStyle(.segmented)
-        .labelsHidden()
         .accessibilityLabel("Filter")
         .accessibilityValue(appState.activeScope.label)
         .accessibilityIdentifier(A11y.Filter.group)

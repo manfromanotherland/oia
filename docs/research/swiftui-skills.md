@@ -80,13 +80,17 @@ the whole app to AppKit. See [app scenes](../../macos/Sources/Oia/App/OiaApp.swi
 [masonry integration](../../macos/Sources/Oia/Features/Oia/LazyMasonryBoard.swift), and
 [reader selection](../../macos/Sources/Oia/Features/Reader/Markdown/SelectableTextView.swift).
 
-Use one native segmented primitive for image filters. Separate glass buttons do not acquire
-segmented-control semantics or selection artwork merely by sharing an outer glass background.
-The implemented bridge retains native segment tracking and accessibility, removes the content
-bezel and its dividers, and positions a native glass view behind the selected segment inside a
-shared glass surface. This is custom selection presentation using AppKit glass; it does not claim
-to reproduce the toolbar's framework-managed selection artwork. No custom blur or blue toggle
-styling is involved. Live appearance remains unverified under the code-only constraint.
+The main scope control and floating image filters now use the same `LibraryFilterPicker`, whose
+body contains only a SwiftUI `Picker`, `.pickerStyle(.segmented)`, and `.labelsHidden()`. The
+floating caller adds native `.controlSize(.extraLarge)`, `.fixedSize()`, and one outer
+`.glassEffect(.regular, in: .capsule)` where available. The framework owns all selection drawing,
+tracking, and animation. There is no custom AppKit picker bridge, selected lens, segment geometry,
+bezel override, tint, or custom selection animation. See the [shared picker and floating caller](../../macos/Sources/Oia/Features/Oia/FloatingImageTypePicker.swift).
+
+Sharing the native primitive keeps behavior consistent without recreating a selection surface.
+Toolbar and content contexts can still affect native rendering; shared source and unshown-window
+checks do not establish identical active-window artwork. Live appearance remains unverified under
+the code-only constraint.
 Use native menu commands for the accepted A/G/P/U image-filter shortcuts, with typing and modal
 guards, rather than depending on board focus. Keep the iOS-oriented custom segmented recipe
 excluded from this implementation.

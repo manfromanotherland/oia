@@ -126,16 +126,17 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
 - Within **Images**, one native segmented control floats at the bottom center of the board:
-  **All**, **Graphics**, **Photos**, and **Unsure (N)**. On supported systems, the
-  `NSSegmentedControl` lives inside a shared `NSGlassEffectView` content view. Its content-area
-  bezel is disabled to remove dividers; a second native glass view presents the neutral selection
-  behind the selected segment. This is custom selection presentation using native glass, not
-  system toolbar selection artwork. Keep the control 36 pt high without surrounding padding.
+  **All**, **Graphics**, **Photos**, and **Unsure (N)**. Both this control and the main scope
+  control use the shared `LibraryFilterPicker`: a SwiftUI `Picker` with the native segmented
+  style and hidden label. The system owns selection drawing, tracking, and animation. The
+  floating picker stays 36 pt high using native control sizing, with no surrounding padding.
+  On supported systems, one outer SwiftUI glass effect supplies its floating surface. Do not add a custom selected
+  lens, per-segment glass, manual segment geometry, or custom selection animation.
   It uses the same 8-point bottom inset, scale-and-opacity transition, and spring animation as
   the scroll-to-top button.
   Keep this animation inside the floating overlay so it does not animate scope changes or board
   loading. The group remains available during loading and when a filter has no results. The main
-  scope picker keeps its original SwiftUI implementation without menu integration or event hooks.
+  scope picker retains its toolbar appearance without menu integration or event hooks.
   Choosing another board scope hides the floating group and remembers the image choice. Photos depict real-world
   scenes and objects. Graphics includes confirmed screenshots, illustrations, and graphic design.
   Images awaiting a confident assessment appear in All and Unsure, so unresolved photos
