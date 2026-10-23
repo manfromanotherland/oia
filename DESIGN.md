@@ -125,11 +125,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Within **Images**, a second native picker floats at the bottom center of the board:
+- Within **Images**, a second native glass button group floats at the bottom center of the board:
   **All**, **Graphics**, **Photos**, and **Unsure (N)**. It uses Liquid Glass and the same 8-point
   bottom inset, scale-and-opacity transition, and spring animation as the scroll-to-top button.
-  Use the native tab appearance where available, with no segment dividers. The surrounding glass
-  stays passive; the picker owns its selection interaction so the entire group does not bounce.
+  Native glass buttons provide selection feedback without segment dividers. The surrounding glass
+  stays passive; each button owns its selection interaction so the entire group does not bounce.
   Keep this animation inside the floating overlay so it does not animate scope changes or board
   loading. The group remains available during loading and when a filter has no results. The main
   scope picker keeps its original SwiftUI implementation without menu integration or event hooks.

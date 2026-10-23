@@ -332,11 +332,8 @@ extension OiaLibraryView {
             phases: [.down],
             action: performImageFilterShortcut
         )
-        .onChange(of: appState.activeScope) { _, scope in
-            if scope == .images, !searchFocused, !appState.isEditingText,
-               presentedReading == nil, boardTagRequest == nil {
-                boardFocused = true
-            }
+        .onChange(of: appState.activeScope) { _, _ in
+            focusImageBoardIfAppropriate()
         }
         .overlay(alignment: .bottom) {
             ZStack {
@@ -354,6 +351,12 @@ extension OiaLibraryView {
     }
 
     private static let floatingControlInset: CGFloat = 8
+
+    private func focusImageBoardIfAppropriate() {
+        guard appState.activeScope == .images, !searchFocused, !appState.isEditingText,
+              presentedReading == nil, boardTagRequest == nil else { return }
+        boardFocused = true
+    }
 
     private func performImageFilterShortcut(_ press: KeyPress) -> KeyPress.Result {
         guard appState.activeScope == .images, boardFocused, !searchFocused,
@@ -388,6 +391,7 @@ extension OiaLibraryView {
                 .focusable(appState.activeScope == .images)
                 .focused($boardFocused)
                 .focusEffectDisabled()
+                .onAppear(perform: focusImageBoardIfAppropriate)
         } else {
             GeometryReader { proxy in
                 LazyMasonryBoard(
@@ -443,6 +447,7 @@ extension OiaLibraryView {
                 .focusable()
                 .focused($boardFocused)
                 .focusEffectDisabled()
+                .onAppear(perform: focusImageBoardIfAppropriate)
                 .onKeyPress(
                     keys: [.upArrow, .downArrow, .leftArrow, .rightArrow],
                     phases: [.down, .repeat],

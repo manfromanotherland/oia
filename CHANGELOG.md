@@ -98,8 +98,8 @@ and versions track the app's `CFBundleShortVersionString`. See
 - All and Images paint the first screen's saved card colors before transferring the complete
   result, while previews decode independently. New scope requests no longer wait behind stale
   Swift FFI decoding. Temporary previews preserve detail navigation until the full result arrives.
-- Floating image filters use the native tab appearance on macOS 27+, removing segment dividers,
-  and no longer add interactive glass scaling around the entire group.
+- Floating image filters use native glass buttons in one passive glass capsule, without segment
+  dividers or interactive scaling around the entire group. Selecting a filter preserves its size.
 - The toolbar no longer offers the Icon and Text / Icon Only display-mode menu.
 
 - Removed the Images pop-up integration and restored the original main scope picker and its

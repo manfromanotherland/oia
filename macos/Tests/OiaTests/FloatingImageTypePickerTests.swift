@@ -6,73 +6,89 @@ import XCTest
 
 @MainActor
 final class FloatingImageTypePickerTests: XCTestCase {
-    func testUsesNativeTabAppearanceWithoutGrowingTheFloatingControl() throws {
-        guard #available(macOS 27.0, *) else {
-            throw XCTSkip("Native tab picker appearance requires macOS 27")
+    func testNativeGlassButtonsKeepTheSameSizeAcrossSelections() throws {
+        guard #available(macOS 26.0, *) else {
+            throw XCTSkip("Native glass buttons require macOS 26")
         }
-        let host = hostingView(selection: .graphics, count: 12)
-        let control = try XCTUnwrap(segmentedControl(in: host))
-
-        XCTAssertEqual(control.role, .tabs)
-        XCTAssertEqual(control.intrinsicContentSize.height, 36, accuracy: 0.5)
-        XCTAssertEqual(host.fittingSize.height, 36, accuracy: 0.5)
+        var widths: [CGFloat] = []
+        for filter in ImageTypeFilter.allCases {
+            let host = hostingView(selection: Selection(filter), count: 12)
+            XCTAssertGreaterThan(host.fittingSize.width, 0)
+            XCTAssertEqual(host.fittingSize.height, 36, accuracy: 0.5)
+            widths.append(host.fittingSize.width)
+        }
+        let firstWidth = try XCTUnwrap(widths.first)
+        for width in widths {
+            XCTAssertEqual(width, firstWidth, accuracy: 0.5)
+        }
     }
 
-    func testZeroAndNegativeCountsHideUnsureWithoutChangingTheSelectedFacet() throws {
+    func testZeroAndNegativeCountsHideUnsureWithoutChangingTheSelectedFacet() {
         for count in [0, -1] {
-            let host = hostingView(selection: .photos, count: count)
-            let control = try XCTUnwrap(segmentedControl(in: host))
-
-            XCTAssertEqual(control.segmentCount, 3)
-            XCTAssertEqual((0 ..< control.segmentCount).map { control.label(forSegment: $0) },
-                           ["All", "Graphics", "Photos"])
-            XCTAssertEqual(control.selectedSegment, 2)
-            for index in 0 ..< control.segmentCount {
-                XCTAssertTrue(control.isEnabled(forSegment: index))
-            }
+            let view = picker(selection: Selection(.photos), count: count)
+            XCTAssertEqual(view.availableFilters, [.all, .graphics, .photos])
+            XCTAssertTrue(view.selectionBinding(for: .photos).wrappedValue)
+            XCTAssertFalse(view.selectionBinding(for: .unsure).wrappedValue)
         }
     }
 
-    func testCountUpdatesShowAndHideUnsureWhilePreservingSelectedFacet() throws {
-        let host = hostingView(selection: .graphics, count: 12)
-        let initial = try XCTUnwrap(segmentedControl(in: host))
-        XCTAssertEqual(initial.label(forSegment: 3), "Unsure (12)")
-        XCTAssertTrue(initial.isEnabled(forSegment: 3))
-        XCTAssertEqual(initial.selectedSegment, 1)
-
+    func testCountUpdatesShowAndHideUnsureWhilePreservingSelectedFacet() {
+        let selection = Selection(.graphics)
+        let host = hostingView(selection: selection, count: 12)
+        let expandedWidth = host.fittingSize.width
         for count in [0, 12] {
-            host.rootView = FloatingImageTypePicker(selection: .constant(.graphics), unsureImageCount: count)
+            let view = picker(selection: selection, count: count)
+            host.rootView = view
             host.layoutSubtreeIfNeeded()
-            let control = try XCTUnwrap(segmentedControl(in: host))
-            XCTAssertTrue(control === initial)
-            XCTAssertEqual(control.segmentCount, count > 0 ? 4 : 3)
-            if count > 0 {
-                XCTAssertEqual(control.label(forSegment: 3), "Unsure (\(count))")
-                XCTAssertTrue(control.isEnabled(forSegment: 3))
+            XCTAssertEqual(view.availableFilters, count > 0 ? [.all, .graphics, .photos, .unsure] : [.all, .graphics, .photos])
+            XCTAssertTrue(view.selectionBinding(for: .graphics).wrappedValue)
+            if count == 0 {
+                XCTAssertLessThan(host.fittingSize.width, expandedWidth)
+            } else {
+                XCTAssertEqual(host.fittingSize.width, expandedWidth, accuracy: 0.5)
             }
-            XCTAssertEqual(control.selectedSegment, 1)
         }
     }
 
-    func testHiddenUnsureSelectionDisplaysAllImages() throws {
-        let host = hostingView(selection: .unsure, count: 0)
-        let control = try XCTUnwrap(segmentedControl(in: host))
-
-        XCTAssertEqual(control.segmentCount, 3)
-        XCTAssertEqual(control.selectedSegment, 0)
+    func testNativeToggleSelectionIsExclusiveAndCannotBeTurnedOff() {
+        let selection = Selection(.all)
+        let view = picker(selection: selection, count: 12)
+        for filter in ImageTypeFilter.allCases {
+            let binding = view.selectionBinding(for: filter)
+            binding.wrappedValue = true
+            XCTAssertEqual(selection.value, filter)
+            binding.wrappedValue = false
+            XCTAssertEqual(selection.value, filter)
+            XCTAssertEqual(view.availableFilters.filter { view.selectionBinding(for: $0).wrappedValue }, [filter])
+        }
     }
 
-    private func hostingView(selection: ImageTypeFilter, count: Int) -> NSHostingView<FloatingImageTypePicker> {
-        let host = NSHostingView(rootView:
-            FloatingImageTypePicker(selection: .constant(selection), unsureImageCount: count)
+    func testHiddenUnsureSelectionDisplaysAllImages() {
+        let view = picker(selection: Selection(.unsure), count: 0)
+        XCTAssertEqual(view.availableFilters, [.all, .graphics, .photos])
+        XCTAssertTrue(view.selectionBinding(for: .all).wrappedValue)
+        XCTAssertFalse(view.selectionBinding(for: .unsure).wrappedValue)
+    }
+
+    private final class Selection {
+        var value: ImageTypeFilter
+
+        init(_ value: ImageTypeFilter) {
+            self.value = value
+        }
+    }
+
+    private func picker(selection: Selection, count: Int) -> FloatingImageTypePicker {
+        FloatingImageTypePicker(
+            selection: Binding(get: { selection.value }, set: { selection.value = $0 }),
+            unsureImageCount: count
         )
+    }
+
+    private func hostingView(selection: Selection, count: Int) -> NSHostingView<FloatingImageTypePicker> {
+        let host = NSHostingView(rootView: picker(selection: selection, count: count))
         host.frame = CGRect(x: 0, y: 0, width: 800, height: 80)
         host.layoutSubtreeIfNeeded()
         return host
-    }
-
-    private func segmentedControl(in view: NSView) -> NSSegmentedControl? {
-        if let control = view as? NSSegmentedControl { return control }
-        return view.subviews.lazy.compactMap { self.segmentedControl(in: $0) }.first
     }
 }

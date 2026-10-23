@@ -2,53 +2,62 @@
 
 import SwiftUI
 
-/// A native image facet picker that floats independently of the board scopes.
+/// Native glass toggle buttons share one floating image filter surface.
 struct FloatingImageTypePicker: View {
     @Binding var selection: ImageTypeFilter
     let unsureImageCount: Int
 
     var body: some View {
-        styledPicker
-            .labelsHidden()
+        styledButtons
             .controlSize(.extraLarge)
             .fixedSize()
             .modifier(FloatingImageTypeGlass())
+            .accessibilityElement(children: .contain)
             .accessibilityLabel("Image type")
-            .accessibilityValue(availableSelection.wrappedValue.label)
+            .accessibilityValue(effectiveSelection.label)
             .accessibilityIdentifier(A11y.Filter.imageType)
     }
 
     @ViewBuilder
-    private var styledPicker: some View {
-        if #available(macOS 27.0, *) {
-            picker.pickerStyle(.tabs)
+    private var styledButtons: some View {
+        if #available(macOS 26.0, *) {
+            buttons.buttonStyle(.glass)
         } else {
-            picker.pickerStyle(.segmented)
+            buttons.buttonStyle(.bordered)
         }
     }
 
-    private var picker: some View {
-        Picker("Image type", selection: availableSelection) {
+    private var buttons: some View {
+        HStack(spacing: 0) {
             ForEach(availableFilters) { filter in
-                Text(filter == .unsure ? "Unsure (\(count))" : filter.label)
-                    .tag(filter)
-                    .help("\(filter.label) (\(ShortcutCatalog.imageTypeFilterShortcut(for: filter).display))")
-                    .accessibilityLabel(accessibilityLabel(for: filter))
-                    .accessibilityIdentifier(A11y.Filter.imageType + "." + filter.rawValue)
+                Toggle(
+                    filter == .unsure ? "Unsure (\(count))" : filter.label,
+                    isOn: selectionBinding(for: filter)
+                )
+                .toggleStyle(.button)
+                .help("\(filter.label) (\(ShortcutCatalog.imageTypeFilterShortcut(for: filter).display))")
+                .accessibilityLabel(accessibilityLabel(for: filter))
+                .accessibilityAddTraits(effectiveSelection == filter ? [.isSelected] : [])
+                .accessibilityIdentifier(A11y.Filter.imageType + "." + filter.rawValue)
             }
         }
     }
 
     private var count: Int { max(0, unsureImageCount) }
 
-    private var availableFilters: [ImageTypeFilter] {
+    var availableFilters: [ImageTypeFilter] {
         ImageTypeFilter.allCases.filter { $0 != .unsure || count > 0 }
     }
 
-    private var availableSelection: Binding<ImageTypeFilter> {
+    private var effectiveSelection: ImageTypeFilter {
+        selection.availableSelection(hasUnsureImages: count > 0)
+    }
+
+    /// Selecting the current native toggle cannot turn off the active filter.
+    func selectionBinding(for filter: ImageTypeFilter) -> Binding<Bool> {
         Binding(
-            get: { selection.availableSelection(hasUnsureImages: count > 0) },
-            set: { selection = $0 }
+            get: { effectiveSelection == filter },
+            set: { _ in selection = filter.availableSelection(hasUnsureImages: count > 0) }
         )
     }
 
