@@ -1,6 +1,10 @@
 # SwiftUI skills for Óia
 
-Research date: 2026-10-23. Research only: no skills installed, UI changed, app builds run, or applications controlled. Isolated compiler checks verified two problematic companion examples. This compares actual `SKILL.md` instructions and their references, rather than popularity or repository descriptions.
+Research date: 2026-10-23. Both recommended skills were subsequently installed with the user's
+authorization. This research compares actual `SKILL.md` instructions and their references,
+rather than popularity or repository descriptions. Isolated compiler checks verified two
+problematic companion examples. The research did not control applications or verify live UI
+appearance.
 
 ## Recommendation
 
@@ -8,7 +12,7 @@ Research date: 2026-10-23. Research only: no skills installed, UI changed, app b
 
 Its macOS 27 design defaults must remain subordinate to Óia's product constraints: retain the sidebar-free media board, meaningful content cards, and macOS 15 fallbacks. Its own source hierarchy places the user's constraints first. Its live-app and Figma workflows do not authorize computer control in this conversation. [Source precedence and design contract](https://github.com/gambadio/macos-golden-gate-design/blob/b7068fcaf5b857fcebef36399e8f64843d2ced8e/SKILL.md#source-precedence)
 
-**AvdLee's `swiftui-expert-skill` is an optional broader coding foundation.** It prefers native SwiftUI, permits necessary AppKit bridges, preserves availability fallbacks, and provides dedicated macOS scenes, window styling, and views references. [Skill entry point](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/SKILL.md), [macOS window styling](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/references/macos-window-styling.md), [macOS views and AppKit interop](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/references/macos-views.md)
+**AvdLee's `swiftui-expert-skill` supplies the broader coding foundation.** It prefers native SwiftUI, permits necessary AppKit bridges, preserves availability fallbacks, and provides dedicated macOS scenes, window styling, and views references. [Skill entry point](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/SKILL.md), [macOS window styling](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/references/macos-window-styling.md), [macOS views and AppKit interop](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/references/macos-views.md)
 
 **Do not follow its custom segmented-control example for this task.** Its Liquid Glass chapter is primarily for iOS 26 and builds a “segmented control” from separate glass buttons, accent tint, and animated glass identities. That is a custom composition, with exactly the distinction from one native segmented control that matters here. The same chapter's useful availability, modifier-order, and container explanations do not establish native macOS selection artwork. [Actual Liquid Glass reference](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/skills/swiftui-expert-skill/references/liquid-glass.md#segmented-control)
 
@@ -31,9 +35,15 @@ Apple documents `.tabs` as a deliberately different macOS visual treatment for n
 
 This Mac's Xcode also ships Apple's own [SwiftUI specialist instructions](</Applications/Xcode.app/Contents/PlugIns/IDEIntelligenceChat.framework/Versions/A/Resources/swiftui-specialist.idechatprompttemplate>), [Liquid Glass reference](</Applications/Xcode.app/Contents/PlugIns/IDEIntelligenceChat.framework/Versions/A/Resources/AdditionalDocumentation/SwiftUI-Implementing-Liquid-Glass-Design.md>), and [toolbar reference](</Applications/Xcode.app/Contents/PlugIns/IDEIntelligenceChat.framework/Versions/A/Resources/AdditionalDocumentation/SwiftUI-New-Toolbar-Features.md>). These are local Xcode resources, not a verified installable Codex skill package. Consult them in place; this note does not redistribute their contents.
 
-## Installation options, not executed
+## Installation
 
-The existing Codex installer supports these pinned sources. Gambadio's skill is at repository root, so `--path .` needs an explicit destination name:
+Both skills are installed in `~/.codex/skills` and available for the next turn:
+
+- `macos-golden-gate-design` — native macOS design and validation guidance.
+- `swiftui-expert-skill` — SwiftUI implementation, state, performance, and platform references.
+
+The installation used these pinned sources. Gambadio's skill is at repository root, so
+`--path .` needs an explicit destination name:
 
 ```sh
 python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
@@ -42,7 +52,7 @@ python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-
   --ref b7068fcaf5b857fcebef36399e8f64843d2ced8e
 ```
 
-For the optional AvdLee foundation, use the actual skill directory under `skills/`, not its old root alias:
+AvdLee's actual skill directory is under `skills/`:
 
 ```sh
 python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py" \
@@ -51,7 +61,35 @@ python3 "$HOME/.codex/skills/.system/skill-installer/scripts/install-skill-from-
   --ref 204dba7c67256a8b707ee3fbc5759a824191974f
 ```
 
-These commands were not executed. The path/name behavior was checked against the [local Codex installer](</Users/ed/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py>); AvdLee also publishes [canonical installation instructions](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/llms.txt).
+The installed entry points are [macos-golden-gate-design](</Users/ed/.codex/skills/macos-golden-gate-design/SKILL.md>) and [swiftui-expert-skill](</Users/ed/.codex/skills/swiftui-expert-skill/SKILL.md>). The path/name behavior was checked against the [local Codex installer](</Users/ed/.codex/skills/.system/skill-installer/scripts/install-skill-from-github.py>); AvdLee also publishes [canonical installation instructions](https://github.com/AvdLee/SwiftUI-Agent-Skill/blob/204dba7c67256a8b707ee3fbc5759a824191974f/llms.txt).
+
+## Decision for Óia
+
+Keep SwiftUI for scenes, view composition, state, and ordinary native controls, with narrow AppKit
+bridges where a specific platform capability needs them. Retain the existing Rust core for shared
+library, query, and persistence behavior. A full AppKit rewrite has no demonstrated benefit for
+the reported control and shortcut problems.
+
+The app already uses a native SwiftUI window, unified toolbar, segmented scope picker, search,
+and menu commands. Its custom masonry layout is justified by the mixed visual board: geometry
+is calculated before image decoding, and only the materialized card window becomes views.
+Existing AppKit bridges provide continuous reader text selection, native video layers, and the
+optional Original webpage. These are bounded platform integrations rather than reasons to move
+the whole app to AppKit. See [app scenes](../../macos/Sources/Oia/App/OiaApp.swift),
+[board controls](../../macos/Sources/Oia/Features/Oia/OiaLibraryView.swift),
+[masonry integration](../../macos/Sources/Oia/Features/Oia/LazyMasonryBoard.swift), and
+[reader selection](../../macos/Sources/Oia/Features/Reader/Markdown/SelectableTextView.swift).
+
+Use one native segmented primitive for image filters. Separate glass buttons do not acquire
+segmented-control semantics or selection artwork merely by sharing an outer glass background.
+The implemented bridge retains native segment tracking and accessibility, removes the content
+bezel and its dividers, and positions a native glass view behind the selected segment inside a
+shared glass surface. This is custom selection presentation using AppKit glass; it does not claim
+to reproduce the toolbar's framework-managed selection artwork. No custom blur or blue toggle
+styling is involved. Live appearance remains unverified under the code-only constraint.
+Use native menu commands for the accepted A/G/P/U image-filter shortcuts, with typing and modal
+guards, rather than depending on board focus. Keep the iOS-oriented custom segmented recipe
+excluded from this implementation.
 
 ## What the skills do not validate
 
