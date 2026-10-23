@@ -2,9 +2,9 @@
 
 import SwiftUI
 
-/// One physical key binding for an app action. Modified bindings are installed
-/// on menu commands; unmodified alternatives stay local to the focused board so
-/// they never steal typing from a text field or a confirmation dialog.
+/// One physical key binding for an app action. Menu commands disable conflicting
+/// key equivalents while editing or presenting a dialog; focus-local alternatives
+/// are interpreted by the board.
 struct AppShortcutKey {
     let key: KeyEquivalent
     let modifiers: EventModifiers
@@ -134,8 +134,8 @@ enum ShortcutCatalog {
     static let showQuotes = AppShortcut(title: "Show Quotes", key: "6", modifiers: .command, keyGlyph: "6")
     static let previousFilter = AppShortcut(title: "Previous Filter", key: "[", modifiers: .command, keyGlyph: "[")
     static let nextFilter = AppShortcut(title: "Next Filter", key: "]", modifiers: .command, keyGlyph: "]")
-    // Unmodified image facets stay local to the Images board, never menu key
-    // equivalents that could intercept typing in the search field.
+    // Image facet menu commands are enabled only on the Images board, outside
+    // search, text editing, and modal presentations.
     static let showAllImages = AppShortcut(title: "Show All Images", key: "a", modifiers: [], keyGlyph: "A")
     static let showGraphics = AppShortcut(title: "Show Graphics", key: "g", modifiers: [], keyGlyph: "G")
     static let showPhotos = AppShortcut(title: "Show Photos", key: "p", modifiers: [], keyGlyph: "P")

@@ -9,12 +9,12 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Added
 
-- In Images, an **All / Graphics / Photos / Unsure (N)** Liquid Glass button group floats at the
+- In Images, an **All / Graphics / Photos / Unsure (N)** native segmented control floats at the
   bottom center, aligned with the scroll-to-top button and using the same appearance transition.
   Image filters work alongside search and Tags. Apple
   Intelligence identifies photos locally on supported Macs with macOS 27 or later.
-  Images awaiting a confident assessment appear in All and Unsure. Unsure always appears
-  with a count for the whole library and is disabled at zero; finishing the last one returns
+  Images awaiting a confident assessment appear in All and Unsure. Unsure appears when its
+  count for the whole library is positive; finishing the last one hides it and returns
   that selection to All. The Inspector's Photo switch and card actions let you correct
   the type or return to automatic
   classification. Select several images and press **⇧⌘P** to mark them all as photos or **⇧⌘G**
@@ -92,14 +92,17 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
-- Unsure hides when no images need classification. The focused Images board supports A / G / P / U
+- Unsure hides when no images need classification. **View → Filter → Image Type** provides A / G / P / U
   for All images / Graphics / Photos / Unsure, with matching tooltips and keyboard-shortcut help.
+  The shortcuts work without board focus and are disabled during search, typing, detail views,
+  and modal interactions.
 
 - All and Images paint the first screen's saved card colors before transferring the complete
   result, while previews decode independently. New scope requests no longer wait behind stale
   Swift FFI decoding. Temporary previews preserve detail navigation until the full result arrives.
-- Floating image filters use native glass buttons in one passive glass capsule, without segment
-  dividers or interactive scaling around the entire group. Selecting a filter preserves its size.
+- Floating image filters now use one native segmented control with shared AppKit glass and a
+  neutral glass selection, replacing separate blue glass toggle buttons. The control remains
+  36 pt high without extra surrounding padding or segment dividers.
 - The toolbar no longer offers the Icon and Text / Icon Only display-mode menu.
 
 - Removed the Images pop-up integration and restored the original main scope picker and its

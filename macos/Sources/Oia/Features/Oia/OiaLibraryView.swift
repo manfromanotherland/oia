@@ -325,16 +325,6 @@ extension OiaLibraryView {
             boardContent
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .onKeyPress(
-            keys: Set(ImageTypeFilter.allCases.map {
-                ShortcutCatalog.imageTypeFilterShortcut(for: $0).primary.key
-            }),
-            phases: [.down],
-            action: performImageFilterShortcut
-        )
-        .onChange(of: appState.activeScope) { _, _ in
-            focusImageBoardIfAppropriate()
-        }
         .overlay(alignment: .bottom) {
             ZStack {
                 if appState.activeScope == .images {
@@ -352,27 +342,6 @@ extension OiaLibraryView {
 
     private static let floatingControlInset: CGFloat = 8
 
-    private func focusImageBoardIfAppropriate() {
-        guard appState.activeScope == .images, !searchFocused, !appState.isEditingText,
-              presentedReading == nil, boardTagRequest == nil else { return }
-        boardFocused = true
-    }
-
-    private func performImageFilterShortcut(_ press: KeyPress) -> KeyPress.Result {
-        guard appState.activeScope == .images, boardFocused, !searchFocused,
-              !appState.isEditingText, !appState.isBrowsingWebContent,
-              presentedReading == nil, boardTagRequest == nil,
-              let filter = ImageTypeFilter.allCases.first(where: {
-                  ShortcutCatalog.imageTypeFilterShortcut(for: $0)
-                      .matches(key: press.key, modifiers: press.modifiers)
-              }) else { return .ignored }
-        // A hidden Unsure shortcut must not reset an existing Photos/Graphics
-        // choice through the unavailable-selection fallback.
-        guard filter != .unsure || appState.hasUnsureImages else { return .handled }
-        appState.selectImageTypeFilter(filter)
-        return .handled
-    }
-
     private static var floatingControlTransition: AnyTransition {
         .scale(scale: 0.7).combined(with: .opacity)
     }
@@ -388,10 +357,6 @@ extension OiaLibraryView {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if appState.readings.isEmpty {
             emptyState
-                .focusable(appState.activeScope == .images)
-                .focused($boardFocused)
-                .focusEffectDisabled()
-                .onAppear(perform: focusImageBoardIfAppropriate)
         } else {
             GeometryReader { proxy in
                 LazyMasonryBoard(
@@ -447,7 +412,6 @@ extension OiaLibraryView {
                 .focusable()
                 .focused($boardFocused)
                 .focusEffectDisabled()
-                .onAppear(perform: focusImageBoardIfAppropriate)
                 .onKeyPress(
                     keys: [.upArrow, .downArrow, .leftArrow, .rightArrow],
                     phases: [.down, .repeat],

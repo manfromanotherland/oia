@@ -13,10 +13,7 @@ extension OiaLibraryView {
     var imageTypeSelection: Binding<ImageTypeFilter> {
         Binding(
             get: { appState.effectiveImageTypeFilter },
-            set: {
-                appState.selectImageTypeFilter($0)
-                boardFocused = true
-            }
+            set: { appState.selectImageTypeFilter($0) }
         )
     }
 
@@ -30,6 +27,12 @@ extension OiaLibraryView {
             canScrollToTop: presentedReading == nil && !appState.readings.isEmpty,
             canClassifyImages: presentedReading == nil
                 && appState.selectedRows.contains(where: { $0.kind == .image }),
+            canFilterImages: appState.activeScope == .images
+                && presentedReading == nil
+                && !searchFocused
+                && quickLookURL == nil
+                && appState.pendingDelete == nil
+                && appState.error == nil,
             openSelection: openSelection,
             editTags: requestEditSelectedTags,
             markAsPhoto: { markSelectedImages(as: .photograph) },

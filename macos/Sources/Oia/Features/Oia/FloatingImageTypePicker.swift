@@ -1,85 +1,134 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+import AppKit
 import SwiftUI
 
-/// Native glass toggle buttons share one floating image filter surface.
-struct FloatingImageTypePicker: View {
+/// One native selection control. AppKit owns tracking, focus, and accessibility;
+/// native glass supplies the shared surface and the neutral selected lens.
+struct FloatingImageTypePicker: NSViewRepresentable {
     @Binding var selection: ImageTypeFilter
     let unsureImageCount: Int
 
-    var body: some View {
-        styledButtons
-            .controlSize(.extraLarge)
-            .fixedSize()
-            .modifier(FloatingImageTypeGlass())
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel("Image type")
-            .accessibilityValue(effectiveSelection.label)
-            .accessibilityIdentifier(A11y.Filter.imageType)
+    func makeNSView(context: Context) -> ImageTypeSegmentedView {
+        let view = ImageTypeSegmentedView()
+        context.coordinator.view = view
+        view.control.target = context.coordinator
+        view.control.action = #selector(Coordinator.selectFilter(_:))
+        updateNSView(view, context: context)
+        return view
     }
 
-    @ViewBuilder
-    private var styledButtons: some View {
-        if #available(macOS 26.0, *) {
-            buttons.buttonStyle(.glass)
-        } else {
-            buttons.buttonStyle(.bordered)
+    func updateNSView(_ view: ImageTypeSegmentedView, context: Context) {
+        context.coordinator.parent = self
+        view.update(selection: selection, unsureImageCount: unsureImageCount)
+    }
+
+    func sizeThatFits(_ proposal: ProposedViewSize, nsView: ImageTypeSegmentedView, context: Context) -> CGSize? {
+        nsView.intrinsicContentSize
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(parent: self) }
+
+    final class Coordinator: NSObject {
+        var parent: FloatingImageTypePicker
+        weak var view: ImageTypeSegmentedView?
+
+        init(parent: FloatingImageTypePicker) { self.parent = parent }
+
+        @objc func selectFilter(_ sender: NSSegmentedControl) {
+            let filters = ImageTypeSegmentedView.filters(unsureImageCount: parent.unsureImageCount)
+            guard filters.indices.contains(sender.selectedSegment) else { return }
+            parent.selection = filters[sender.selectedSegment]
+            // Update the lens immediately; persistence and board reconciliation
+            // must not delay feedback from this native selection control.
+            view?.needsLayout = true
+            view?.layoutSubtreeIfNeeded()
         }
-    }
-
-    private var buttons: some View {
-        HStack(spacing: 0) {
-            ForEach(availableFilters) { filter in
-                Toggle(
-                    filter == .unsure ? "Unsure (\(count))" : filter.label,
-                    isOn: selectionBinding(for: filter)
-                )
-                .toggleStyle(.button)
-                .help("\(filter.label) (\(ShortcutCatalog.imageTypeFilterShortcut(for: filter).display))")
-                .accessibilityLabel(accessibilityLabel(for: filter))
-                .accessibilityAddTraits(effectiveSelection == filter ? [.isSelected] : [])
-                .accessibilityIdentifier(A11y.Filter.imageType + "." + filter.rawValue)
-            }
-        }
-    }
-
-    private var count: Int { max(0, unsureImageCount) }
-
-    var availableFilters: [ImageTypeFilter] {
-        ImageTypeFilter.allCases.filter { $0 != .unsure || count > 0 }
-    }
-
-    private var effectiveSelection: ImageTypeFilter {
-        selection.availableSelection(hasUnsureImages: count > 0)
-    }
-
-    /// Selecting the current native toggle cannot turn off the active filter.
-    func selectionBinding(for filter: ImageTypeFilter) -> Binding<Bool> {
-        Binding(
-            get: { effectiveSelection == filter },
-            set: { _ in selection = filter.availableSelection(hasUnsureImages: count > 0) }
-        )
-    }
-
-    private func accessibilityLabel(for filter: ImageTypeFilter) -> String {
-        guard filter == .unsure else { return filter.label }
-        return "Unsure, \(count) \(count == 1 ? "image" : "images") to classify"
     }
 }
 
-private struct FloatingImageTypeGlass: ViewModifier {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+final class ImageTypeSegmentedView: NSView {
+    let control = NSSegmentedControl(labels: [], trackingMode: .selectOne, target: nil, action: nil)
+    private let surface: NSView
+    private let content = NSView()
+    private let selectedLens: NSView?
+    private static let height: CGFloat = 36
 
-    func body(content: Content) -> some View {
-        let shape = Capsule()
-        if reduceTransparency {
-            content.background(Color(nsColor: .controlBackgroundColor), in: shape)
-                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
-        } else if #available(macOS 26.0, *) {
-            content.glassEffect(.regular, in: shape)
+    override init(frame frameRect: NSRect) {
+        if #available(macOS 26.0, *) {
+            let glass = NSGlassEffectView()
+            glass.style = .regular
+            glass.cornerRadius = Self.height / 2
+            glass.contentView = content
+            surface = glass
+
+            let lens = NSGlassEffectView()
+            lens.style = .regular
+            lens.cornerRadius = Self.height / 2
+            selectedLens = lens
         } else {
-            content.background(.regularMaterial, in: shape)
-                .overlay(shape.strokeBorder(.primary.opacity(0.08)))
+            surface = content
+            selectedLens = nil
         }
+        super.init(frame: frameRect)
+
+        control.segmentStyle = .automatic
+        control.segmentDistribution = .fillEqually
+        control.selectedSegmentBezelColor = nil
+        if #available(macOS 26.0, *) {
+            control.controlSize = .extraLarge
+            // Replace the content-area bezel (and its dividers) with native
+            // glass for the shared surface and the selected segment.
+            (control.cell as? NSSegmentedCell)?.isBordered = false
+        } else {
+            control.controlSize = .large
+        }
+        control.setAccessibilityIdentifier(A11y.Filter.imageType)
+        control.setAccessibilityLabel("Image type")
+        addSubview(surface)
+        if let selectedLens { content.addSubview(selectedLens) }
+        content.addSubview(control)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    static func filters(unsureImageCount: Int) -> [ImageTypeFilter] {
+        ImageTypeFilter.allCases.filter { $0 != .unsure || unsureImageCount > 0 }
+    }
+
+    func update(selection: ImageTypeFilter, unsureImageCount: Int) {
+        let count = max(0, unsureImageCount)
+        let filters = Self.filters(unsureImageCount: count)
+        if control.segmentCount != filters.count { control.segmentCount = filters.count }
+        for (index, filter) in filters.enumerated() {
+            let label = filter == .unsure ? "Unsure (\(count))" : filter.label
+            if control.label(forSegment: index) != label { control.setLabel(label, forSegment: index) }
+            control.setToolTip(
+                "\(label) (\(ShortcutCatalog.imageTypeFilterShortcut(for: filter).display))",
+                forSegment: index
+            )
+        }
+        let effectiveSelection = selection.availableSelection(hasUnsureImages: count > 0)
+        control.selectedSegment = filters.firstIndex(of: effectiveSelection) ?? 0
+        control.setAccessibilityValue(effectiveSelection.label)
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: control.intrinsicContentSize.width, height: Self.height)
+    }
+
+    override func layout() {
+        super.layout()
+        surface.frame = bounds
+        content.frame = bounds
+        control.frame = content.bounds
+        guard let selectedLens, control.segmentCount > 0 else { return }
+        let width = content.bounds.width / CGFloat(control.segmentCount)
+        let index = userInterfaceLayoutDirection == .rightToLeft
+            ? control.segmentCount - 1 - control.selectedSegment
+            : control.selectedSegment
+        selectedLens.frame = NSRect(x: CGFloat(index) * width, y: 0, width: width, height: bounds.height)
     }
 }

@@ -125,11 +125,14 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   social posts and categorized links. Links includes lightweight URL saves, captured social posts,
   and categorized links. Exact tag filtering
   comes from native suggestions in the toolbar search field.
-- Within **Images**, a second native glass button group floats at the bottom center of the board:
-  **All**, **Graphics**, **Photos**, and **Unsure (N)**. It uses Liquid Glass and the same 8-point
-  bottom inset, scale-and-opacity transition, and spring animation as the scroll-to-top button.
-  Native glass buttons provide selection feedback without segment dividers. The surrounding glass
-  stays passive; each button owns its selection interaction so the entire group does not bounce.
+- Within **Images**, one native segmented control floats at the bottom center of the board:
+  **All**, **Graphics**, **Photos**, and **Unsure (N)**. On supported systems, the
+  `NSSegmentedControl` lives inside a shared `NSGlassEffectView` content view. Its content-area
+  bezel is disabled to remove dividers; a second native glass view presents the neutral selection
+  behind the selected segment. This is custom selection presentation using native glass, not
+  system toolbar selection artwork. Keep the control 36 pt high without surrounding padding.
+  It uses the same 8-point bottom inset, scale-and-opacity transition, and spring animation as
+  the scroll-to-top button.
   Keep this animation inside the floating overlay so it does not animate scope changes or board
   loading. The group remains available during loading and when a filter has no results. The main
   scope picker keeps its original SwiftUI implementation without menu integration or event hooks.
@@ -142,9 +145,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   and classify them in batches. Classified images leave Unsure immediately. Unsure appears only
   when its global unclassified image count is positive, regardless of the active search or Tags.
   Classifying the last one hides Unsure and returns an active Unsure selection to All; new
-  unclassified images reveal it again. With the Images board focused, **A**, **G**, **P**, and **U**
-  select All images, Graphics, Photos, and Unsure. These plain-letter shortcuts do not intercept
-  search or other text editing; **U** does nothing while Unsure is hidden. The existing
+  unclassified images reveal it again. The native **View → Filter → Image Type** menu exposes **A**,
+  **G**, **P**, and **U** for All images, Graphics, Photos, and Unsure. These commands work while
+  browsing Images without requiring the board itself to hold keyboard focus. Disable them during
+  search, text editing, detail presentation, or modal interactions; **U** is unavailable while
+  Unsure is hidden. The existing
   **⇧⌘G** and **⇧⌘P** shortcuts continue to reclassify selected images.
   The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
   or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**

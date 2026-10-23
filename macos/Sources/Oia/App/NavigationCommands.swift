@@ -32,6 +32,7 @@ struct BoardActions {
     let canFocusSearch: Bool
     let canScrollToTop: Bool
     let canClassifyImages: Bool
+    let canFilterImages: Bool
     let openSelection: () -> Void
     let editTags: () -> Void
     let markAsPhoto: () -> Void
@@ -172,6 +173,22 @@ struct NavigationCommands: Commands {
                 .disabled(appState.activeScope == scope)
             }
 
+            if appState.activeScope == .images {
+                Divider()
+
+                Menu("Image Type") {
+                    ForEach(ImageTypeFilter.allCases) { filter in
+                        Button(filter.label) {
+                            guard canSelectImageType(filter) else { return }
+                            appState.selectImageTypeFilter(filter)
+                        }
+                        .keyboardShortcut(ShortcutCatalog.imageTypeFilterShortcut(for: filter))
+                        .disabled(!canSelectImageType(filter))
+                    }
+                }
+                .disabled(!canFilterImages)
+            }
+
             Divider()
 
             Button("Previous Filter") {
@@ -185,5 +202,16 @@ struct NavigationCommands: Commands {
             .keyboardShortcut(ShortcutCatalog.nextFilter)
         }
         .disabled(appState.isEditingText)
+    }
+
+    private var canFilterImages: Bool {
+        boardActions?.canFilterImages == true
+            && appState.activeScope == .images
+            && !appState.isEditingText
+            && !appState.isBrowsingWebContent
+    }
+
+    private func canSelectImageType(_ filter: ImageTypeFilter) -> Bool {
+        canFilterImages && (filter != .unsure || appState.hasUnsureImages)
     }
 }
