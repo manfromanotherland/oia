@@ -92,6 +92,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
+- The Inspector's image-type section now shows only the Photo switch, without the automatic
+  classification action or model-availability explanation.
+
 - Unsure hides when no images need classification. **View → Filter → Image Type** provides A / G / P / U
   for All images / Graphics / Photos / Unsure, with matching tooltips and keyboard-shortcut help.
   The shortcuts work without board focus and are disabled during search, typing, detail views,

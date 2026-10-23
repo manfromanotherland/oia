@@ -152,9 +152,11 @@ cards organize into masonry columns**. The surrounding mymind branding and chrom
   search, text editing, detail presentation, or modal interactions; **U** is unavailable while
   Unsure is hidden. The existing
   **⇧⌘G** and **⇧⌘P** shortcuts continue to reclassify selected images.
-  The Inspector's **Photo** switch and image card actions let the user mark an image as a photo
-  or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P) and **Mark as Graphic**
-  (⇧⌘G) set every selected image to that type; repeating either action keeps that type. Corrections live in the
+  The Inspector shows only a **Photo** switch for image type; it does not expose classification
+  provenance, automatic reset, or model availability. Image card actions also let the user mark
+  an image as a photo or graphic, or return to automatic classification. **Mark as Photo** (⇧⌘P)
+  and **Mark as Graphic** (⇧⌘G) set every selected image to that type; repeating either action keeps
+  that type. Corrections live in the
   reading's file and take precedence over later model results. Classification does not create
   a Tag or a card kind.
   Automatic classification uses the on-device Apple Intelligence image model on macOS 27 or

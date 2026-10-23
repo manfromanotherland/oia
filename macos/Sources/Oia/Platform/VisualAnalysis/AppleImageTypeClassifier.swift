@@ -22,21 +22,6 @@ struct AppleImageTypeClassifier: ImageTypeClassifying {
         return Self.availability(of: SystemLanguageModel(useCase: .general))
     }
 
-    var unavailableMessage: String? {
-        switch availability {
-        case .available:
-            return nil
-        case .unavailable(.unsupportedOS):
-            return "Automatic classification requires macOS 27 or later. You can mark images as photos manually."
-        case .unavailable(.deviceNotEligible):
-            return "Automatic classification isn’t available on this Mac. You can mark images as photos manually."
-        case .unavailable(.appleIntelligenceNotEnabled):
-            return "Enable Apple Intelligence to classify images automatically, or mark images as photos manually."
-        case .unavailable(.modelNotReady):
-            return "Automatic classification will start when Apple Intelligence is ready."
-        }
-    }
-
     func classify(imageAt url: URL) async throws -> ImageTypeAssessment {
         try Task.checkCancellation()
         guard #available(macOS 27.0, *) else {

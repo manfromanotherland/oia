@@ -35,7 +35,6 @@ struct InspectorDetails: View {
     let inspector: ReadingInspector?
     let failed: Bool
     var onSetImageType: ((ReadingImageType?) -> Void)?
-    var automaticClassificationMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -60,19 +59,6 @@ struct InspectorDetails: View {
                     .accessibilityIdentifier(A11y.Inspector.imageType)
                 }
                 .padding(.vertical, 7)
-                Button("Use automatic classification") { onSetImageType(nil) }
-                    .buttonStyle(.plain)
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 7)
-                    .accessibilityIdentifier(A11y.Inspector.automaticImageType)
-                if let automaticClassificationMessage {
-                    Text(automaticClassificationMessage)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.bottom, 7)
-                }
                 Divider().opacity(0.65)
             }
 

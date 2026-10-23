@@ -37,6 +37,7 @@ final class ImageTypeJourney: UITestCase {
         list.open(unknown)
         let type = app.byId(A11y.Inspector.imageType)
         XCTAssertTrue(type.waitExists())
+        XCTAssertFalse(app.buttons["Use automatic classification"].exists)
         type.clickWhenReady()
         XCTAssertTrue(wait {
             let contents = self.library.articleContents(id: unknown) ?? ""
@@ -62,17 +63,16 @@ final class ImageTypeJourney: UITestCase {
         relaunchApp()
         XCTAssertTrue(wait { Set(list.orderedRowIds) == [photo, unknown] }, "Scope and facet survive relaunch")
         list.open(unknown)
-        app.byId(A11y.Inspector.automaticImageType).clickWhenReady()
+        app.byId(A11y.Inspector.imageType).clickWhenReady()
         XCTAssertTrue(wait {
-            !(self.library.articleContents(id: unknown) ?? "").contains("image_classification:")
-        }, "Automatic reset clears the stored correction")
+            let contents = self.library.articleContents(id: unknown) ?? ""
+            return contents.contains("image_type: other") && contents.contains("origin: user")
+        }, "Turning Photo off stores the image as a graphic")
         app.byId(A11y.Detail.close).clickWhenReady()
-        XCTAssertTrue(wait { list.orderedRowIds == [photo] }, "Reset leaves Photos immediately")
-        assertUnsureSegment(count: 1, enabled: true)
-        list.selectImageType("Unsure")
-        XCTAssertTrue(wait { list.orderedRowIds == [unknown] })
+        XCTAssertTrue(wait { list.orderedRowIds == [photo] }, "Turning Photo off leaves Photos immediately")
+        assertUnsureSegment(count: 0, enabled: false)
         list.selectImageType("Graphics")
-        XCTAssertTrue(wait { list.orderedRowIds == [graphic] })
+        XCTAssertTrue(wait { Set(list.orderedRowIds) == [graphic, unknown] })
         list.selectImageType("All")
         XCTAssertTrue(wait { Set(list.orderedRowIds) == [photo, graphic, unknown] })
     }

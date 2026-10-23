@@ -27,8 +27,7 @@ struct OiaInspectorView: View {
                 visualAnalysis
                 InspectorDetails(
                     row: row, inspector: currentInspector, failed: currentFailure,
-                    onSetImageType: onSetImageType,
-                    automaticClassificationMessage: appState.imageClassificationAvailabilityMessage
+                    onSetImageType: onSetImageType
                 )
                 if currentFailure {
                     InspectorPill("Try again") { retry += 1 }

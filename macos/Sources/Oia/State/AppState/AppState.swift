@@ -178,10 +178,6 @@ final class AppState {
             : .all
     }
 
-    var imageClassificationAvailabilityMessage: String? {
-        TestHooks.isIsolatedRun ? nil : AppleImageTypeClassifier().unavailableMessage
-    }
-
     /// Readings awaiting delete confirmation, in their current board order.
     var pendingDelete: [ReadingRow]?
 
