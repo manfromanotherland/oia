@@ -13,7 +13,10 @@ extension OiaLibraryView {
     var imageTypeSelection: Binding<ImageTypeFilter> {
         Binding(
             get: { appState.effectiveImageTypeFilter },
-            set: { appState.selectImageTypeFilter($0) }
+            set: {
+                appState.selectImageTypeFilter($0)
+                boardFocused = true
+            }
         )
     }
 

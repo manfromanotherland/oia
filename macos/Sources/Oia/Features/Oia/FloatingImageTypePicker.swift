@@ -14,7 +14,7 @@ struct FloatingImageTypePicker: View {
             .fixedSize()
             .modifier(FloatingImageTypeGlass())
             .accessibilityLabel("Image type")
-            .accessibilityValue(selection.label)
+            .accessibilityValue(availableSelection.wrappedValue.label)
             .accessibilityIdentifier(A11y.Filter.imageType)
     }
 
@@ -28,11 +28,11 @@ struct FloatingImageTypePicker: View {
     }
 
     private var picker: some View {
-        Picker("Image type", selection: $selection) {
-            ForEach(ImageTypeFilter.allCases) { filter in
+        Picker("Image type", selection: availableSelection) {
+            ForEach(availableFilters) { filter in
                 Text(filter == .unsure ? "Unsure (\(count))" : filter.label)
                     .tag(filter)
-                    .selectionDisabled(filter == .unsure && count == 0)
+                    .help("\(filter.label) (\(ShortcutCatalog.imageTypeFilterShortcut(for: filter).display))")
                     .accessibilityLabel(accessibilityLabel(for: filter))
                     .accessibilityIdentifier(A11y.Filter.imageType + "." + filter.rawValue)
             }
@@ -40,6 +40,17 @@ struct FloatingImageTypePicker: View {
     }
 
     private var count: Int { max(0, unsureImageCount) }
+
+    private var availableFilters: [ImageTypeFilter] {
+        ImageTypeFilter.allCases.filter { $0 != .unsure || count > 0 }
+    }
+
+    private var availableSelection: Binding<ImageTypeFilter> {
+        Binding(
+            get: { selection.availableSelection(hasUnsureImages: count > 0) },
+            set: { selection = $0 }
+        )
+    }
 
     private func accessibilityLabel(for filter: ImageTypeFilter) -> String {
         guard filter == .unsure else { return filter.label }

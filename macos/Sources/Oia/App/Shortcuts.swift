@@ -134,6 +134,12 @@ enum ShortcutCatalog {
     static let showQuotes = AppShortcut(title: "Show Quotes", key: "6", modifiers: .command, keyGlyph: "6")
     static let previousFilter = AppShortcut(title: "Previous Filter", key: "[", modifiers: .command, keyGlyph: "[")
     static let nextFilter = AppShortcut(title: "Next Filter", key: "]", modifiers: .command, keyGlyph: "]")
+    // Unmodified image facets stay local to the Images board, never menu key
+    // equivalents that could intercept typing in the search field.
+    static let showAllImages = AppShortcut(title: "Show All Images", key: "a", modifiers: [], keyGlyph: "A")
+    static let showGraphics = AppShortcut(title: "Show Graphics", key: "g", modifiers: [], keyGlyph: "G")
+    static let showPhotos = AppShortcut(title: "Show Photos", key: "p", modifiers: [], keyGlyph: "P")
+    static let showUnsure = AppShortcut(title: "Show Unsure", key: "u", modifiers: [], keyGlyph: "U")
     static let previousItem = AppShortcut(title: "Previous Item", key: "k", modifiers: [], keyGlyph: "K")
     static let nextItem = AppShortcut(title: "Next Item", key: "j", modifiers: [], keyGlyph: "J")
 
@@ -161,6 +167,10 @@ enum ShortcutCatalog {
             ]
         ),
         Group(
+            name: "Images Grid",
+            shortcuts: [showAllImages, showGraphics, showPhotos, showUnsure]
+        ),
+        Group(
             name: "Detail",
             shortcuts: [selectFirstView, selectOriginalView, previousItem, nextItem, toggleSidebar, toggleHighlights]
         ),
@@ -176,6 +186,15 @@ enum ShortcutCatalog {
         case .articles: showArticles
         case .links: showLinks
         case .quotes: showQuotes
+        }
+    }
+
+    static func imageTypeFilterShortcut(for filter: ImageTypeFilter) -> AppShortcut {
+        switch filter {
+        case .all: showAllImages
+        case .graphics: showGraphics
+        case .photos: showPhotos
+        case .unsure: showUnsure
         }
     }
     // swiftlint:enable line_length

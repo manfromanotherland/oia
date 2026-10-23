@@ -92,6 +92,9 @@ and versions track the app's `CFBundleShortVersionString`. See
 
 ### Fixed
 
+- Unsure hides when no images need classification. The focused Images board supports A / G / P / U
+  for All images / Graphics / Photos / Unsure, with matching tooltips and keyboard-shortcut help.
+
 - All and Images paint the first screen's saved card colors before transferring the complete
   result, while previews decode independently. New scope requests no longer wait behind stale
   Swift FFI decoding. Temporary previews preserve detail navigation until the full result arrives.

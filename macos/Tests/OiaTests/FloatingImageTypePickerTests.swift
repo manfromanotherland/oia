@@ -18,21 +18,22 @@ final class FloatingImageTypePickerTests: XCTestCase {
         XCTAssertEqual(host.fittingSize.height, 36, accuracy: 0.5)
     }
 
-    func testZeroCountKeepsUnsureVisibleAndDisablesItsNativeSegment() throws {
-        let host = hostingView(selection: .photos, count: 0)
-        let control = try XCTUnwrap(segmentedControl(in: host))
+    func testZeroAndNegativeCountsHideUnsureWithoutChangingTheSelectedFacet() throws {
+        for count in [0, -1] {
+            let host = hostingView(selection: .photos, count: count)
+            let control = try XCTUnwrap(segmentedControl(in: host))
 
-        XCTAssertEqual(control.segmentCount, 4)
-        XCTAssertEqual((0 ..< control.segmentCount).map { control.label(forSegment: $0) },
-                       ["All", "Graphics", "Photos", "Unsure (0)"])
-        XCTAssertEqual(control.selectedSegment, 2)
-        XCTAssertFalse(control.isEnabled(forSegment: 3))
-        for index in 0 ..< 3 {
-            XCTAssertTrue(control.isEnabled(forSegment: index))
+            XCTAssertEqual(control.segmentCount, 3)
+            XCTAssertEqual((0 ..< control.segmentCount).map { control.label(forSegment: $0) },
+                           ["All", "Graphics", "Photos"])
+            XCTAssertEqual(control.selectedSegment, 2)
+            for index in 0 ..< control.segmentCount {
+                XCTAssertTrue(control.isEnabled(forSegment: index))
+            }
         }
     }
 
-    func testCountUpdatesEnableAndDisableUnsureWhilePreservingSelectedFacet() throws {
+    func testCountUpdatesShowAndHideUnsureWhilePreservingSelectedFacet() throws {
         let host = hostingView(selection: .graphics, count: 12)
         let initial = try XCTUnwrap(segmentedControl(in: host))
         XCTAssertEqual(initial.label(forSegment: 3), "Unsure (12)")
@@ -43,10 +44,22 @@ final class FloatingImageTypePickerTests: XCTestCase {
             host.rootView = FloatingImageTypePicker(selection: .constant(.graphics), unsureImageCount: count)
             host.layoutSubtreeIfNeeded()
             let control = try XCTUnwrap(segmentedControl(in: host))
-            XCTAssertEqual(control.label(forSegment: 3), "Unsure (\(count))")
-            XCTAssertEqual(control.isEnabled(forSegment: 3), count > 0)
+            XCTAssertTrue(control === initial)
+            XCTAssertEqual(control.segmentCount, count > 0 ? 4 : 3)
+            if count > 0 {
+                XCTAssertEqual(control.label(forSegment: 3), "Unsure (\(count))")
+                XCTAssertTrue(control.isEnabled(forSegment: 3))
+            }
             XCTAssertEqual(control.selectedSegment, 1)
         }
+    }
+
+    func testHiddenUnsureSelectionDisplaysAllImages() throws {
+        let host = hostingView(selection: .unsure, count: 0)
+        let control = try XCTUnwrap(segmentedControl(in: host))
+
+        XCTAssertEqual(control.segmentCount, 3)
+        XCTAssertEqual(control.selectedSegment, 0)
     }
 
     private func hostingView(selection: ImageTypeFilter, count: Int) -> NSHostingView<FloatingImageTypePicker> {

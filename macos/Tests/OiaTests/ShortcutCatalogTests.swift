@@ -4,6 +4,26 @@ import SwiftUI
 import XCTest
 
 final class ShortcutCatalogTests: XCTestCase {
+    func testImageFacetShortcutsUseUnmodifiedInitialsAndRemainSeparateFromClassification() throws {
+        let bindings: [(ImageTypeFilter, KeyEquivalent, String)] = [
+            (.all, "a", "A"), (.graphics, "g", "G"), (.photos, "p", "P"), (.unsure, "u", "U")
+        ]
+        for (filter, key, display) in bindings {
+            let shortcut = ShortcutCatalog.imageTypeFilterShortcut(for: filter)
+            XCTAssertTrue(shortcut.matches(key: key, modifiers: []))
+            for modifiers: EventModifiers in [.command, [.command, .shift], .option, .control] {
+                XCTAssertFalse(shortcut.matches(key: key, modifiers: modifiers))
+            }
+            XCTAssertEqual(shortcut.display, display)
+        }
+        let imageGrid = try XCTUnwrap(ShortcutCatalog.groups.first { $0.name == "Images Grid" })
+        XCTAssertEqual(imageGrid.shortcuts.map(\.id), bindings.map {
+            ShortcutCatalog.imageTypeFilterShortcut(for: $0.0).id
+        })
+        XCTAssertFalse(ShortcutCatalog.markAsGraphic.matches(key: "g", modifiers: []))
+        XCTAssertFalse(ShortcutCatalog.markAsPhoto.matches(key: "p", modifiers: []))
+    }
+
     func testPrimaryActionShortcutsFollowMacConventions() {
         XCTAssertTrue(ShortcutCatalog.copy.matches(key: "c", modifiers: .command))
         XCTAssertTrue(ShortcutCatalog.openSource.matches(key: "o", modifiers: .command))
